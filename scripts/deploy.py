@@ -1,4 +1,4 @@
-"""Funds the roles, deploys MockUSDC, NodeRegistry and JobMarket, wires and verifies them, writes networks/<name>.toml."""
+"""Funds the roles, deploys ToDToken, NodeRegistry and JobMarket, wires and verifies them, writes networks/<name>.toml."""
 import argparse
 import json
 import os
@@ -33,7 +33,7 @@ def validate_roles(cfg: dict, chain_id: int) -> None:
     if chain_id == ANVIL_CHAIN_ID:
         return
     roles = cfg["roles"]
-    for role in ("deployer", "coordinator", "admitter", "faucet"):
+    for role in ("deployer", "coordinator", "admitter", "faucet", "tokenAdmin"):
         address = roles.get(role, "")
         if not Web3.is_address(address) or int(address, 16) == 0:
             raise SystemExit(f"Set a nonzero {role} address in the network's [roles]. Nothing was sent.")
@@ -42,6 +42,18 @@ def validate_roles(cfg: dict, chain_id: int) -> None:
             or len({v.lower() for v in verifiers}) != len(verifiers)
             or not 1 <= cfg["threshold"] <= len(verifiers) <= 255):
         raise SystemExit("Set distinct verifier addresses and a valid threshold. Nothing was sent.")
+
+
+def token_parameters(cfg: dict) -> tuple[str, str, int]:
+    cap = cfg.get("token", {}).get("cap")
+    if isinstance(cap, bool) or not isinstance(cap, int) or not 0 < cap < 2**256:
+        raise SystemExit("Set token.cap to a positive uint256 in TOD base units. Nothing was sent.")
+    roles = cfg["roles"]
+    for role in ("tokenAdmin", "faucet"):
+        address = roles.get(role, "")
+        if not Web3.is_address(address) or int(address, 16) == 0:
+            raise SystemExit(f"Set a nonzero {role} address. Nothing was sent.")
+    return roles["tokenAdmin"], roles["faucet"], cap
 
 
 def artifact(name: str) -> dict:
@@ -77,7 +89,7 @@ def plan_deploy(w3: Web3, sender: str, roles: dict, cfg: dict) -> tuple[list[str
     # Constructors only check addresses are non-zero, so any address gives the right estimate before the real ones exist.
     stand_in = roles["coordinator"]
     items = [
-        ("MockUSDC", creation(w3, "MockUSDC")[0]),
+        ("ToDToken", creation(w3, "ToDToken", *token_parameters(cfg))[0]),
         ("NodeRegistry", creation(w3, "NodeRegistry", stand_in, roles["admitter"], cfg["probationSeconds"])[0]),
         ("JobMarket", creation(w3, "JobMarket", stand_in, stand_in, roles["coordinator"], roles["verifiers"],
                                cfg["threshold"])[0]),
@@ -148,6 +160,7 @@ def main() -> None:
     src = Path(args.network) if args.network.endswith(".toml") else REPO / "networks" / f"{args.network}.toml"
     text = src.read_text()
     cfg = tomllib.loads(text)
+    token_parameters(cfg)
     rpc = rpc_url(cfg, args.rpc)
     w3 = Web3(Web3.HTTPProvider(rpc, request_kwargs={"timeout": 60}))
     chain_id = w3.eth.chain_id
@@ -164,7 +177,7 @@ def main() -> None:
     subprocess.run(["node", str(REPO / "packages/abi/scripts/generate.mjs")], check=True, capture_output=True)
 
     if dev:
-        for addr in (deployer.address, roles["coordinator"], roles["admitter"], roles["faucet"], *roles["verifiers"]):
+        for addr in (deployer.address, roles["coordinator"], roles["admitter"], roles["faucet"], roles["tokenAdmin"], *roles["verifiers"]):
             w3.provider.make_request("anvil_setBalance", [addr, ANVIL_ETH])
     else:
         plan, spend, hold = plan_deploy(w3, deployer.address, roles, cfg)
@@ -205,8 +218,8 @@ def main() -> None:
         return receipt
 
     created: dict[str, tuple[str, str]] = {}
-    usdc = create("MockUSDC")
-    token = usdc["contractAddress"]
+    token_receipt = create("ToDToken", *token_parameters(cfg))
+    token = token_receipt["contractAddress"]
     registry = create("NodeRegistry", token, roles["admitter"], cfg["probationSeconds"])["contractAddress"]
     market = create("JobMarket", token, registry, roles["coordinator"], roles["verifiers"], cfg["threshold"])["contractAddress"]
     reg = w3.eth.contract(address=registry, abi=json.loads((REPO / "packages/abi/json/INodeRegistry.json").read_text()))
@@ -216,7 +229,7 @@ def main() -> None:
     # [contracts] is always the file's last section, so everything above it survives a redeploy.
     head = text.split("[contracts]")[0].rstrip()
     out.write_text(f'{head}\n\n[contracts]\ntoken = "{token}"\nregistry = "{registry}"\nmarket = "{market}"\n'
-                   f'deployBlock = {usdc["blockNumber"]}\n')
+                   f'deployBlock = {token_receipt["blockNumber"]}\n')
 
     verified = None
     if cfg.get("verifierUrl") and not args.no_verify:

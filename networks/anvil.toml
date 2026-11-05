@@ -14,7 +14,11 @@ verify = 45
 finalize = 60
 stall = 3600
 
+[token]
+cap = 1000000000000
+
 [roles]
+tokenAdmin = "0x819eeFC594Ba69911A60f22d6Cac2Eb219910A19"
 deployer = "0x819eeFC594Ba69911A60f22d6Cac2Eb219910A19"
 coordinator = "0xB3aAd8a5c0e9DCCaAF617C9D07BCCB894Db690D7"
 admitter = "0x29e236748697Bbfe5B7B45f487238181bF15E4c6"

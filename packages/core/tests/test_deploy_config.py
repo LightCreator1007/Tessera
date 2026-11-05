@@ -14,7 +14,7 @@ spec.loader.exec_module(deploy)
 
 def config():
     roles = {name: "0x" + f"{i:040x}" for i, name in enumerate(
-        ["deployer", "coordinator", "admitter", "faucet"], 1)}
+        ["deployer", "coordinator", "admitter", "faucet", "tokenAdmin"], 1)}
     roles["verifiers"] = ["0x" + "11" * 20, "0x" + "22" * 20]
     return {"roles": roles, "threshold": 2}
 
@@ -30,7 +30,7 @@ def test_rpc_override_takes_precedence(monkeypatch):
     assert deploy.rpc_url({"rpc": "", "rpcEnv": "BASE_SEPOLIA_RPC_URL"}, "http://127.0.0.1:1234") == "http://127.0.0.1:1234"
 
 
-@pytest.mark.parametrize("role", ["deployer", "coordinator", "admitter", "faucet"])
+@pytest.mark.parametrize("role", ["deployer", "coordinator", "admitter", "faucet", "tokenAdmin"])
 def test_missing_public_role_is_rejected(role):
     cfg = config()
     cfg["roles"][role] = ""
@@ -59,3 +59,17 @@ def test_missing_rpc_is_rejected_by_ledger_configuration(tmp_path, monkeypatch):
     path.write_text(text)
     with pytest.raises(RuntimeError, match="RPC URL missing"):
         Network.load(path)
+
+
+@pytest.mark.parametrize("cap", [0, -1, True, 1.5, "100", 2**256])
+def test_invalid_token_cap_stops_before_rpc(cap):
+    cfg = config()
+    cfg["token"] = {"cap": cap}
+    with pytest.raises(SystemExit, match="token.cap"):
+        deploy.token_parameters(cfg)
+
+
+def test_token_constructor_parameters_use_explicit_roles():
+    cfg = config()
+    cfg["token"] = {"cap": 10**12}
+    assert deploy.token_parameters(cfg) == (cfg["roles"]["tokenAdmin"], cfg["roles"]["faucet"], 10**12)

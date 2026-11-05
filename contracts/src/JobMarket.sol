@@ -90,7 +90,7 @@ contract JobMarket is IJobMarket, EIP712, ReentrancyGuardTransient {
         });
         _weights[jobId] = p.initialWeightsHash;
         claimable[msg.sender] -= fromBalance;
-        // One known token (USDC, no transfer fee), so the requested amount is what arrives.
+        // One known six-decimal token without transfer fees, so the requested amount is what arrives.
         IERC20(token).safeTransferFrom(msg.sender, address(this), p.budget - fromBalance);
         emit JobCreated(
             jobId,
@@ -574,7 +574,7 @@ contract JobMarket is IJobMarket, EIP712, ReentrancyGuardTransient {
     }
 
     /// @dev Half of a slash tops up this round's pot and half stays locked as `burned` , so a
-    ///      verifier gains nothing by inventing failures and USDC never goes to address(0).
+    ///      verifier gains nothing by inventing failures and ERC-20 transfers never go to address(0).
     function _confirm(uint256 jobId, uint256 roundId, address operator, Kind kind) private {
         NodeRound storage nr = _nr[jobId][roundId][operator];
         Round storage r = _rounds[jobId][roundId];

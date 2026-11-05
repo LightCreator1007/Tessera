@@ -7,7 +7,11 @@ logSpan = 200
 probationSeconds = 300
 threshold = 2
 
+[token]
+cap = 1000000000000
+
 [roles]
+tokenAdmin = ""
 deployer = ""
 coordinator = ""
 admitter = "0x285818EC744B88Db9Fad59508f7eD0E56B60A5aD"
