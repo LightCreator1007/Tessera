@@ -1,0 +1,31 @@
+# Installs the Python workspace exactly as locked and runs pytest. Skips until the workspace exists.
+name: python
+on:
+  pull_request:
+    paths: ["packages/**", "services/**", "apps/**", "scripts/**", "contracts/**", "vectors/**",
+            "pyproject.toml", "uv.lock", ".python-version", ".github/workflows/python.yml"]
+  push:
+    branches: [main]
+    paths: ["packages/**", "services/**", "apps/**", "scripts/**", "contracts/**", "vectors/**",
+            "pyproject.toml", "uv.lock", ".python-version", ".github/workflows/python.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: python-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+      # Ledger tests talk to a local anvil, so Foundry is only needed once contracts exist.
+      - if: hashFiles('contracts/foundry.toml') != ''
+        uses: foundry-rs/foundry-toolchain@dba66c27052e63476d886f22216e119ba7e615bf # v1.9.2
+      - if: hashFiles('uv.lock') != ''
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - if: hashFiles('uv.lock') != ''
+        run: uv sync --locked --all-packages
+      - if: hashFiles('uv.lock') != ''
+        run: uv run pytest
