@@ -2,8 +2,27 @@
 # tod-node: runs the node CLI in Docker with its data volume, so operators only need Docker installed.
 set -e
 IMAGE="${TOD_NODE_IMAGE:-ghcr.io/lightcreator1007/tod-node:latest}"
-if [ "$1" = run ]; then
-  # The daemon outlives the shell and restarts after a crash or reboot; its local API stays on loopback.
-  exec docker run -d --restart unless-stopped --name tod-node -p 127.0.0.1:7777:7777 -v tod-data:/data "$IMAGE" "$@"
-fi
-exec docker run --rm -i -v tod-data:/data "$IMAGE" "$@"
+NAME=tod-node
+TTY=""
+if [ -t 0 ] && [ -t 1 ]; then TTY="-t"; fi
+# A bare -e NAME passes the host value only if it is set, so RPC URLs never land in the image or docker inspect.
+ENVS="-e TOD_NETWORK -e TOD_COORDINATOR -e BASE_SEPOLIA_RPC_URL -e ANVIL_RPC_URL -e NO_COLOR"
+# Lets a local chain or coordinator on the host be reached as host.docker.internal on Linux too.
+HOST="--add-host host.docker.internal:host-gateway"
+running() { [ "$(docker inspect -f '{{.State.Running}}' "$NAME" 2>/dev/null)" = true ]; }
+
+case "$1" in
+  run)
+    if running; then echo "tod-node is already running" >&2; exit 6; fi
+    docker rm "$NAME" >/dev/null 2>&1 || true  # a stopped container with this name would block docker run
+    # --init forwards signals; 240 s covers the commit and reveal windows, so a stop can finish an owed reveal.
+    exec docker run -d --init --restart unless-stopped --stop-timeout 240 --name "$NAME" $HOST \
+      -p 127.0.0.1:7777:7777 -v tod-data:/data $ENVS "$IMAGE" "$@" ;;
+  stop)
+    if ! running; then echo "tod-node is not running" >&2; exit 3; fi
+    # SIGTERM makes the daemon reveal what it owes, then exit; an explicit stop also keeps unless-stopped from restarting it.
+    exec docker stop "$NAME" ;;
+esac
+# While the daemon runs, commands go into its container so status and logs see the real node.
+if running; then exec docker exec -i $TTY "$NAME" tod-app "$@"; fi
+exec docker run --rm -i $TTY $HOST -v tod-data:/data $ENVS "$IMAGE" "$@"
