@@ -15,14 +15,10 @@ from . import config
 LOCAL_HOSTS = {"127.0.0.1", "::1"}
 
 
-def _blob_access(job, rnd, blob_hash, method, expiry):
-    return {"jobId": job, "roundId": rnd, "blobHash": bytes.fromhex(blob_hash.removeprefix("0x")),
-            "method": method, "expiry": expiry}
-
-
 def blob_access_signable(job, rnd, blob_hash, method, expiry):
     """The EIP-712 BlobAccess message a node, verifier or requester signs to read or write a blob."""
-    msg = _blob_access(job, rnd, blob_hash, method, expiry)
+    msg = {"jobId": job, "roundId": rnd, "blobHash": bytes.fromhex(blob_hash.removeprefix("0x")),
+           "method": method, "expiry": expiry}
     # BlobAccess is checked here, off chain, but names JobMarket as its contract because job ids live there.
     return encode_typed_data(full_message=encodings.typed_data("BlobAccess", config.CHAIN_ID, config.JOB_MARKET, msg))
 
@@ -44,7 +40,7 @@ async def node(request: Request, x_operator: str = Header(), x_timestamp: int = 
 
     The node signs "METHOD\\nPATH\\nTIMESTAMP\\nsha256(body)" with EIP-191; the timestamp bounds replays.
     """
-    # Wall clock for now. The latest block timestamp would be harder to skew once the ledger feeds the API.
+    # ponytail: wall clock, so a skewed server clock shifts the window; use the latest block time once the ledger feeds the API
     if abs(time.time() - x_timestamp) > config.CLOCK_SKEW:
         raise HTTPException(401, f"timestamp more than {config.CLOCK_SKEW} s off")
     body = await request.body()

@@ -1,7 +1,7 @@
 """In-memory state behind the read routes, filled by the scheduler and the round driver."""
 from .models import Evidence, Job, JobState, Round, Selftest, Workload
 
-# Kept in memory for now; after a restart they are rebuilt from chain events.
+# ponytail: in memory, so a restart empties them until they are rebuilt from chain events
 WORKLOADS: dict[str, Workload] = {}
 SELFTESTS: dict[str, Selftest] = {}
 JOBS: dict[int, Job] = {}

@@ -15,9 +15,12 @@ def f64hex(x):
 def _reject_floats(value):
     if isinstance(value, float):
         raise TypeError("write floats with f64hex; JSON floats do not round-trip byte for byte")
-    children = value.values() if isinstance(value, dict) else value if isinstance(value, (list, tuple)) else ()
-    for child in children:
-        _reject_floats(child)
+    if isinstance(value, dict):
+        for child in value.values():
+            _reject_floats(child)
+    elif isinstance(value, (list, tuple)):
+        for child in value:
+            _reject_floats(child)
 
 
 def canonical(doc):
