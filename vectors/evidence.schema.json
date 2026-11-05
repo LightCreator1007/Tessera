@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/LightCreator1007/ToD/vectors/evidence.schema.json",
+  "title": "ToD evidence documents",
+  "description": "Canonical JSON: sorted keys, no whitespace, no floats. Floats are f64hex (16 hex digits, IEEE-754 float64 bit pattern). Readers hash the bytes they received. Fields reserved for later pay modes are present and null.",
+  "$defs": {
+    "addr": {"type": "string", "pattern": "^0x[0-9a-fA-F]{40}$"},
+    "hex32": {"type": "string", "pattern": "^0x[0-9a-f]{64}$"},
+    "f64hex": {"type": "string", "pattern": "^[0-9a-f]{16}$"},
+    "uint": {"type": "integer", "minimum": 0},
+    "amount": {
+      "type": "object", "additionalProperties": false, "required": ["op", "amount"],
+      "properties": {"op": {"$ref": "#/$defs/addr"}, "amount": {"$ref": "#/$defs/uint"}}
+    },
+    "verifierReport": {
+      "description": "Posted as attestRound.reportHash. Full replay: every node's whole round, starting from the round's weights G_r.",
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "job", "round", "verifier", "start", "kernel", "numpy", "platform", "nodes"],
+      "properties": {
+        "kind": {"const": "verifierReport"},
+        "job": {"$ref": "#/$defs/uint"},
+        "round": {"$ref": "#/$defs/uint"},
+        "verifier": {"$ref": "#/$defs/addr"},
+        "start": {"$ref": "#/$defs/hex32"},
+        "kernel": {"type": "string"},
+        "numpy": {"type": "string"},
+        "platform": {"type": "string"},
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["op", "shard", "committed", "replayHash", "match", "err", "upd", "verdict", "fetch"],
+            "properties": {
+              "op": {"$ref": "#/$defs/addr"},
+              "shard": {"$ref": "#/$defs/uint"},
+              "committed": {"$ref": "#/$defs/hex32"},
+              "replayHash": {"oneOf": [{"$ref": "#/$defs/hex32"}, {"type": "null"}]},
+              "match": {"type": "boolean"},
+              "err": {"oneOf": [{"$ref": "#/$defs/f64hex"}, {"type": "null"}]},
+              "upd": {"oneOf": [{"$ref": "#/$defs/f64hex"}, {"type": "null"}]},
+              "verdict": {"enum": ["pass", "ReplayDrift", "ReplayMismatch", "DataUnavailable"]},
+              "fetch": {"enum": ["ok", "absent-signed", "network-error", "not-needed"]}
+            }
+          }
+        }
+      }
+    },
+    "aggregateEvidence": {
+      "description": "Posted as finalizeRound evidenceHash; both verifiers recompute and sign it.",
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "job", "round", "start", "revealed", "confirmed", "matcher", "merge", "gate", "outer", "aggregate", "outcome", "features", "handoffs", "detector"],
+      "properties": {
+        "kind": {"const": "aggregateEvidence"},
+        "job": {"$ref": "#/$defs/uint"},
+        "round": {"$ref": "#/$defs/uint"},
+        "start": {"$ref": "#/$defs/hex32"},
+        "revealed": {
+          "type": "array",
+          "items": {"type": "object", "additionalProperties": false, "required": ["op", "hash"],
+                    "properties": {"op": {"$ref": "#/$defs/addr"}, "hash": {"$ref": "#/$defs/hex32"}}}
+        },
+        "confirmed": {
+          "type": "array",
+          "items": {"type": "object", "additionalProperties": false, "required": ["op", "kind"],
+                    "properties": {"op": {"$ref": "#/$defs/addr"},
+                                   "kind": {"enum": ["ReplayDrift", "ReplayMismatch", "DataUnavailable"]}}}
+        },
+        "matcher": {
+          "description": "Inputs and output of the published roster rule, so anyone can re-check it.",
+          "type": "object", "additionalProperties": false, "required": ["inputs", "roster"],
+          "properties": {
+            "inputs": {"type": "object"},
+            "roster": {
+              "type": "array",
+              "items": {"type": "object", "additionalProperties": false, "required": ["op", "shard"],
+                        "properties": {"op": {"$ref": "#/$defs/addr"}, "shard": {"$ref": "#/$defs/uint"}}}
+            }
+          }
+        },
+        "merge": {
+          "description": "Updates are clipped to the median norm, then merged with a coordinate-wise trimmed mean.",
+          "type": "object", "additionalProperties": false, "required": ["accepted", "clipNorm", "trimPerSide"],
+          "properties": {
+            "accepted": {"type": "array", "items": {"$ref": "#/$defs/addr"}},
+            "clipNorm": {"$ref": "#/$defs/f64hex"},
+            "trimPerSide": {"$ref": "#/$defs/uint"}
+          }
+        },
+        "gate": {
+          "description": "Validation gate with a margin band; leave-one-out runs at most n times and every loss is recorded.",
+          "type": "object", "additionalProperties": false,
+          "required": ["valBefore", "valAfter", "band", "result", "leaveOneOut", "dropped"],
+          "properties": {
+            "valBefore": {"$ref": "#/$defs/f64hex"},
+            "valAfter": {"$ref": "#/$defs/f64hex"},
+            "band": {"$ref": "#/$defs/f64hex"},
+            "result": {"enum": ["pass", "dropped", "reverted"]},
+            "leaveOneOut": {
+              "type": "array",
+              "items": {"type": "object", "additionalProperties": false, "required": ["op", "valLoss"],
+                        "properties": {"op": {"$ref": "#/$defs/addr"}, "valLoss": {"$ref": "#/$defs/f64hex"}}}
+            },
+            "dropped": {"oneOf": [{"$ref": "#/$defs/addr"}, {"type": "null"}]}
+          }
+        },
+        "outer": {
+          "type": "object", "additionalProperties": false, "required": ["kind"],
+          "properties": {"kind": {"enum": ["avg"]}}
+        },
+        "aggregate": {"$ref": "#/$defs/hex32"},
+        "outcome": {"enum": ["Accepted", "Reverted"]},
+        "features": {"type": "null"},
+        "handoffs": {"type": "null"},
+        "detector": {"type": "null"}
+      }
+    },
+    "payEvidence": {
+      "description": "Posted as finalizeRound payEvidenceHash. Built by tod_core.evidence.pay_evidence.",
+      "type": "object", "additionalProperties": false,
+      "required": ["job", "round", "mode", "budget", "eligible", "graduated", "payouts", "forfeits", "toPool", "drip", "players", "vTable", "phi", "slice"],
+      "properties": {
+        "job": {"$ref": "#/$defs/uint"},
+        "round": {"$ref": "#/$defs/uint"},
+        "mode": {"const": "equal"},
+        "budget": {"$ref": "#/$defs/uint"},
+        "eligible": {"type": "array", "items": {"$ref": "#/$defs/addr"}},
+        "graduated": {"type": "array", "items": {"$ref": "#/$defs/addr"}},
+        "payouts": {"type": "array", "items": {"$ref": "#/$defs/amount"}},
+        "forfeits": {"type": "array", "items": {"$ref": "#/$defs/amount"}},
+        "toPool": {"$ref": "#/$defs/uint"},
+        "drip": {"$ref": "#/$defs/uint"},
+        "players": {"type": "null"},
+        "vTable": {"type": "null"},
+        "phi": {"type": "null"},
+        "slice": {"type": "null"}
+      }
+    }
+  },
+  "oneOf": [
+    {"$ref": "#/$defs/verifierReport"},
+    {"$ref": "#/$defs/aggregateEvidence"},
+    {"$ref": "#/$defs/payEvidence"}
+  ]
+}
