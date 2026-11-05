@@ -6,6 +6,8 @@ ARG APP
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never PATH=/app/.venv/bin:$PATH
 # Keys and node state live on the volume, so they survive container replacement.
 ENV TOD_DATA=/data
+# The wrapper publishes 7777 on the host's 127.0.0.1 only, so the node's local API listens on every interface in here.
+ENV TOD_API_BIND=0.0.0.0:7777
 WORKDIR /app
 COPY . .
 RUN test -n "$APP" \
