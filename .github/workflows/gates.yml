@@ -1,0 +1,30 @@
+# Checks every commit and PR: under 2,000 changed lines, no binaries, no co-author trailers, no merge commits.
+name: gates
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: gates-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  change:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          # PRs default to GitHub's test merge commit, which the merge-commit rule would reject; check the PR's own head.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - run: python3 -m unittest scripts/test_check_change.py
+      - name: Check the change
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          # A brand-new branch has no "before" commit, so fall back to the first commit in history.
+          if [ -z "$BASE" ] || [ "$BASE" = 0000000000000000000000000000000000000000 ]; then
+            BASE=$(git rev-list --max-parents=0 HEAD | tail -n1)
+          fi
+          python3 scripts/check_change.py "$BASE" HEAD

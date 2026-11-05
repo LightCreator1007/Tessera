@@ -1,0 +1,51 @@
+# Who reviews what. The last matching line wins; files with no match need no code-owner review.
+
+# Dhairya: training code, datasets, numeric vectors, CI
+/packages/workloads/              @dhairya-pandya
+/packages/datasets/               @dhairya-pandya
+/packages/core/**/blob*           @dhairya-pandya
+/packages/core/**/aggregate*      @dhairya-pandya
+/packages/core/**/judge*          @dhairya-pandya
+/vectors/kernel/                  @dhairya-pandya
+/vectors/spec.schema.json         @dhairya-pandya @ByteKnight28
+/.github/                         @dhairya-pandya
+/scripts/check_change.py          @dhairya-pandya
+/scripts/test_check_change.py     @dhairya-pandya
+
+# Arunit: contracts and chain
+/contracts/                       @LightCreator1007
+/packages/abi/                    @LightCreator1007
+/packages/core/**/encodings*      @LightCreator1007
+/packages/core/**/hashing*        @LightCreator1007
+/packages/core/**/ledger*         @LightCreator1007
+/packages/core/**/txmgr*          @LightCreator1007
+/vectors/encodings.json           @LightCreator1007
+/networks/                        @LightCreator1007
+/scripts/deploy*                  @LightCreator1007
+/scripts/fund*                    @LightCreator1007
+/.claude/                         @LightCreator1007
+/.mcp.json                        @LightCreator1007
+
+# Shantanu: coordinator, payouts and evidence
+/services/coordinator/            @ByteKnight28
+/packages/core/**/payout*         @ByteKnight28
+/packages/core/**/evidence*       @ByteKnight28
+/vectors/evidence.schema.json     @ByteKnight28
+
+# Rounak: node, verifier, identity, images and root config
+/services/coordinator/identity/   @rounak-agl
+/apps/node/                       @rounak-agl
+/apps/verifier/                   @rounak-agl
+/docker/                          @rounak-agl
+/infra/                           @rounak-agl
+/pyproject.toml                   @rounak-agl
+/uv.lock                          @rounak-agl
+/.python-version                  @rounak-agl
+/package.json                     @rounak-agl
+/pnpm-workspace.yaml              @rounak-agl
+/.env.example                     @rounak-agl
+/.dockerignore                    @rounak-agl
+
+# Ashutosh: web app and terminal UI
+/apps/web/                        @Ashu-2006
+/apps/tui/                        @Ashu-2006

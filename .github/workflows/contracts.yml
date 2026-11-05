@@ -1,0 +1,33 @@
+# Builds and tests the Solidity contracts, then regenerates the ABI package. Skips until contracts exist.
+name: contracts
+on:
+  pull_request:
+    paths: ["contracts/**", "packages/abi/**", ".github/workflows/contracts.yml"]
+  push:
+    branches: [main]
+    paths: ["contracts/**", "packages/abi/**", ".github/workflows/contracts.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: contracts-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  forge:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+      - if: hashFiles('contracts/foundry.toml') != ''
+        uses: foundry-rs/foundry-toolchain@dba66c27052e63476d886f22216e119ba7e615bf # v1.9.2
+      - if: hashFiles('contracts/foundry.toml') != ''
+        run: forge build
+      - if: hashFiles('contracts/foundry.toml') != ''
+        run: forge test
+      # ABIs are generated rather than committed (some are over 2,000 lines), so CI just proves generation works.
+      - if: hashFiles('packages/abi/scripts/generate.mjs') != ''
+        working-directory: .
+        run: node packages/abi/scripts/generate.mjs
