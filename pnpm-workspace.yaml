@@ -1,0 +1,4 @@
+# pnpm workspace for the JS packages: the web app and the generated ABI package.
+packages:
+  - apps/web
+  - packages/abi

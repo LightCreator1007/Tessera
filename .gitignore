@@ -4,8 +4,22 @@
 # CodeGraph local index (per clone; see .claude/skills/codegraph)
 .codegraph/
 
+# Per-agent local notes
+MEMORY.md
+
 # Secrets and local state
 .env
 .env.*
 !.env.example
+runs/
+store/
+services/coordinator/*.db
+
+# The coordinator has a source package called store; the rule above is for runtime data
+!services/coordinator/store/
+
+# Python and JS tooling
+.venv/
+__pycache__/
+.pytest_cache/
 node_modules/

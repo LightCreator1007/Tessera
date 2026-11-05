@@ -1,0 +1,21 @@
+# Package for tod-datasets: dataset cards, presets and the canonicaliser.
+
+[project]
+name = "tod-datasets"
+version = "0.1.0"
+description = "Dataset cards, presets and the canonicaliser for uploaded data"
+requires-python = ">=3.12"
+dependencies = ["numpy>=2", "tod-core"]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.uv.sources]
+tod-core = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.8,<0.14"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = ""

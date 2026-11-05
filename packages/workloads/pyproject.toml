@@ -1,0 +1,25 @@
+# Package for tod-workloads: the training workloads and the round runner.
+
+[project]
+name = "tod-workloads"
+version = "0.1.0"
+description = "Workloads (exact MLP, later CNN and adapters), defaults and the round runner"
+requires-python = ">=3.12"
+dependencies = ["numpy>=2", "tod-core", "tod-datasets"]
+
+[project.optional-dependencies]
+torch = ["torch>=2.4", "torchvision>=0.19"]
+
+[dependency-groups]
+dev = ["pytest>=8", "jsonschema>=4"]
+
+[tool.uv.sources]
+tod-core = { workspace = true }
+tod-datasets = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.8,<0.14"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = ""
