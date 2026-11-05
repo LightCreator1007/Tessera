@@ -17,6 +17,8 @@ from eth_utils import is_address, to_checksum_address
 from tod_core import encodings as enc
 from tod_workloads.mlp_exact import selftest as mlp_selftest
 
+from . import config
+
 # Agents and the web app branch on these exit codes, so they are part of the CLI contract.
 OK, BAD_INPUT, NOT_ELIGIBLE, UNREACHABLE = 0, 2, 3, 4
 # An old pairing code must be useless, so consent expires after 30 minutes.
@@ -71,8 +73,12 @@ def main(
 
 
 @app.command()
-def init(as_json: JsonOpt = False) -> None:
-    """Create this node's operator key (once; later runs print the existing address)."""
+def init(
+    network: Annotated[str | None, typer.Option("--network", help="Network name in networks/ or a path to its toml.")] = None,
+    coordinator: Annotated[str | None, typer.Option("--coordinator", help="Coordinator base URL.")] = None,
+    as_json: JsonOpt = False,
+) -> None:
+    """Create this node's operator key once, and save --network and --coordinator if given. Never rotates the key."""
     path = key_path()
     created = not path.exists()
     if created:
@@ -81,8 +87,23 @@ def init(as_json: JsonOpt = False) -> None:
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, "w") as f:
             f.write(Account.create().key.hex())
+    if network or coordinator:
+        config.write(data_dir(), {"network": network, "coordinator": coordinator})
     operator = load_operator(as_json).address
-    emit(as_json, {"created": created, "operator": operator}, f"operator {operator}" + (" (created)" if created else ""))
+    emit(as_json, {"created": created, "operator": operator, "config": str(config.path(data_dir()))},
+         f"operator {operator}" + (" (created)" if created else "") + f"\nconfig   {config.path(data_dir())}")
+
+
+config_app = typer.Typer(no_args_is_help=True, help="Show this node's settings.")
+app.add_typer(config_app, name="config")
+
+
+@config_app.command("show")
+def config_show(as_json: JsonOpt = False) -> None:
+    """Print each setting with where it came from: flag, env, file or unset."""
+    values = config.resolve(data_dir())
+    fields = {k: {"value": v, "source": src} for k, (v, src) in values.items()}
+    emit(as_json, fields, "\n".join(f"{k:<12} {v or '-'}  ({src})" for k, (v, src) in values.items()))
 
 
 @app.command()
@@ -158,8 +179,8 @@ def doctor(
     checks["dataDir"] = (os.access(data_dir(), os.W_OK), str(data_dir()))
     expected = json.loads(SELFTEST_VECTOR.read_text())["hash"]
     checks["selftest"] = (mlp_selftest() == expected, platform.machine())
-    url = os.environ.get("TOD_COORDINATOR_URL")
-    coord = _coordinator_check(url, chain_id) if url else (None, "TOD_COORDINATOR_URL not set, skipped")
+    url = config.resolve(data_dir())["coordinator"][0]
+    coord = _coordinator_check(url, chain_id) if url else (None, "no coordinator set (init --coordinator), skipped")
     checks["coordinator"] = coord
 
     fields = {k: {"ok": ok, "detail": d} for k, (ok, d) in checks.items()}

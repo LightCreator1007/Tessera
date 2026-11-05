@@ -99,7 +99,7 @@ def health_server():
 
 
 def test_doctor_needs_a_key(run, monkeypatch):
-    monkeypatch.delenv("TOD_COORDINATOR_URL", raising=False)
+    monkeypatch.delenv("TOD_COORDINATOR", raising=False)
     result = run("doctor", "--json")
     assert result.exit_code == NOT_ELIGIBLE
     out = json.loads(result.output)
@@ -108,7 +108,7 @@ def test_doctor_needs_a_key(run, monkeypatch):
 
 
 def test_doctor_rejects_a_readable_key(run, tmp_path, monkeypatch):
-    monkeypatch.delenv("TOD_COORDINATOR_URL", raising=False)
+    monkeypatch.delenv("TOD_COORDINATOR", raising=False)
     run("init")
     (tmp_path / "operator.key").chmod(0o644)
     assert run("doctor").exit_code == NOT_ELIGIBLE
@@ -116,7 +116,7 @@ def test_doctor_rejects_a_readable_key(run, tmp_path, monkeypatch):
 
 def test_doctor_checks_coordinator_chain(run, monkeypatch, health_server):
     run("init")
-    monkeypatch.setenv("TOD_COORDINATOR_URL", health_server({"ok": True, "chainId": 31337, "version": "0.1.0"}))
+    monkeypatch.setenv("TOD_COORDINATOR", health_server({"ok": True, "chainId": 31337, "version": "0.1.0"}))
     assert run("doctor", "--chain-id", "31337").exit_code == 0
     result = run("doctor", "--chain-id", "84532", "--json")
     assert result.exit_code == UNREACHABLE
@@ -125,5 +125,26 @@ def test_doctor_checks_coordinator_chain(run, monkeypatch, health_server):
 
 def test_doctor_reports_unreachable_coordinator(run, monkeypatch):
     run("init")
-    monkeypatch.setenv("TOD_COORDINATOR_URL", "http://127.0.0.1:9")
+    monkeypatch.setenv("TOD_COORDINATOR", "http://127.0.0.1:9")
     assert run("doctor").exit_code == UNREACHABLE
+
+
+def test_init_saves_config_and_keeps_the_key(run, monkeypatch):
+    monkeypatch.delenv("TOD_NETWORK", raising=False)
+    monkeypatch.delenv("TOD_COORDINATOR", raising=False)
+    first = json.loads(run("init", "--network", "anvil", "--json").output)
+    second = json.loads(run("init", "--coordinator", "http://127.0.0.1:8000", "--json").output)
+    assert first["operator"] == second["operator"] and not second["created"]
+    shown = json.loads(run("config", "show", "--json").output)
+    assert shown["network"] == {"value": "anvil", "source": "file"}
+    assert shown["coordinator"] == {"value": "http://127.0.0.1:8000", "source": "file"}
+    monkeypatch.setenv("TOD_NETWORK", "base-sepolia")
+    assert json.loads(run("config", "show", "--json").output)["network"] == {"value": "base-sepolia", "source": "env"}
+
+
+def test_doctor_uses_the_saved_coordinator(run, monkeypatch, health_server):
+    monkeypatch.delenv("TOD_COORDINATOR", raising=False)
+    url = health_server({"ok": True, "chainId": 31337, "version": "0.1.0"})
+    run("init", "--coordinator", url)
+    out = json.loads(run("doctor", "--json").output)
+    assert out["coordinator"]["ok"] is True
