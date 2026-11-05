@@ -46,9 +46,30 @@ def test_job_routes_return_their_shapes(monkeypatch):
     assert c.get("/v1/workloads/mlp-exact/1").json()["replayClass"] == "exact"
 
 
-def test_openapi_export_is_stable():
-    first = render()
-    assert first == render() and json.loads(first)["info"]["title"] == "ToD coordinator"
+# The routes clients are built against; the exported schema must keep every one.
+ROUTES = """
+GET /v1/health                                  GET /v1/config
+GET /v1/workloads                               GET /v1/workloads/{wid}
+GET /v1/workloads/{wid}/selftest                POST /v1/jobs/draft
+GET /v1/jobs                                    GET /v1/jobs/{job}
+GET /v1/jobs/{job}/spec                         GET /v1/jobs/{job}/state
+GET /v1/jobs/{job}/model                        GET /v1/jobs/{job}/rounds
+GET /v1/jobs/{job}/rounds/{r}                   GET /v1/jobs/{job}/rounds/{r}/evidence
+POST /v1/jobs/{job}/rounds/{r}/disputes         GET /v1/jobs/{job}/rounds/{r}/settlement
+POST /v1/jobs/{job}/rounds/{r}/signatures       GET /v1/blobs/{h}
+PUT /v1/blobs/{h}                               HEAD /v1/blobs/{h}
+POST /v1/nodes/heartbeat                        GET /v1/nodes
+GET /v1/pool                                    POST /v1/admin/jobs/{job}/mode
+POST /v1/admin/jobs/{job}/pause                 POST /v1/admin/nodes/{op}/rearm
+GET /v1/admin/txs
+"""
+
+
+def test_openapi_export_keeps_every_client_route():
+    doc = json.loads(render())
+    exported = {(m.upper(), p) for p, ops in doc["paths"].items() for m in ops}
+    words = ROUTES.split()
+    assert set(zip(words[::2], words[1::2])) <= exported
 
 
 def test_evidence_schema_accepts_examples():
