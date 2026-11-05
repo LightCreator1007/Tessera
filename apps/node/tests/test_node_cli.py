@@ -1,8 +1,10 @@
-"""Tests for the tod-node CLI: version, operator key, pairing code and status."""
+"""Tests for the tod-node CLI: version, operator key, pairing code, status and doctor."""
 
 import base64
+import http.server
 import json
 import stat
+import threading
 import time
 from importlib.metadata import version
 
@@ -10,7 +12,7 @@ import pytest
 from tod_core import encodings as enc
 from typer.testing import CliRunner
 
-from tod_node.cli import BAD_INPUT, NOT_ELIGIBLE, PAIR_PREFIX, PAIR_TTL, app
+from tod_node.cli import BAD_INPUT, NOT_ELIGIBLE, PAIR_PREFIX, PAIR_TTL, UNREACHABLE, app
 
 OWNER = "0x" + "11" * 20
 REGISTRY = "0x" + "22" * 20
@@ -68,3 +70,81 @@ def test_selftest_reproduces_vector(run):
     assert result.exit_code == 0, result.output
     out = json.loads(result.output)
     assert out["ok"] and out["got"] == out["expected"]
+
+
+@pytest.fixture
+def health_server():
+    """A local stand-in for the coordinator's /v1/health that answers with the given body."""
+    servers = []
+
+    def start(body: dict):
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                data = json.dumps(body).encode()
+                self.send_response(200 if self.path == "/v1/health" else 404)
+                self.end_headers()
+                self.wfile.write(data)
+
+            def log_message(self, *args):
+                pass
+
+        srv = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        servers.append(srv)
+        return f"http://127.0.0.1:{srv.server_port}"
+
+    yield start
+    for srv in servers:
+        srv.shutdown()
+
+
+def test_doctor_needs_a_key(run, monkeypatch):
+    monkeypatch.delenv("TOD_COORDINATOR", raising=False)
+    result = run("doctor", "--json")
+    assert result.exit_code == NOT_ELIGIBLE
+    out = json.loads(result.output)
+    assert out["key"]["ok"] is False and out["selftest"]["ok"] is True
+    assert out["coordinator"]["ok"] is None
+
+
+def test_doctor_rejects_a_readable_key(run, tmp_path, monkeypatch):
+    monkeypatch.delenv("TOD_COORDINATOR", raising=False)
+    run("init")
+    (tmp_path / "operator.key").chmod(0o644)
+    assert run("doctor").exit_code == NOT_ELIGIBLE
+
+
+def test_doctor_checks_coordinator_chain(run, monkeypatch, health_server):
+    run("init")
+    monkeypatch.setenv("TOD_COORDINATOR", health_server({"ok": True, "chainId": 31337, "version": "0.1.0"}))
+    assert run("doctor", "--chain-id", "31337").exit_code == 0
+    result = run("doctor", "--chain-id", "84532", "--json")
+    assert result.exit_code == UNREACHABLE
+    assert "expected 84532" in json.loads(result.output)["coordinator"]["detail"]
+
+
+def test_doctor_reports_unreachable_coordinator(run, monkeypatch):
+    run("init")
+    monkeypatch.setenv("TOD_COORDINATOR", "http://127.0.0.1:9")
+    assert run("doctor").exit_code == UNREACHABLE
+
+
+def test_init_saves_config_and_keeps_the_key(run, monkeypatch):
+    monkeypatch.delenv("TOD_NETWORK", raising=False)
+    monkeypatch.delenv("TOD_COORDINATOR", raising=False)
+    first = json.loads(run("init", "--network", "anvil", "--json").output)
+    second = json.loads(run("init", "--coordinator", "http://127.0.0.1:8000", "--json").output)
+    assert first["operator"] == second["operator"] and not second["created"]
+    shown = json.loads(run("config", "show", "--json").output)
+    assert shown["network"] == {"value": "anvil", "source": "file"}
+    assert shown["coordinator"] == {"value": "http://127.0.0.1:8000", "source": "file"}
+    monkeypatch.setenv("TOD_NETWORK", "base-sepolia")
+    assert json.loads(run("config", "show", "--json").output)["network"] == {"value": "base-sepolia", "source": "env"}
+
+
+def test_doctor_uses_the_saved_coordinator(run, monkeypatch, health_server):
+    monkeypatch.delenv("TOD_COORDINATOR", raising=False)
+    url = health_server({"ok": True, "chainId": 31337, "version": "0.1.0"})
+    run("init", "--coordinator", url)
+    out = json.loads(run("doctor", "--json").output)
+    assert out["coordinator"]["ok"] is True

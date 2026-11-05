@@ -1,10 +1,12 @@
-"""tod-node CLI: operator key, pairing code, self-test and status. The run loop comes with the node daemon."""
+"""tod-node CLI: operator key, pairing code, self-test, status and doctor. The run loop comes with the node daemon."""
 
 import base64
 import json
 import os
 import platform
+import stat
 import time
+import urllib.request
 from importlib.metadata import version
 from pathlib import Path
 from typing import Annotated
@@ -14,6 +16,8 @@ from eth_account import Account
 from eth_utils import is_address, to_checksum_address
 from tod_core import encodings as enc
 from tod_workloads.mlp_exact import selftest as mlp_selftest
+
+from . import config
 
 # Agents and the web app branch on these exit codes, so they are part of the CLI contract.
 OK, BAD_INPUT, NOT_ELIGIBLE, UNREACHABLE = 0, 2, 3, 4
@@ -69,8 +73,12 @@ def main(
 
 
 @app.command()
-def init(as_json: JsonOpt = False) -> None:
-    """Create this node's operator key (once; later runs print the existing address)."""
+def init(
+    network: Annotated[str | None, typer.Option("--network", help="Network name in networks/ or a path to its toml.")] = None,
+    coordinator: Annotated[str | None, typer.Option("--coordinator", help="Coordinator base URL.")] = None,
+    as_json: JsonOpt = False,
+) -> None:
+    """Create this node's operator key once, and save --network and --coordinator if given. Never rotates the key."""
     path = key_path()
     created = not path.exists()
     if created:
@@ -79,8 +87,23 @@ def init(as_json: JsonOpt = False) -> None:
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, "w") as f:
             f.write(Account.create().key.hex())
+    if network or coordinator:
+        config.write(data_dir(), {"network": network, "coordinator": coordinator})
     operator = load_operator(as_json).address
-    emit(as_json, {"created": created, "operator": operator}, f"operator {operator}" + (" (created)" if created else ""))
+    emit(as_json, {"created": created, "operator": operator, "config": str(config.path(data_dir()))},
+         f"operator {operator}" + (" (created)" if created else "") + f"\nconfig   {config.path(data_dir())}")
+
+
+config_app = typer.Typer(no_args_is_help=True, help="Show this node's settings.")
+app.add_typer(config_app, name="config")
+
+
+@config_app.command("show")
+def config_show(as_json: JsonOpt = False) -> None:
+    """Print each setting with where it came from: flag, env, file or unset."""
+    values = config.resolve(data_dir())
+    fields = {k: {"value": v, "source": src} for k, (v, src) in values.items()}
+    emit(as_json, fields, "\n".join(f"{k:<12} {v or '-'}  ({src})" for k, (v, src) in values.items()))
 
 
 @app.command()
@@ -124,3 +147,46 @@ def status(as_json: JsonOpt = False) -> None:
     operator = Account.from_key(path.read_text().strip()).address if path.exists() else None
     fields = {"dataDir": str(data_dir()), "initialized": operator is not None, "operator": operator}
     emit(as_json, fields, "\n".join(f"{k}: {v}" for k, v in fields.items()))
+
+
+def _coordinator_check(url: str, chain_id: int | None) -> tuple[bool, str]:
+    try:
+        with urllib.request.urlopen(url.rstrip("/") + "/v1/health", timeout=5) as r:
+            health = json.loads(r.read())
+    except Exception as e:  # any network or parse failure means the node can't work with this coordinator
+        return False, f"unreachable: {e}"
+    if not health.get("ok"):
+        return False, "health says not ok"
+    if chain_id is not None and health.get("chainId") != chain_id:
+        return False, f"coordinator is on chain {health.get('chainId')}, expected {chain_id}"
+    return True, f"chain {health.get('chainId')}, version {health.get('version')}"
+
+
+@app.command()
+def doctor(
+    chain_id: Annotated[int | None, typer.Option("--chain-id", help="Fail if the coordinator is on another chain.")] = None,
+    as_json: JsonOpt = False,
+) -> None:
+    """Check that this node is ready to train: key, data folder, self-test and coordinator."""
+    path, checks = key_path(), {}
+    if not path.exists():
+        checks["key"] = (False, "missing; run `tod-node init`")
+    elif stat.S_IMODE(path.stat().st_mode) != 0o600:
+        checks["key"] = (False, f"{path} must be mode 0600")
+    else:
+        checks["key"] = (True, str(path))
+    data_dir().mkdir(parents=True, exist_ok=True)
+    checks["dataDir"] = (os.access(data_dir(), os.W_OK), str(data_dir()))
+    expected = json.loads(SELFTEST_VECTOR.read_text())["hash"]
+    checks["selftest"] = (mlp_selftest() == expected, platform.machine())
+    url = config.resolve(data_dir())["coordinator"][0]
+    coord = _coordinator_check(url, chain_id) if url else (None, "no coordinator set (init --coordinator), skipped")
+    checks["coordinator"] = coord
+
+    fields = {k: {"ok": ok, "detail": d} for k, (ok, d) in checks.items()}
+    marks = {True: "ok  ", False: "FAIL", None: "skip"}
+    emit(as_json, fields, "\n".join(f"{marks[ok]} {k}: {d}" for k, (ok, d) in checks.items()))
+    if not all(checks[k][0] for k in ("key", "dataDir", "selftest")):
+        raise typer.Exit(NOT_ELIGIBLE)
+    if coord[0] is False:
+        raise typer.Exit(UNREACHABLE)
