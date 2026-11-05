@@ -1,0 +1,28 @@
+# Deterministic public fixtures for local Anvil tests; never fund these keys on a public network.
+name = "anvil"
+chainId = 31337
+rpc = "http://127.0.0.1:8545"
+rpcEnv = "ANVIL_RPC_URL"
+logSpan = 2000
+probationSeconds = 0
+threshold = 2
+
+[windows]
+commit = 45
+reveal = 30
+verify = 45
+finalize = 60
+stall = 3600
+
+[roles]
+deployer = "0x819eeFC594Ba69911A60f22d6Cac2Eb219910A19"
+coordinator = "0xB3aAd8a5c0e9DCCaAF617C9D07BCCB894Db690D7"
+admitter = "0x29e236748697Bbfe5B7B45f487238181bF15E4c6"
+faucet = "0xe98Fb22AFdFc69CC7fd539dE8e0bBeD44d429eC0"
+verifiers = ["0x070469c67cf5cf06dB283288B943EDa5D0422f6c", "0x4037306FE3e10C1950b1CD7F1404e532de351a21"]
+
+[contracts]
+token = "0xbcA2693dC55355FC51E20a7eA22CDA6c1589D263"
+registry = "0x067a59DA8200EaF53dB2eD1BA3aDd74FEdbBD4f0"
+market = "0xfdAfECB684069F7dfFDd83997a0cf30B2f06438d"
+deployBlock = 1
