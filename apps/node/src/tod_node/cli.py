@@ -164,15 +164,21 @@ def events_log():
     return EventLog(data_dir() / "events.ndjson")
 
 
-@app.command()
-def status(as_json: JsonOpt = False) -> None:
-    """Show this node's state: key, whether the daemon is running, and its latest event."""
+def status_fields() -> dict:
+    """The `status --json` object; GET /v1/status returns the same one."""
     path = key_path()
     operator = Account.from_key(path.read_text().strip()).address if path.exists() else None
     pid = daemon_pid()
     last = (events_log().read()[-1:] or [None])[0]
-    fields = {"dataDir": str(data_dir()), "initialized": operator is not None, "operator": operator,
-              "daemon": {"state": "running" if pid else "stopped", "pid": pid}, "lastEvent": last}
+    return {"dataDir": str(data_dir()), "initialized": operator is not None, "operator": operator,
+            "daemon": {"state": "running" if pid else "stopped", "pid": pid}, "lastEvent": last}
+
+
+@app.command()
+def status(as_json: JsonOpt = False) -> None:
+    """Show this node's state: key, whether the daemon is running, and its latest event."""
+    fields = status_fields()
+    pid, last = fields["daemon"]["pid"], fields["lastEvent"]
     from .events import render
     text = {**fields, "daemon": f"{fields['daemon']['state']}" + (f" (pid {pid})" if pid else ""),
             "lastEvent": render(last) if last else None}
@@ -244,12 +250,37 @@ def run(
         signal.signal(sig, on_signal)
     events.append("node.started", version=version("tod-node"), network=net.name, chainId=net.chain_id,
                   operator=account.address, mode=mode)
+    api, server = _start_api(events, stop)
     try:
-        run_daemon(ledger, loop, stop, poll=poll, emit=events.append)
+        run_daemon(ledger, loop, stop, poll=poll, emit=events.append, on_tick=api.tick)
     finally:
+        if server:
+            server.shutdown()
         events.append("node.stopped")
         pid_path().unlink(missing_ok=True)
         lock.release()
+
+
+def _start_api(events, stop: threading.Event):
+    """Serve the local API unless TOD_API_BIND is "off". A busy port is logged, not fatal: the node matters more."""
+    from .api import Api, load_token
+
+    def api_stop():
+        if not stop.is_set():
+            events.append("node.stopping", source="api")
+            stop.set()
+
+    api = Api(status_fields, events, api_stop, load_token(data_dir()))
+    bind = os.environ.get("TOD_API_BIND", "127.0.0.1:7777")
+    if bind == "off":
+        return api, None
+    try:
+        server = api.serve(bind)
+    except (OSError, ValueError) as e:
+        events.append("error", what="api", bind=bind, reason=str(e))
+        return api, None
+    events.append("api.listening", bind=f"{server.server_address[0]}:{server.server_address[1]}")
+    return api, server
 
 
 @app.command()
