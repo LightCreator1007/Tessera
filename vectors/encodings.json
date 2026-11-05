@@ -1,0 +1,623 @@
+{
+ "version": 1,
+ "keccakEmpty": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+ "domain": [
+  {
+   "chainId": 84532,
+   "jobMarket": "0xd359F9E33dDe896b6516F42437C4b774e681a98B",
+   "domain": "0x7a6dc12aa0ba447510e09d4d8c978e1bf81be0b3d172fa11f510dc6e108e0bdf"
+  },
+  {
+   "chainId": 31337,
+   "jobMarket": "0xd359F9E33dDe896b6516F42437C4b774e681a98B",
+   "domain": "0x00ab6648dfad1753925ab0e3fa6b849ea0ea57c49d72aa703e4feaa674201c34"
+  },
+  {
+   "chainId": 0,
+   "jobMarket": "0x0000000000000000000000000000000000000000",
+   "domain": "0xad3228b676f7d3cd4284a5443f17f1962b36e491b30a40b2405849e597ba5fb5"
+  }
+ ],
+ "checkpointRoot": [
+  {
+   "hashes": [
+    "0xcb7d47b21b9b49c056f1fe66fc964bac875c6841dee9e3216825eca1c5099a94",
+    "0x2ef8d95d8aa7ffe3ff423fba87172e4e03ce672f30738a9876f745ee0139c0da",
+    "0xd5a18a7d00b97c43068de3cdc872ef6ad3b92510f9a80e455886230393bbb615",
+    "0x9167bc58f18f1cfa8ebf32ff62b7653ed13db560a998bef77d7b79a1293fddc8",
+    "0x436009c3ab6b517a6e9c0fd37fb3799d700d316c085383e59c2d9d64b4a9aab6"
+   ],
+   "root": "0x830c9756661fc54d9c2596163967907c0f3d1bbd67bceb4e8d62aa36f29bb2e1"
+  },
+  {
+   "hashes": [
+    "0xcb7d47b21b9b49c056f1fe66fc964bac875c6841dee9e3216825eca1c5099a94",
+    "0x2ef8d95d8aa7ffe3ff423fba87172e4e03ce672f30738a9876f745ee0139c0da"
+   ],
+   "root": "0x3d08b678fe34d0968ee90cdad7e0a367fc984af574de73956b3df6d98c66dd87"
+  },
+  {
+   "hashes": [
+    "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "0x2ef8d95d8aa7ffe3ff423fba87172e4e03ce672f30738a9876f745ee0139c0da"
+   ],
+   "root": "0xb0960131156c4592bee5d5769d610b7cf7ac3c0d57986a84f624dfb64daf24e7"
+  }
+ ],
+ "commitHash": [
+  {
+   "domain": "0x7a6dc12aa0ba447510e09d4d8c978e1bf81be0b3d172fa11f510dc6e108e0bdf",
+   "jobId": 7,
+   "roundId": 3,
+   "operator": "0x5756747c34d7348C33F3189AC767A21486271F9C",
+   "root": "0x830c9756661fc54d9c2596163967907c0f3d1bbd67bceb4e8d62aa36f29bb2e1",
+   "salt": "0xa05e334153147e75f3f416139b5109d1179cb56fef6a4ecb4c4cbc92a7c37b70",
+   "commitHash": "0x008308250241c98213869817650680e87736336f928fe0d95860c0cd0e4515a7"
+  },
+  {
+   "domain": "0x7a6dc12aa0ba447510e09d4d8c978e1bf81be0b3d172fa11f510dc6e108e0bdf",
+   "jobId": 0,
+   "roundId": 0,
+   "operator": "0x0000000000000000000000000000000000000000",
+   "root": "0x0000000000000000000000000000000000000000000000000000000000000000",
+   "salt": "0x0000000000000000000000000000000000000000000000000000000000000000",
+   "commitHash": "0x3813de18400b905af77caafd1daa2244af7ae52aca8939bc278fefd3958b578b"
+  },
+  {
+   "domain": "0x7a6dc12aa0ba447510e09d4d8c978e1bf81be0b3d172fa11f510dc6e108e0bdf",
+   "jobId": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+   "roundId": "18446744073709551616",
+   "operator": "0x5756747c34d7348C33F3189AC767A21486271F9C",
+   "root": "0x436009c3ab6b517a6e9c0fd37fb3799d700d316c085383e59c2d9d64b4a9aab6",
+   "salt": "0x155be92b2f4d9840dffa6d5d9ec7c217158eaa53806e42820606ede6f9e17f25",
+   "commitHash": "0x5a9f51b48cf9d8d5e69de27a3ec74da0cf1a4130cbe764013206ed5d98138557"
+  }
+ ],
+ "taskSeed": [
+  {
+   "domain": "0x7a6dc12aa0ba447510e09d4d8c978e1bf81be0b3d172fa11f510dc6e108e0bdf",
+   "jobId": 7,
+   "roundId": 3,
+   "shard": 2,
+   "startWeightsHash": "0xcb7d47b21b9b49c056f1fe66fc964bac875c6841dee9e3216825eca1c5099a94",
+   "taskSeed": "0xea8e7c83f01c782a50eab4e09dc76f2e3b4ed6ea8e8e64c253e446f8269c96af"
+  },
+  {
+   "domain": "0x7a6dc12aa0ba447510e09d4d8c978e1bf81be0b3d172fa11f510dc6e108e0bdf",
+   "jobId": 0,
+   "roundId": 0,
+   "shard": 0,
+   "startWeightsHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+   "taskSeed": "0x32d13ecc697bb1baf4ee05cef4fd6cdb85866e933611acde06753e5ecdee058b"
+  },
+  {
+   "domain": "0x7a6dc12aa0ba447510e09d4d8c978e1bf81be0b3d172fa11f510dc6e108e0bdf",
+   "jobId": 7,
+   "roundId": 3,
+   "shard": 255,
+   "startWeightsHash": "0xcb7d47b21b9b49c056f1fe66fc964bac875c6841dee9e3216825eca1c5099a94",
+   "taskSeed": "0x9512a79b4d10340451a37343c7a2dc377894e03ab0544281a917a428cf013c28"
+  }
+ ],
+ "roundSeed": [
+  {
+   "blockhash": "0x20b53acf0daefc8c6ad68c861fb3b543ca541abd101abc1edfcbf6606b838ef4",
+   "domain": "0x7a6dc12aa0ba447510e09d4d8c978e1bf81be0b3d172fa11f510dc6e108e0bdf",
+   "jobId": 7,
+   "roundId": 3,
+   "seed": "0x4c3c6098c597a8f82279526343f617037b8bc942f698f4d9bb19d22a8ed7e940"
+  },
+  {
+   "blockhash": "0x20b53acf0daefc8c6ad68c861fb3b543ca541abd101abc1edfcbf6606b838ef4",
+   "domain": "0x7a6dc12aa0ba447510e09d4d8c978e1bf81be0b3d172fa11f510dc6e108e0bdf",
+   "jobId": 7,
+   "roundId": 4,
+   "seed": "0xca726a23effddc28b7a61467453fd423749fc3b48677ba40c589e6ec9fd6ebc5"
+  },
+  {
+   "blockhash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+   "domain": "0x7a6dc12aa0ba447510e09d4d8c978e1bf81be0b3d172fa11f510dc6e108e0bdf",
+   "jobId": 0,
+   "roundId": 0,
+   "seed": "0xb3f89dd46afe19e83213288235c52988bb027df8c0acd4a54223840c9c1b6879"
+  }
+ ],
+ "epochSeed": [
+  {
+   "domain": "0x7a6dc12aa0ba447510e09d4d8c978e1bf81be0b3d172fa11f510dc6e108e0bdf",
+   "jobId": 7,
+   "shard": 0,
+   "epoch": 0,
+   "seed": "0x7a35bcbca429c1b7dac88f83df69ae45cb910bb665dc24d89f0932c98aa4297c"
+  },
+  {
+   "domain": "0x7a6dc12aa0ba447510e09d4d8c978e1bf81be0b3d172fa11f510dc6e108e0bdf",
+   "jobId": 7,
+   "shard": 0,
+   "epoch": 1,
+   "seed": "0x303480a8af85738612a2224871d72dea8cd9262e6492cbe255869db89a13cd5c"
+  },
+  {
+   "domain": "0x7a6dc12aa0ba447510e09d4d8c978e1bf81be0b3d172fa11f510dc6e108e0bdf",
+   "jobId": 7,
+   "shard": 255,
+   "epoch": 0,
+   "seed": "0x9a9be471e673acdbcb55f53b712e5808711ed38463de46450285df17320d5dba"
+  }
+ ],
+ "permutation": [
+  {
+   "seed": "0x7a35bcbca429c1b7dac88f83df69ae45cb910bb665dc24d89f0932c98aa4297c",
+   "n": 1,
+   "perm": [
+    0
+   ]
+  },
+  {
+   "seed": "0x7a35bcbca429c1b7dac88f83df69ae45cb910bb665dc24d89f0932c98aa4297c",
+   "n": 2,
+   "perm": [
+    0,
+    1
+   ]
+  },
+  {
+   "seed": "0x7a35bcbca429c1b7dac88f83df69ae45cb910bb665dc24d89f0932c98aa4297c",
+   "n": 10,
+   "perm": [
+    0,
+    5,
+    7,
+    2,
+    9,
+    6,
+    4,
+    8,
+    3,
+    1
+   ]
+  },
+  {
+   "seed": "0x6259dd8f6da05ace15d11d42b06006eee7e38f577d513d5bb328a1b8b3f8d57a",
+   "n": 33,
+   "perm": [
+    16,
+    30,
+    21,
+    28,
+    9,
+    26,
+    1,
+    22,
+    13,
+    24,
+    14,
+    10,
+    7,
+    17,
+    15,
+    5,
+    32,
+    20,
+    2,
+    18,
+    19,
+    6,
+    31,
+    12,
+    8,
+    11,
+    0,
+    27,
+    4,
+    29,
+    3,
+    23,
+    25
+   ]
+  }
+ ],
+ "batch": [
+  {
+   "domain": "0x7a6dc12aa0ba447510e09d4d8c978e1bf81be0b3d172fa11f510dc6e108e0bdf",
+   "jobId": 7,
+   "shard": 0,
+   "entry": {
+    "start": 100,
+    "len": 10
+   },
+   "H": 3,
+   "B": 4,
+   "roundsDone": 0,
+   "cursor": 0,
+   "steps": [
+    [
+     100,
+     105,
+     107,
+     102
+    ],
+    [
+     109,
+     106,
+     104,
+     108
+    ],
+    [
+     103,
+     101,
+     105,
+     104
+    ]
+   ]
+  },
+  {
+   "domain": "0x7a6dc12aa0ba447510e09d4d8c978e1bf81be0b3d172fa11f510dc6e108e0bdf",
+   "jobId": 7,
+   "shard": 0,
+   "entry": {
+    "start": 100,
+    "len": 10
+   },
+   "H": 3,
+   "B": 4,
+   "roundsDone": 1,
+   "cursor": 12,
+   "steps": [
+    [
+     103,
+     109,
+     106,
+     100
+    ],
+    [
+     101,
+     102,
+     108,
+     107
+    ],
+    [
+     109,
+     108,
+     107,
+     106
+    ]
+   ]
+  },
+  {
+   "domain": "0x7a6dc12aa0ba447510e09d4d8c978e1bf81be0b3d172fa11f510dc6e108e0bdf",
+   "jobId": 7,
+   "shard": 0,
+   "entry": {
+    "start": 0,
+    "len": 3
+   },
+   "H": 2,
+   "B": 4,
+   "roundsDone": 0,
+   "cursor": 0,
+   "steps": [
+    [
+     0,
+     1,
+     2,
+     0
+    ],
+    [
+     1,
+     2,
+     2,
+     0
+    ]
+   ]
+  }
+ ],
+ "shardTableHash": [
+  {
+   "shards": [
+    {
+     "start": 0,
+     "len": 6000
+    },
+    {
+     "start": 6000,
+     "len": 6000
+    }
+   ],
+   "hash": "0x880ebf85b6e641a7569402d72d9c90e585ba82c51d2567d346750c3aef83c8c3"
+  },
+  {
+   "shards": [
+    {
+     "start": 0,
+     "len": 1
+    }
+   ],
+   "hash": "0xaf08793d73ecf58e29be2c5cb1c78217c7b37e29bb379ec768f66e5045d70f90"
+  },
+  {
+   "shards": [
+    {
+     "start": 0,
+     "len": 500
+    },
+    {
+     "rowsHash": "0xdb38fa249b9f9b1986d025a60befae989c80a3f28e3c545e289cc963b9faf885",
+     "len": 250
+    }
+   ],
+   "hash": "0xeda2848fdf263dc80579417fee94d3868aef3a5ead5f814ce0726ca4b3f36709"
+  }
+ ],
+ "payoutsHash": [
+  {
+   "payouts": [
+    {
+     "operator": "0x5756747c34d7348C33F3189AC767A21486271F9C",
+     "amount": 1250000
+    },
+    {
+     "operator": "0xD02151ae80dc538894c7D7f0a131A1cE9Cb4e567",
+     "amount": 1250001
+    }
+   ],
+   "hash": "0x18cbe2ccb11ba0e0b0b15fa43c558fec64426a846b05214d5f5660e4a6f6eecd"
+  },
+  {
+   "payouts": [],
+   "hash": "0x569e75fc77c1a856f6daaf9e69d8a9566ca34aa47f9133711ce065a571af0cfd"
+  }
+ ],
+ "eip712": [
+  {
+   "primaryType": "Invite",
+   "chainId": 84532,
+   "verifyingContract": "0x50c3958D2033c86b95ca78b65c7C9709AdcE4da8",
+   "message": {
+    "operator": "0x5756747c34d7348C33F3189AC767A21486271F9C",
+    "owner": "0x151D7929b19a470FAb7F6Cb7aa276E3e3a41F00e",
+    "nullifier": "0x9937976f9e78aff7159abf4e4ca289a7bf7c39fdc8a1a73b13d35761061e7d00",
+    "deadline": 1800000600
+   },
+   "typeHash": "0x8928e79d797e6734b830351f4f516185bca9372a52fc595a452cd52b50284f62",
+   "structHash": "0xb1a93fc9018e94508413fb28d7051029a9559fe91ebf706ce1e2d746b06026a9",
+   "domainSeparator": "0xe34c571617d5d0c02a095392a186e62895d96845ebcceda17b1e9475eba02576",
+   "digest": "0xe28f506454ef8f727af53db9d10c721be5c347d9f7a2ba948776fc76e8ff069a",
+   "signerRole": "admitter",
+   "signer": "0x54B7eB53F6eb8bb8656901Dcc2487d27aB469511",
+   "signature": "0x6d3c5e06710e72470b822409cf36e50e9ee9f239150fc8c9cd47f110041bde062c6385cc2a2dc01d1706f795477ebb29b285913fed17cbe9d6076c4e195b97ae1b"
+  },
+  {
+   "primaryType": "Consent",
+   "chainId": 84532,
+   "verifyingContract": "0x50c3958D2033c86b95ca78b65c7C9709AdcE4da8",
+   "message": {
+    "owner": "0x151D7929b19a470FAb7F6Cb7aa276E3e3a41F00e",
+    "operator": "0x5756747c34d7348C33F3189AC767A21486271F9C",
+    "consentDeadline": 1800001800
+   },
+   "typeHash": "0x519ee611d2984cf4b3bc28539f29748e51e74741ca6878f0d9be115674f567e5",
+   "structHash": "0x8b562110da29da4e313faa2fbd94992d1359e196e55ccf2f137e5c23104a69e7",
+   "domainSeparator": "0xe34c571617d5d0c02a095392a186e62895d96845ebcceda17b1e9475eba02576",
+   "digest": "0x59952616acb89490485f01131fb9b759691d55b6e605665fdcc671366adf767c",
+   "signerRole": "operator",
+   "signer": "0x5756747c34d7348C33F3189AC767A21486271F9C",
+   "signature": "0x7621bde4c813a641d3610524145dc4109a230e218bca9f86bdc234914d6e29e1391f01daa5b33e8fb2ff3b9f373e7cf7f6dba5ac2be1945325337b310e5079d41b"
+  },
+  {
+   "primaryType": "Consent",
+   "chainId": 84532,
+   "verifyingContract": "0x50c3958D2033c86b95ca78b65c7C9709AdcE4da8",
+   "message": {
+    "owner": "0x151D7929b19a470FAb7F6Cb7aa276E3e3a41F00e",
+    "operator": "0x5756747c34d7348C33F3189AC767A21486271F9C",
+    "consentDeadline": "18446744073709551615"
+   },
+   "typeHash": "0x519ee611d2984cf4b3bc28539f29748e51e74741ca6878f0d9be115674f567e5",
+   "structHash": "0x9fec37a444b6da65a5715bfb06ed273a1451a535c413c7b16b68b38cce1a5469",
+   "domainSeparator": "0xe34c571617d5d0c02a095392a186e62895d96845ebcceda17b1e9475eba02576",
+   "digest": "0xb310833cac996173b04cb4978d39ce6f9bbfbe81f86b367be1fa73c5acf46a9c",
+   "signerRole": "operator",
+   "signer": "0x5756747c34d7348C33F3189AC767A21486271F9C",
+   "signature": "0xdd71f3ff3f8e29e986dce17e6c7c3a1bcfb3632e3097ce9290f19089249c43ab2445cc27833f66efbaa7f2a2b8cce9daf82a08bc3068c7b906bc251ca960f5b11b"
+  },
+  {
+   "primaryType": "FinalizeRound",
+   "chainId": 84532,
+   "verifyingContract": "0xd359F9E33dDe896b6516F42437C4b774e681a98B",
+   "message": {
+    "jobId": 7,
+    "roundId": 3,
+    "outcome": 0,
+    "aggregateHash": "0x48990417e807a8a37a6c1879eea0106d844cf814975d8f86996c960c49b4922c",
+    "flaggedBitmap": 5,
+    "aggEvidenceHash": "0x6600e56f40b0d61e807684f158f82a54f6111fa925a97f81e02d2de129f28629",
+    "payEvidenceHash": "0x101268f9dd4ebae9194f2c11ffa8a531f55a7bf87e270f1b3349c2b7be5640e5",
+    "payoutsHash": "0x18cbe2ccb11ba0e0b0b15fa43c558fec64426a846b05214d5f5660e4a6f6eecd"
+   },
+   "typeHash": "0xad6a1ef2271a84cbb45faca1f7a028573f98bef9bb7c1f4069af76893c319500",
+   "structHash": "0x4e1668f31124865de917c89d4438a4c63af83ab9471aae9766be43575bcd0b2a",
+   "domainSeparator": "0x9dc12ed19ffdfc50e3c0d6ab3c2c4ed0681320e0fbb7c7f6d1f930dee9ca56b7",
+   "digest": "0xde1b71bfe331dd812e5037222aa61dfa1af533e5d002141d43e27d14caa7e524",
+   "signerRole": "verifierA",
+   "signer": "0x4ba433aC9F1e5Aa5829daabf0A24FE2F41Ce638C",
+   "signature": "0xed607bed582f79d6d8c7487c96d07c2c9c277c6931c2321fc2006f40a7ed356a4740bbad64c54d0c5068843e9f2002f0f28ac0d16c05374ac5c0e3f1dac0d39a1b",
+   "settlement": {
+    "payouts": [
+     {
+      "operator": "0x5756747c34d7348C33F3189AC767A21486271F9C",
+      "amount": 1250000
+     },
+     {
+      "operator": "0xD02151ae80dc538894c7D7f0a131A1cE9Cb4e567",
+      "amount": 1250001
+     }
+    ]
+   }
+  },
+  {
+   "primaryType": "FinalizeRound",
+   "chainId": 84532,
+   "verifyingContract": "0xd359F9E33dDe896b6516F42437C4b774e681a98B",
+   "message": {
+    "jobId": 7,
+    "roundId": 3,
+    "outcome": 0,
+    "aggregateHash": "0x48990417e807a8a37a6c1879eea0106d844cf814975d8f86996c960c49b4922c",
+    "flaggedBitmap": 5,
+    "aggEvidenceHash": "0x6600e56f40b0d61e807684f158f82a54f6111fa925a97f81e02d2de129f28629",
+    "payEvidenceHash": "0x101268f9dd4ebae9194f2c11ffa8a531f55a7bf87e270f1b3349c2b7be5640e5",
+    "payoutsHash": "0x18cbe2ccb11ba0e0b0b15fa43c558fec64426a846b05214d5f5660e4a6f6eecd"
+   },
+   "typeHash": "0xad6a1ef2271a84cbb45faca1f7a028573f98bef9bb7c1f4069af76893c319500",
+   "structHash": "0x4e1668f31124865de917c89d4438a4c63af83ab9471aae9766be43575bcd0b2a",
+   "domainSeparator": "0x9dc12ed19ffdfc50e3c0d6ab3c2c4ed0681320e0fbb7c7f6d1f930dee9ca56b7",
+   "digest": "0xde1b71bfe331dd812e5037222aa61dfa1af533e5d002141d43e27d14caa7e524",
+   "signerRole": "verifierB",
+   "signer": "0x517f0719E7ac0Fcdf1C1A046e7663C167edA57bA",
+   "signature": "0xd7ac98ad88d908b65b5db0890d5f3058360e866a59d0c4ca6a40afaf810df3005c6670d5a2c861d7246810029d70854b9e782ca4f3c145658500928ee97b65061b",
+   "settlement": {
+    "payouts": [
+     {
+      "operator": "0x5756747c34d7348C33F3189AC767A21486271F9C",
+      "amount": 1250000
+     },
+     {
+      "operator": "0xD02151ae80dc538894c7D7f0a131A1cE9Cb4e567",
+      "amount": 1250001
+     }
+    ]
+   }
+  },
+  {
+   "primaryType": "FinalizeRound",
+   "chainId": 84532,
+   "verifyingContract": "0xd359F9E33dDe896b6516F42437C4b774e681a98B",
+   "message": {
+    "jobId": 7,
+    "roundId": 3,
+    "outcome": 1,
+    "aggregateHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "flaggedBitmap": 0,
+    "aggEvidenceHash": "0x6600e56f40b0d61e807684f158f82a54f6111fa925a97f81e02d2de129f28629",
+    "payEvidenceHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "payoutsHash": "0x569e75fc77c1a856f6daaf9e69d8a9566ca34aa47f9133711ce065a571af0cfd"
+   },
+   "typeHash": "0xad6a1ef2271a84cbb45faca1f7a028573f98bef9bb7c1f4069af76893c319500",
+   "structHash": "0xdb8183093bd3b4a7821d0339f9d5bc02211c79e765a13bcd82a7c114e4af430b",
+   "domainSeparator": "0x9dc12ed19ffdfc50e3c0d6ab3c2c4ed0681320e0fbb7c7f6d1f930dee9ca56b7",
+   "digest": "0xf8582ad8feca0278925a2ac36d4c467095c3e2f013dcb3ade820868cd6f5d4ac",
+   "signerRole": "verifierA",
+   "signer": "0x4ba433aC9F1e5Aa5829daabf0A24FE2F41Ce638C",
+   "signature": "0xf9da69d9d45ef9e743e2ed819b92bfdc8c30d978bdcb3a475c9b1f85699826d15ddfd2df9824c21cbe9c50c4c3188c2fa832b24deba1348e2054558de8e09f0d1b",
+   "settlement": {
+    "payouts": []
+   }
+  },
+  {
+   "primaryType": "BlobAccess",
+   "chainId": 84532,
+   "verifyingContract": "0xd359F9E33dDe896b6516F42437C4b774e681a98B",
+   "message": {
+    "jobId": 7,
+    "roundId": 3,
+    "blobHash": "0x436009c3ab6b517a6e9c0fd37fb3799d700d316c085383e59c2d9d64b4a9aab6",
+    "method": "GET",
+    "expiry": 1800000300
+   },
+   "typeHash": "0xd4304ca0aa5a24fef55a81a305bf9d803d8a863df226fe7aa514586feab09147",
+   "structHash": "0x9bfc83a93dbc4f1f7b6049c0afc839796e6f460da62ad63155a7e7ed10845637",
+   "domainSeparator": "0x9dc12ed19ffdfc50e3c0d6ab3c2c4ed0681320e0fbb7c7f6d1f930dee9ca56b7",
+   "digest": "0x6ad9a3539da4fbb8fa40adf0346d49cbd818369bcdf0c38bf193c631ed3bfb00",
+   "signerRole": "operator",
+   "signer": "0x5756747c34d7348C33F3189AC767A21486271F9C",
+   "signature": "0x6e0b19f2975d248eb0a3a457549d8df469790c428e166d3ae5c58d21427ac8372b307d08934c8cb31ca4465a26b202c9330c1caaa619806b2831233c1a4719461b",
+   "now": 1800000000,
+   "fresh": true
+  },
+  {
+   "primaryType": "BlobAccess",
+   "chainId": 84532,
+   "verifyingContract": "0xd359F9E33dDe896b6516F42437C4b774e681a98B",
+   "message": {
+    "jobId": 7,
+    "roundId": 3,
+    "blobHash": "0x436009c3ab6b517a6e9c0fd37fb3799d700d316c085383e59c2d9d64b4a9aab6",
+    "method": "PUT",
+    "expiry": 1800000060
+   },
+   "typeHash": "0xd4304ca0aa5a24fef55a81a305bf9d803d8a863df226fe7aa514586feab09147",
+   "structHash": "0x204c4be82d4d3f652cb5248abd91137aedba6589e98007a624ca645ed10cff44",
+   "domainSeparator": "0x9dc12ed19ffdfc50e3c0d6ab3c2c4ed0681320e0fbb7c7f6d1f930dee9ca56b7",
+   "digest": "0xc65b3457fa424871d4ae2e17d31e65892ac28cc983e745ae5dc98e225851f7d6",
+   "signerRole": "operator",
+   "signer": "0x5756747c34d7348C33F3189AC767A21486271F9C",
+   "signature": "0x8bcaa2ced87cec7a2bb56ad340ed23e718bd66d5ca352d1f9909b45f5d6270273707eac59ff4038a5cf8a7fbf305f2e091c70e423150517eeb68aa9c1373f6f21b",
+   "now": 1800000000,
+   "fresh": true
+  },
+  {
+   "primaryType": "BlobAccess",
+   "chainId": 84532,
+   "verifyingContract": "0xd359F9E33dDe896b6516F42437C4b774e681a98B",
+   "message": {
+    "jobId": 7,
+    "roundId": 3,
+    "blobHash": "0x436009c3ab6b517a6e9c0fd37fb3799d700d316c085383e59c2d9d64b4a9aab6",
+    "method": "GET",
+    "expiry": 1800000120
+   },
+   "typeHash": "0xd4304ca0aa5a24fef55a81a305bf9d803d8a863df226fe7aa514586feab09147",
+   "structHash": "0x77f63355570469cec33c47ac7a80d875fdaba27d066ca63893f9b90bc0d44de6",
+   "domainSeparator": "0x9dc12ed19ffdfc50e3c0d6ab3c2c4ed0681320e0fbb7c7f6d1f930dee9ca56b7",
+   "digest": "0xb1380ed8bb5d4fc6108d41cc89df97421ff91b47cde92eb53a0228c26842fb86",
+   "signerRole": "verifierA",
+   "signer": "0x4ba433aC9F1e5Aa5829daabf0A24FE2F41Ce638C",
+   "signature": "0x4866e33badb21668b6f4b3f7402c210729f4a7f28245930e31b292cc4d4820b55f5458a09c027b252a7489d2167d1c1fb741d07045813bfd57dba0735ac5c0691b",
+   "now": 1800000000,
+   "fresh": true
+  },
+  {
+   "primaryType": "BlobAccess",
+   "chainId": 84532,
+   "verifyingContract": "0xd359F9E33dDe896b6516F42437C4b774e681a98B",
+   "message": {
+    "jobId": 7,
+    "roundId": 3,
+    "blobHash": "0x436009c3ab6b517a6e9c0fd37fb3799d700d316c085383e59c2d9d64b4a9aab6",
+    "method": "GET",
+    "expiry": 1800000120
+   },
+   "typeHash": "0xd4304ca0aa5a24fef55a81a305bf9d803d8a863df226fe7aa514586feab09147",
+   "structHash": "0x77f63355570469cec33c47ac7a80d875fdaba27d066ca63893f9b90bc0d44de6",
+   "domainSeparator": "0x9dc12ed19ffdfc50e3c0d6ab3c2c4ed0681320e0fbb7c7f6d1f930dee9ca56b7",
+   "digest": "0xb1380ed8bb5d4fc6108d41cc89df97421ff91b47cde92eb53a0228c26842fb86",
+   "signerRole": "requester",
+   "signer": "0x3c5A2E5E23820909387dC0e0D1609D05Cd1e71F8",
+   "signature": "0xe9161fbba49e0818f8052bb90ccf3575b128184e53f8b33860f2e9c4ffda20c05aa59124d27a35eb7b58103844a19f5b34f6be821f966df118462aeefba38d6d1c",
+   "now": 1800000000,
+   "fresh": true
+  },
+  {
+   "primaryType": "BlobAccess",
+   "chainId": 84532,
+   "verifyingContract": "0xd359F9E33dDe896b6516F42437C4b774e681a98B",
+   "message": {
+    "jobId": 7,
+    "roundId": 3,
+    "blobHash": "0x436009c3ab6b517a6e9c0fd37fb3799d700d316c085383e59c2d9d64b4a9aab6",
+    "method": "GET",
+    "expiry": 1799999999
+   },
+   "typeHash": "0xd4304ca0aa5a24fef55a81a305bf9d803d8a863df226fe7aa514586feab09147",
+   "structHash": "0x7bbdb5db0734d791dc21d5fc4fef16cf70d566ad315eb2da0036641eb47669d8",
+   "domainSeparator": "0x9dc12ed19ffdfc50e3c0d6ab3c2c4ed0681320e0fbb7c7f6d1f930dee9ca56b7",
+   "digest": "0xb2827e385a9ec9a8451e445b21f8b4e669d5c48d6a4cc1a3e9beeddb590d0678",
+   "signerRole": "operator",
+   "signer": "0x5756747c34d7348C33F3189AC767A21486271F9C",
+   "signature": "0x7dfbc69027a5b8c01047a40d8b326747da5b1601235ed137ddba2b0c9637f02f757a12b42c8661a1586fc994f67c40b70b656a70509a7638ec2998dafe4963a51b",
+   "now": 1800000000,
+   "fresh": false
+  }
+ ]
+}
