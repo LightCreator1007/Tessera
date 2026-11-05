@@ -1,0 +1,134 @@
+{
+ "mnist": {
+  "sources": {
+   "train-images-idx3-ubyte.gz": "440fcabf73cc546fa21475e81ea370265605f56be210a4024d2ca8f203523609",
+   "train-labels-idx1-ubyte.gz": "3552534a0a558bbed6aed32b30c495cca23d567ec52cac8be1a0730e8010255c",
+   "t10k-images-idx3-ubyte.gz": "8d422c7b0a1c1c79245a5bcf07fe86e33eeafee792b84584aec276f5a2dbc4e6",
+   "t10k-labels-idx1-ubyte.gz": "f7ae60f92e00ec6debd23a6088c31dbd2371eca3ffa0defaefb259924204aec6"
+  },
+  "card": {
+   "hash": "0xa905dbf2a65deb6e1abf496bb1fe7a356639741b5552aaa13a1a0afce7701447",
+   "rows": 70000,
+   "x_shape": [
+    28,
+    28
+   ],
+   "task": "classification",
+   "classes": 10,
+   "x_dtype": "uint8"
+  },
+  "split": {
+   "train": [
+    0,
+    59500
+   ],
+   "val": [
+    59500,
+    3500
+   ],
+   "test": [
+    63000,
+    7000
+   ],
+   "shards": [
+    {
+     "start": 0,
+     "len": 7438
+    },
+    {
+     "start": 7438,
+     "len": 7438
+    },
+    {
+     "start": 14876,
+     "len": 7438
+    },
+    {
+     "start": 22314,
+     "len": 7438
+    },
+    {
+     "start": 29752,
+     "len": 7437
+    },
+    {
+     "start": 37189,
+     "len": 7437
+    },
+    {
+     "start": 44626,
+     "len": 7437
+    },
+    {
+     "start": 52063,
+     "len": 7437
+    }
+   ]
+  }
+ },
+ "cifar10": {
+  "sources": {
+   "cifar-10-binary.tar.gz": "c4a38c50a1bc5f3a1c5537f2155ab9d68f9f25eb1ed8d9ddda3db29a59bca1dd"
+  },
+  "card": {
+   "hash": "0x48a133cef764fd4625c92e07db4d702077f2d11dfd51a0cda2c014fc20d9193c",
+   "rows": 60000,
+   "x_shape": [
+    32,
+    32,
+    3
+   ],
+   "task": "classification",
+   "classes": 10,
+   "x_dtype": "uint8"
+  },
+  "split": {
+   "train": [
+    0,
+    51000
+   ],
+   "val": [
+    51000,
+    3000
+   ],
+   "test": [
+    54000,
+    6000
+   ],
+   "shards": [
+    {
+     "start": 0,
+     "len": 6375
+    },
+    {
+     "start": 6375,
+     "len": 6375
+    },
+    {
+     "start": 12750,
+     "len": 6375
+    },
+    {
+     "start": 19125,
+     "len": 6375
+    },
+    {
+     "start": 25500,
+     "len": 6375
+    },
+    {
+     "start": 31875,
+     "len": 6375
+    },
+    {
+     "start": 38250,
+     "len": 6375
+    },
+    {
+     "start": 44625,
+     "len": 6375
+    }
+   ]
+  }
+ }
+}
