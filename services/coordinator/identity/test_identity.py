@@ -1,0 +1,126 @@
+"""Tests for POST /v1/identity/join: dev-mode proof, pairing-code checks, one nullifier per human, Invite signature."""
+import base64
+import json
+import os
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+import pytest
+from eth_account import Account
+from tod_core import encodings as enc
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+os.environ.setdefault("DB_PATH", os.path.join(tempfile.mkdtemp(prefix="tod-id-"), "test.db"))
+
+
+@pytest.fixture(scope="module", autouse=True)
+def mods():
+    # Imported at run time, not collection time: the coordinator's tests/conftest.py must set its env before
+    # api.config is first imported, and pytest collects this folder before tests/.
+    global config, identity, client
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from api import config
+    from identity import router as identity
+
+    app = FastAPI()
+    app.include_router(identity.router)
+    client = TestClient(app)
+
+
+def pairing_code(operator, owner, deadline, chain_id=None):
+    msg = {"owner": owner, "operator": operator.address, "consentDeadline": deadline}
+    sig = enc.sign(operator.key, "Consent", chain_id or config.CHAIN_ID, config.NODE_REGISTRY, msg)
+    fields = {"consentDeadline": deadline, "operator": operator.address, "owner": owner, "signature": "0x" + sig.hex()}
+    body = json.dumps(fields, sort_keys=True, separators=(",", ":")).encode()
+    return identity.PAIR_PREFIX + base64.urlsafe_b64encode(body).decode().rstrip("=")
+
+
+def join(owner, code):
+    return client.post("/v1/identity/join", json={"owner": owner, "pairingCode": code})
+
+
+@pytest.fixture
+def owner():
+    return Account.create().address
+
+
+def test_join_signs_invite_for_join(owner):
+    op = Account.create()
+    r = join(owner, pairing_code(op, owner, int(time.time()) + 1800))
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["operator"] == op.address and out["credential"] == "dev"
+    invite = {"operator": op.address, "owner": owner, "nullifier": bytes.fromhex(out["nullifier"][2:]),
+              "deadline": out["inviteDeadline"]}
+    signer = enc.recover("Invite", config.CHAIN_ID, config.NODE_REGISTRY, invite, bytes.fromhex(out["inviteSig"][2:]))
+    assert signer == identity.ADMITTER.address
+
+
+def test_rejects_expired_wrong_owner_and_forged_codes(owner):
+    op, now = Account.create(), int(time.time())
+    assert join(owner, pairing_code(op, owner, now - 1)).status_code == 400
+    assert join(owner, pairing_code(op, Account.create().address, now + 1800)).status_code == 400
+    assert join(owner, pairing_code(op, owner, now + 1800, chain_id=1)).status_code == 400  # wrong domain
+    assert join(owner, "not-a-code").status_code == 400
+
+
+def test_one_nullifier_per_human_but_many_operators(owner, monkeypatch):
+    now = int(time.time())
+    assert join(owner, pairing_code(Account.create(), owner, now + 1800)).status_code == 200
+    assert join(owner, pairing_code(Account.create(), owner, now + 1800)).status_code == 200
+    # A second wallet presenting the same human (same nullifier) is refused.
+    other = Account.create().address
+    same_human = identity.verify_human
+    monkeypatch.setattr(identity, "verify_human", lambda o, p: same_human(owner, p))
+    assert join(other, pairing_code(Account.create(), other, now + 1800)).status_code == 409
+
+
+def test_dev_mode_refused_off_local_chain(owner, monkeypatch):
+    monkeypatch.setattr(config, "CHAIN_ID", 84532)
+    assert join(owner, pairing_code(Account.create(), owner, int(time.time()) + 1800)).status_code == 403
+
+
+def test_worldid_mode_records_credential_and_rejects_bad_proofs(owner, monkeypatch):
+    from identity import worldid
+
+    monkeypatch.setattr(identity, "MODE", "worldid")
+    monkeypatch.setattr(worldid, "verify", lambda proof, o: ("0x" + "77" * 32, "selfie"))
+    code = pairing_code(Account.create(), owner, int(time.time()) + 1800)
+    r = client.post("/v1/identity/join", json={"owner": owner, "pairingCode": code, "proof": {"x": 1}})
+    assert r.status_code == 200 and r.json()["credential"] == "selfie"
+    assert identity.credentials()[owner.lower()] == "selfie"
+
+    def rejected(proof, o):
+        raise worldid.Rejected("World ID proof was made for a different wallet")
+    monkeypatch.setattr(worldid, "verify", rejected)
+    r = client.post("/v1/identity/join", json={"owner": owner, "pairingCode": code, "proof": {}})
+    assert r.status_code == 400 and "different wallet" in r.json()["detail"]
+
+
+def test_rp_signature_only_for_our_action(monkeypatch):
+    from identity import worldid
+
+    assert client.post("/v1/identity/rp-signature", json={"action": worldid.ACTION}).status_code == 503  # no key
+    monkeypatch.setattr(worldid, "RP_SIGNING_KEY", "0x" + "ab" * 32)
+    assert client.post("/v1/identity/rp-signature", json={"action": "something-else"}).status_code == 400
+    out = client.post("/v1/identity/rp-signature", json={"action": worldid.ACTION}).json()
+    assert set(out) == {"sig", "nonce", "created_at", "expires_at"} and out["expires_at"] - out["created_at"] == 300
+
+
+def test_admitter_key_required_off_local_chain(tmp_path):
+    import subprocess
+
+    cwd = Path(__file__).resolve().parents[1]
+    code = "from identity import router as r; print(r.ADMITTER.address)"
+    base = {**os.environ, "CHAIN_ID": "84532", "DB_PATH": str(tmp_path / "t.db")}
+    base.pop("ADMITTER_PRIVATE_KEY", None)
+    missing = subprocess.run([sys.executable, "-c", code], cwd=cwd, env=base, capture_output=True, text=True)
+    assert missing.returncode != 0 and "ADMITTER_PRIVATE_KEY is required" in missing.stderr
+    key = Account.create()
+    ok = subprocess.run([sys.executable, "-c", code], cwd=cwd, env={**base, "ADMITTER_PRIVATE_KEY": key.key.hex()},
+                        capture_output=True, text=True)
+    assert ok.returncode == 0 and ok.stdout.strip() == key.address

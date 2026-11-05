@@ -1,0 +1,68 @@
+<!doctype html>
+<!-- Developer test page for pool join with World ID (served at /v1/identity/test); the real join page is Ashutosh's (U5). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ToD join test</title>
+<style>
+  :root { --bg: #fff; --fg: #111; --muted: #666; --line: #ddd; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #111; --fg: #eee; --muted: #999; --line: #333; } }
+  body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 16px; }
+  label { display: block; margin-top: 1rem; color: var(--muted); }
+  input, select, button { width: 100%; box-sizing: border-box; padding: .5rem; font: inherit; }
+  button { margin-top: 1rem; cursor: pointer; }
+  pre { white-space: pre-wrap; word-break: break-all; border: 1px solid var(--line); padding: .75rem; }
+  a { color: inherit; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@worldcoin/idkit-core@4.5.0/dist/idkit.global.js"
+        integrity="sha384-ir9v6YCEnIkW9GsxFgIthFkN4PRrBKWIRoEyHmTiQ/Q8h7zZaawYndqS8l88ZQmd" crossorigin="anonymous"></script>
+</head>
+<body>
+<h1>Join the pool (test)</h1>
+<p>Run <code>tod-node pair --owner &lt;wallet&gt; --chain-id &lt;id&gt; --registry &lt;NodeRegistry&gt;</code>, paste the code, then verify with World ID. In staging, open the link in the <a href="https://simulator.worldcoin.org" target="_blank" rel="noopener">World ID simulator</a>.</p>
+<label>Owner wallet <input id="owner" placeholder="0x…"></label>
+<label>Pairing code <input id="code" placeholder="tod-pair:…"></label>
+<label>Credential
+  <select id="cred"><option value="selfie">Selfie Check (jobs under the Proof of Human threshold)</option>
+                    <option value="orb">Proof of Human (Orb)</option></select></label>
+<button id="go">Verify and get invite</button>
+<pre id="out">Ready.</pre>
+<script>
+const $ = (id) => document.getElementById(id);
+const say = (msg) => { $("out").textContent = msg; };
+const post = (path, body) => fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+$("go").onclick = async () => {
+  try {
+    const owner = $("owner").value.trim(), code = $("code").value.trim();
+    const cfg = await (await fetch("/v1/identity/config")).json();
+    let proof = {};
+    if (cfg.mode !== "dev") {
+      const rpRes = await post("/v1/identity/rp-signature", { action: cfg.action });
+      if (!rpRes.ok) return say("RP signature failed: " + (await rpRes.text()));
+      const rp = await rpRes.json();
+      // Must match the backend's identity.worldid.signal_for(owner).
+      const signal = "tod-owner:" + owner.toLowerCase();
+      const preset = $("cred").value === "orb" ? IDKit.proofOfHuman({ signal }) : IDKit.selfieCheck({ signal });
+      const request = await IDKit.request({
+        app_id: cfg.appId, action: cfg.action, environment: cfg.environment,
+        allow_legacy_proofs: $("cred").value === "orb",
+        rp_context: { rp_id: cfg.rpId, nonce: rp.nonce, created_at: rp.created_at, expires_at: rp.expires_at, signature: rp.sig },
+      }).preset(preset);
+      say("Open this in World App (or paste it into the simulator):\n\n" + request.connectorURI + "\n\nWaiting…");
+      const done = await request.pollUntilCompletion();
+      if (!done.success) return say("World ID did not complete: " + done.error);
+      proof = done.result;
+    }
+    const res = await post("/v1/identity/join", { owner, pairingCode: code, proof });
+    const body = await res.json();
+    say(res.ok ? "Invite ready. Call NodeRegistry.join with:\n\n" + JSON.stringify(body, null, 2)
+               : "Refused (" + res.status + "): " + body.detail);
+  } catch (e) {
+    say("Error: " + e);
+  }
+};
+</script>
+</body>
+</html>
