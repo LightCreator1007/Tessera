@@ -1,0 +1,9 @@
+#!/bin/sh
+# tod-node: runs the node CLI in Docker with its data volume, so operators only need Docker installed.
+set -e
+IMAGE="${TOD_NODE_IMAGE:-ghcr.io/lightcreator1007/tod-node:latest}"
+if [ "$1" = run ]; then
+  # The daemon outlives the shell and restarts after a crash or reboot; its local API stays on loopback.
+  exec docker run -d --restart unless-stopped --name tod-node -p 127.0.0.1:7777:7777 -v tod-data:/data "$IMAGE" "$@"
+fi
+exec docker run --rm -i -v tod-data:/data "$IMAGE" "$@"
