@@ -210,12 +210,17 @@ def run(poll: Annotated[float, typer.Option(help="Seconds between chain polls.")
     pid_path().write_text(str(os.getpid()))
     events = events_log()
 
-    def untrained(job, rnd, r):
-        # ponytail: real training needs the coordinator's spec and blob routes plus the workload runner.
-        raise RuntimeError("no trainer for this job yet")
+    coordinator = config.resolve(data_dir())["coordinator"][0]
+    if coordinator:
+        from .trainer import Coordinator, Trainer, preset_datasets
+        train = Trainer(Coordinator(coordinator, account.key, net.chain_id, net.market),
+                        preset_datasets(data_dir() / "datasets"), account.address, net.chain_id, net.market)
+    else:
+        def train(state, job, rnd):
+            raise RuntimeError("no coordinator set, so no spec or start weights to train from")
 
     loop = RoundLoop(ledger.using(sender).market, account.address, net.chain_id, RoundStore(data_dir() / "rounds.json"),
-                     untrained, emit=events.append)
+                     train, emit=events.append)
     stop = threading.Event()
 
     def on_signal(signum, frame):

@@ -40,7 +40,7 @@ class FakeMarket:
 
 def state(committed=False, revealed=False, nodes=(ME,), status=RoundStatus.OPEN):
     nrs = {op: {"committed": committed, "revealed": revealed} for op in nodes}
-    rnd = {"status": status, "startWeightsHash": START, "nodeRounds": nrs}
+    rnd = {"status": status, "startWeightsHash": START, "nodeRounds": nrs, "shards": [0], "fallback_": False}
     return SimpleNamespace(rounds={(1, 1): rnd}, jobs={1: {"params": SimpleNamespace(segments=4)}})
 
 
@@ -50,7 +50,7 @@ def store(tmp_path):
 
 
 def loop(market, store, trained=None):
-    def train(job, rnd, r):
+    def train(st, job, rnd):
         if trained is None:
             raise AssertionError("must not retrain")
         trained.append((job, rnd))
@@ -160,3 +160,21 @@ def test_training_failure_skips_the_round_once(store):
     node.tick(state())
     node.tick(state())
     assert len(calls) == 1 and events[0][0] == "round.skipped" and "no trainer" in events[0][1]["reason"]
+
+
+def test_rounds_done_counts_only_kept_rounds_that_trained_the_shard():
+    from tod_node.trainer import rounds_done
+
+    def rnd(status, shards, fallback=False):
+        return {"status": status, "shards": shards, "fallback_": fallback}
+
+    st = SimpleNamespace(rounds={
+        (1, 1): rnd(RoundStatus.SETTLED, [0, 1]),
+        (1, 2): rnd(RoundStatus.SETTLED, [1, 2]),
+        (1, 3): rnd(RoundStatus.REVERTED, [0, 1]),
+        (1, 4): rnd(RoundStatus.SETTLED, [0], fallback=True),
+        (1, 5): rnd(RoundStatus.VOID, [0]),
+        (2, 1): rnd(RoundStatus.SETTLED, [0]),  # another job
+        (1, 7): rnd(RoundStatus.SETTLED, [0]),  # later than the round being trained
+    })
+    assert [rounds_done(st, 1, 6, s) for s in (0, 1, 2, 3)] == [1, 2, 1, 0]
