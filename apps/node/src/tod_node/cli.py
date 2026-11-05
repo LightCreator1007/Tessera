@@ -1,10 +1,12 @@
-"""tod-node CLI: operator key, pairing code, self-test and status. The run loop comes with the node daemon."""
+"""tod-node CLI: operator key, pairing code, self-test, status and doctor. The run loop comes with the node daemon."""
 
 import base64
 import json
 import os
 import platform
+import stat
 import time
+import urllib.request
 from importlib.metadata import version
 from pathlib import Path
 from typing import Annotated
@@ -124,3 +126,46 @@ def status(as_json: JsonOpt = False) -> None:
     operator = Account.from_key(path.read_text().strip()).address if path.exists() else None
     fields = {"dataDir": str(data_dir()), "initialized": operator is not None, "operator": operator}
     emit(as_json, fields, "\n".join(f"{k}: {v}" for k, v in fields.items()))
+
+
+def _coordinator_check(url: str, chain_id: int | None) -> tuple[bool, str]:
+    try:
+        with urllib.request.urlopen(url.rstrip("/") + "/v1/health", timeout=5) as r:
+            health = json.loads(r.read())
+    except Exception as e:  # any network or parse failure means the node can't work with this coordinator
+        return False, f"unreachable: {e}"
+    if not health.get("ok"):
+        return False, "health says not ok"
+    if chain_id is not None and health.get("chainId") != chain_id:
+        return False, f"coordinator is on chain {health.get('chainId')}, expected {chain_id}"
+    return True, f"chain {health.get('chainId')}, version {health.get('version')}"
+
+
+@app.command()
+def doctor(
+    chain_id: Annotated[int | None, typer.Option("--chain-id", help="Fail if the coordinator is on another chain.")] = None,
+    as_json: JsonOpt = False,
+) -> None:
+    """Check that this node is ready to train: key, data folder, self-test and coordinator."""
+    path, checks = key_path(), {}
+    if not path.exists():
+        checks["key"] = (False, "missing; run `tod-node init`")
+    elif stat.S_IMODE(path.stat().st_mode) != 0o600:
+        checks["key"] = (False, f"{path} must be mode 0600")
+    else:
+        checks["key"] = (True, str(path))
+    data_dir().mkdir(parents=True, exist_ok=True)
+    checks["dataDir"] = (os.access(data_dir(), os.W_OK), str(data_dir()))
+    expected = json.loads(SELFTEST_VECTOR.read_text())["hash"]
+    checks["selftest"] = (mlp_selftest() == expected, platform.machine())
+    url = os.environ.get("TOD_COORDINATOR_URL")
+    coord = _coordinator_check(url, chain_id) if url else (None, "TOD_COORDINATOR_URL not set, skipped")
+    checks["coordinator"] = coord
+
+    fields = {k: {"ok": ok, "detail": d} for k, (ok, d) in checks.items()}
+    marks = {True: "ok  ", False: "FAIL", None: "skip"}
+    emit(as_json, fields, "\n".join(f"{marks[ok]} {k}: {d}" for k, (ok, d) in checks.items()))
+    if not all(checks[k][0] for k in ("key", "dataDir", "selftest")):
+        raise typer.Exit(NOT_ELIGIBLE)
+    if coord[0] is False:
+        raise typer.Exit(UNREACHABLE)
