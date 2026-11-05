@@ -1352,11 +1352,15 @@ name = "tod-verifier"
 version = "0.0.1"
 source = { editable = "apps/verifier" }
 dependencies = [
+    { name = "tod-node" },
     { name = "typer" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "typer", specifier = ">=0.12" }]
+requires-dist = [
+    { name = "tod-node", editable = "apps/node" },
+    { name = "typer", specifier = ">=0.12" },
+]
 
 [[package]]
 name = "tod-workloads"
