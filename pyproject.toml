@@ -1,0 +1,18 @@
+# uv workspace root. It has no package of its own.
+# Members are listed by name because uv fails on a listed folder without a pyproject.toml,
+# and a glob like packages/* would also catch the JS package in packages/abi.
+[tool.uv.workspace]
+members = [
+    "apps/node",
+    "apps/verifier",
+    "packages/core",
+    "packages/datasets",
+    "packages/workloads",
+    "services/coordinator",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib"

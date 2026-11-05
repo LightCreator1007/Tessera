@@ -1,0 +1,18 @@
+# Package for tod-core, the shared library every other Python package builds on.
+
+[project]
+name = "tod-core"
+version = "0.1.0"
+description = "Shared ToD library: encodings, hashing, blob, aggregate, judge, payout, evidence, ledger, txmgr"
+requires-python = ">=3.12"
+dependencies = ["numpy>=2", "pycryptodome>=3.20", "eth-abi>=5", "eth-account>=0.13", "web3>=7,<9"]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["uv_build>=0.8,<0.14"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = ""

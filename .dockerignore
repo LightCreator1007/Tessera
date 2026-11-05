@@ -1,0 +1,12 @@
+# Build context for docker/app.Dockerfile: no secrets, local state or big non-code folders.
+.env
+.env.*
+MEMORY.md
+.git
+.venv
+**/__pycache__
+node_modules
+.codegraph
+runs
+store
+*.zip
