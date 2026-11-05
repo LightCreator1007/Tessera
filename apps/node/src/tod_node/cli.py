@@ -1,10 +1,12 @@
-"""tod-node CLI: operator key, pairing code, self-test, status and doctor. The run loop comes with the node daemon."""
+"""tod-node CLI: operator key, pairing code, self-test, status, doctor, and the run/stop/logs daemon commands."""
 
 import base64
 import json
 import os
 import platform
+import signal
 import stat
+import threading
 import time
 import urllib.request
 from importlib.metadata import version
@@ -21,6 +23,7 @@ from . import config
 
 # Agents and the web app branch on these exit codes, so they are part of the CLI contract.
 OK, BAD_INPUT, NOT_ELIGIBLE, UNREACHABLE = 0, 2, 3, 4
+DAEMON_RUNNING = 6
 # An old pairing code must be useless, so consent expires after 30 minutes.
 PAIR_TTL = 30 * 60
 PAIR_PREFIX = "tod-pair:"
@@ -43,17 +46,18 @@ def emit(as_json: bool, fields: dict, text: str) -> None:
     typer.echo(json.dumps(fields, sort_keys=True) if as_json else text)
 
 
-def fail(as_json: bool, code: int, message: str) -> None:
+def fail(as_json: bool, code: int, message: str, err: str | None = None, hint: str | None = None) -> None:
+    """`err` is a stable snake_case code agents can branch on; `hint` is one sentence of what to do next."""
     if as_json:
-        typer.echo(json.dumps({"error": message}))
+        typer.echo(json.dumps({k: v for k, v in {"error": message, "code": err, "hint": hint}.items() if v}))
     else:
-        typer.echo(f"error: {message}", err=True)
+        typer.echo(f"error: {message}" + (f"\nhint: {hint}" if hint else ""), err=True)
     raise typer.Exit(code)
 
 
 def load_operator(as_json: bool):
     if not key_path().exists():
-        fail(as_json, NOT_ELIGIBLE, "not initialized; run `tod-node init`")
+        fail(as_json, NOT_ELIGIBLE, "not initialized", "not_initialized", "run `tod-node init`")
     return Account.from_key(key_path().read_text().strip())
 
 
@@ -140,13 +144,129 @@ def selftest(as_json: JsonOpt = False) -> None:
         raise typer.Exit(NOT_ELIGIBLE)
 
 
+def pid_path() -> Path:
+    return data_dir() / "node.pid"
+
+
+def daemon_pid() -> int | None:
+    """The pid of a live `run` in this data dir, or None. A stale file from a crash counts as not running."""
+    try:
+        pid = int(pid_path().read_text())
+        os.kill(pid, 0)
+        return pid
+    except (OSError, ValueError):
+        return None
+
+
+def events_log():
+    from .events import EventLog
+    return EventLog(data_dir() / "events.ndjson")
+
+
 @app.command()
 def status(as_json: JsonOpt = False) -> None:
-    """Show this node's state."""
+    """Show this node's state: key, whether the daemon is running, and its latest event."""
     path = key_path()
     operator = Account.from_key(path.read_text().strip()).address if path.exists() else None
-    fields = {"dataDir": str(data_dir()), "initialized": operator is not None, "operator": operator}
-    emit(as_json, fields, "\n".join(f"{k}: {v}" for k, v in fields.items()))
+    pid = daemon_pid()
+    last = (events_log().read()[-1:] or [None])[0]
+    fields = {"dataDir": str(data_dir()), "initialized": operator is not None, "operator": operator,
+              "daemon": {"state": "running" if pid else "stopped", "pid": pid}, "lastEvent": last}
+    from .events import render
+    text = {**fields, "daemon": f"{fields['daemon']['state']}" + (f" (pid {pid})" if pid else ""),
+            "lastEvent": render(last) if last else None}
+    emit(as_json, fields, "\n".join(f"{k}: {v}" for k, v in text.items()))
+
+
+@app.command()
+def run(poll: Annotated[float, typer.Option(help="Seconds between chain polls.")] = 2.0, as_json: JsonOpt = False) -> None:
+    """Run the node in the foreground: watch the chain, train, commit and reveal. Docker restarts it; it never forks."""
+    account = load_operator(as_json)
+    network = config.resolve(data_dir())["network"][0]
+    if not network:
+        fail(as_json, BAD_INPUT, "no network set", "bad_config", "run `tod-node init --network anvil` or set TOD_NETWORK")
+    # Imported here so the one-shot commands start fast and work without web3 loaded.
+    from filelock import FileLock, Timeout
+    from tod_core.ledger import Ledger, Network
+    from tod_core.txmgr import LocalSigner, TxManager
+
+    from .daemon import run as run_daemon
+    from .rounds import RoundLoop, RoundStore
+
+    lock = FileLock(data_dir() / "node.lock")
+    try:
+        lock.acquire(timeout=0)
+    except Timeout:
+        fail(as_json, DAEMON_RUNNING, f"already running (pid {daemon_pid()})", "daemon_running")
+    try:
+        net = Network.load(network)
+    except (OSError, RuntimeError) as e:
+        fail(as_json, BAD_INPUT, f"network {network}: {e}", "bad_config")
+    try:
+        ledger = Ledger(net)
+        sender = TxManager(ledger.w3, LocalSigner(account.key), data_dir() / "journal")
+    except Exception as e:  # RPC down or on the wrong chain: nothing this node can do until that is fixed
+        fail(as_json, UNREACHABLE, f"chain {net.name}: {e}", "rpc_unreachable")
+    pid_path().write_text(str(os.getpid()))
+    events = events_log()
+
+    def untrained(job, rnd, r):
+        # ponytail: real training needs the coordinator's spec and blob routes plus the workload runner.
+        raise RuntimeError("no trainer for this job yet")
+
+    loop = RoundLoop(ledger.using(sender).market, account.address, net.chain_id, RoundStore(data_dir() / "rounds.json"),
+                     untrained, emit=events.append)
+    stop = threading.Event()
+
+    def on_signal(signum, frame):
+        if stop.is_set():
+            os._exit(130)  # second Ctrl+C: everything that matters is already on disk
+        events.append("node.stopping", signal=signal.Signals(signum).name)
+        stop.set()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, on_signal)
+    events.append("node.started", version=version("tod-node"), network=net.name, chainId=net.chain_id,
+                  operator=account.address)
+    try:
+        run_daemon(ledger, loop, stop, poll=poll, emit=events.append)
+    finally:
+        events.append("node.stopped")
+        pid_path().unlink(missing_ok=True)
+        lock.release()
+
+
+@app.command()
+def stop(
+    wait: Annotated[bool, typer.Option("--wait", help="Block until the daemon has exited.")] = False,
+    as_json: JsonOpt = False,
+) -> None:
+    """Ask the daemon to stop. It finishes any reveal it owes first, so stopping never costs stake."""
+    pid = daemon_pid()
+    if pid is None:
+        fail(as_json, NOT_ELIGIBLE, "the daemon is not running", "daemon_not_running")
+    os.kill(pid, signal.SIGTERM)
+    while wait and daemon_pid() == pid:
+        time.sleep(0.5)
+    emit(as_json, {"pid": pid, "stopped": wait}, f"stop sent to pid {pid}" + (", exited" if wait else ""))
+
+
+@app.command()
+def logs(
+    follow: Annotated[bool, typer.Option("--follow", "-f", help="Keep printing new events.")] = False,
+    since: Annotated[int, typer.Option("--since", help="Only events after this seq.")] = 0,
+    as_json: JsonOpt = False,
+) -> None:
+    """Print the node's event log. With --json, one event per line."""
+    from .events import render
+    log_ = events_log()
+    while True:
+        for ev in log_.read(since):
+            typer.echo(json.dumps(ev, sort_keys=True) if as_json else render(ev))
+            since = ev["seq"]
+        if not follow:
+            return
+        time.sleep(1)
 
 
 def _coordinator_check(url: str, chain_id: int | None) -> tuple[bool, str]:
