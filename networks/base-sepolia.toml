@@ -1,0 +1,20 @@
+# Public testnet template; fill role addresses and provide the Alchemy URL through the environment.
+name = "base-sepolia"
+chainId = 84532
+rpc = ""
+rpcEnv = "BASE_SEPOLIA_RPC_URL"
+logSpan = 200
+probationSeconds = 300
+threshold = 2
+
+[roles]
+deployer = ""
+coordinator = ""
+admitter = "0x285818EC744B88Db9Fad59508f7eD0E56B60A5aD"
+faucet = ""
+verifiers = ["", ""]
+
+[funding]
+deployer = 0.0
+coordinator = 0.0
+verifier = 0.0

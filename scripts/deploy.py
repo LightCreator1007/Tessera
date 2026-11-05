@@ -22,6 +22,28 @@ ORACLE_ABI = [{"type": "function", "name": "getL1FeeUpperBound", "stateMutabilit
                "inputs": [{"name": "", "type": "uint256"}], "outputs": [{"name": "", "type": "uint256"}]}]
 
 
+def rpc_url(cfg: dict, override: str | None = None) -> str:
+    url = override or os.environ.get(cfg.get("rpcEnv", ""), "") or cfg.get("rpc", "")
+    if not url:
+        raise SystemExit(f"RPC URL missing; set {cfg.get('rpcEnv', 'the network RPC')} or pass --rpc")
+    return url
+
+
+def validate_roles(cfg: dict, chain_id: int) -> None:
+    if chain_id == ANVIL_CHAIN_ID:
+        return
+    roles = cfg["roles"]
+    for role in ("deployer", "coordinator", "admitter", "faucet"):
+        address = roles.get(role, "")
+        if not Web3.is_address(address) or int(address, 16) == 0:
+            raise SystemExit(f"Set a nonzero {role} address in the network's [roles]. Nothing was sent.")
+    verifiers = roles.get("verifiers", [])
+    if (not verifiers or any(not Web3.is_address(v) or int(v, 16) == 0 for v in verifiers)
+            or len({v.lower() for v in verifiers}) != len(verifiers)
+            or not 1 <= cfg["threshold"] <= len(verifiers) <= 255):
+        raise SystemExit("Set distinct verifier addresses and a valid threshold. Nothing was sent.")
+
+
 def artifact(name: str) -> dict:
     return json.loads((REPO / "contracts" / "out" / f"{name}.sol" / f"{name}.json").read_text())
 
@@ -126,11 +148,12 @@ def main() -> None:
     src = Path(args.network) if args.network.endswith(".toml") else REPO / "networks" / f"{args.network}.toml"
     text = src.read_text()
     cfg = tomllib.loads(text)
-    rpc = args.rpc or os.environ.get(cfg.get("rpcEnv", ""), "") or cfg["rpc"]
+    rpc = rpc_url(cfg, args.rpc)
     w3 = Web3(Web3.HTTPProvider(rpc, request_kwargs={"timeout": 60}))
     chain_id = w3.eth.chain_id
     if chain_id != cfg["chainId"]:
         raise SystemExit(f"RPC is on chain {chain_id}, {src.name} says {cfg['chainId']}")
+    validate_roles(cfg, chain_id)
     dev = chain_id == ANVIL_CHAIN_ID
 
     deployer = signer_from_env("DEPLOYER_PRIVATE_KEY", "deployer", chain_id)
