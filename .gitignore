@@ -1,0 +1,11 @@
+# macOS
+.DS_Store
+
+# CodeGraph local index (per clone; see .claude/skills/codegraph)
+.codegraph/
+
+# Secrets and local state
+.env
+.env.*
+!.env.example
+node_modules/
