@@ -43,3 +43,5 @@ FinalizeRound(uint256 jobId,uint256 roundId,uint8 outcome,bytes32 aggregateHash,
 ```
 
 `inviteHash`, `consentHash` and `finalizeRoundHash` return EIP-712 struct hashes. Signers still need the EIP-712 domain separator and final digest envelope; the `domain(chainId, market)` helper is a separate commitment domain and must not be substituted for that separator. Signature recovery and domain construction belong to the contract implementations and signing clients.
+
+The signing domain uses name `ToD`, version `1`, the selected chain ID and the verifying contract address. Python signing and deterministic batching helpers live in `tod_core.encodings`; regenerate the shared fixtures with `python -m tod_core.encodings_vectors` from an installed workspace.
