@@ -1,0 +1,11 @@
+{
+ "workload": "mlp-exact/1",
+ "d_in": 8,
+ "hidden": 16,
+ "n_out": 4,
+ "init_seed": 0,
+ "data": "default_rng(1): random((32, 8), float32), integers(0, 4, 32)",
+ "steps": 10,
+ "specHash": "77a847b238541179bd1c2f7e6bcf7d685b43d62f7052ced861a4b4e0bfd88d6a",
+ "hash": "dafceb92c4677ad8f3e272ad768cee5e18806d5b408e67d1d27275c7ca38b59b"
+}
