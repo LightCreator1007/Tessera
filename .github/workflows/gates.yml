@@ -2,6 +2,8 @@
 name: gates
 on:
   pull_request:
+    # "edited" covers retargeting a stacked PR; without it the size check keeps measuring against the old base.
+    types: [opened, synchronize, reopened, edited]
   push:
     branches: [main]
 permissions:
