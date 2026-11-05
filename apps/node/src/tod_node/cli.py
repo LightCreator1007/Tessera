@@ -24,6 +24,7 @@ from . import config
 # Agents and the web app branch on these exit codes, so they are part of the CLI contract.
 OK, BAD_INPUT, NOT_ELIGIBLE, UNREACHABLE = 0, 2, 3, 4
 DAEMON_RUNNING = 6
+TEST_CHAINS = {31337, 84532}  # anvil, Base Sepolia
 # An old pairing code must be useless, so consent expires after 30 minutes.
 PAIR_TTL = 30 * 60
 PAIR_PREFIX = "tod-pair:"
@@ -179,7 +180,12 @@ def status(as_json: JsonOpt = False) -> None:
 
 
 @app.command()
-def run(poll: Annotated[float, typer.Option(help="Seconds between chain polls.")] = 2.0, as_json: JsonOpt = False) -> None:
+def run(
+    poll: Annotated[float, typer.Option(help="Seconds between chain polls.")] = 2.0,
+    mode: Annotated[str, typer.Option("--mode", envvar="TOD_MODE",
+                                      help="honest, or fake:lazy to claim work without training (test chains only).")] = "honest",
+    as_json: JsonOpt = False,
+) -> None:
     """Run the node in the foreground: watch the chain, train, commit and reveal. Docker restarts it; it never forks."""
     account = load_operator(as_json)
     network = config.resolve(data_dir())["network"][0]
@@ -202,6 +208,11 @@ def run(poll: Annotated[float, typer.Option(help="Seconds between chain polls.")
         net = Network.load(network)
     except (OSError, RuntimeError) as e:
         fail(as_json, BAD_INPUT, f"network {network}: {e}", "bad_config")
+    if mode not in ("honest", "fake:lazy"):
+        fail(as_json, BAD_INPUT, f"unknown mode {mode}", "bad_config", "use honest or fake:lazy")
+    # A fake node loses its stake by design; never let one near a chain with real money.
+    if mode != "honest" and net.chain_id not in TEST_CHAINS:
+        fail(as_json, BAD_INPUT, f"{mode} is only allowed on test chains", "bad_config")
     try:
         ledger = Ledger(net)
         sender = TxManager(ledger.w3, LocalSigner(account.key), data_dir() / "journal")
@@ -212,8 +223,8 @@ def run(poll: Annotated[float, typer.Option(help="Seconds between chain polls.")
 
     coordinator = config.resolve(data_dir())["coordinator"][0]
     if coordinator:
-        from .trainer import Coordinator, Trainer, preset_datasets
-        train = Trainer(Coordinator(coordinator, account.key, net.chain_id, net.market),
+        from .trainer import Coordinator, LazyTrainer, Trainer, preset_datasets
+        train = (LazyTrainer if mode == "fake:lazy" else Trainer)(Coordinator(coordinator, account.key, net.chain_id, net.market),
                         preset_datasets(data_dir() / "datasets"), account.address, net.chain_id, net.market)
     else:
         def train(state, job, rnd):
@@ -232,7 +243,7 @@ def run(poll: Annotated[float, typer.Option(help="Seconds between chain polls.")
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, on_signal)
     events.append("node.started", version=version("tod-node"), network=net.name, chainId=net.chain_id,
-                  operator=account.address)
+                  operator=account.address, mode=mode)
     try:
         run_daemon(ledger, loop, stop, poll=poll, emit=events.append)
     finally:
