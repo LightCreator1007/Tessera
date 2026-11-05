@@ -1,0 +1,21 @@
+{
+  "name": "@tod/abi",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Generated NodeRegistry and JobMarket ABIs: typed TS for viem/wagmi, JSON for Python. Do not edit by hand.",
+  "type": "module",
+  "main": "./src/generated.ts",
+  "types": "./src/generated.ts",
+  "exports": {
+    ".": "./src/generated.ts",
+    "./json/*": "./json/*"
+  },
+  "files": [
+    "src",
+    "json"
+  ],
+  "scripts": {
+    "generate": "forge build --root ../../contracts && node scripts/generate.mjs",
+    "check": "forge build --root ../../contracts && node scripts/generate.mjs --check"
+  }
+}
