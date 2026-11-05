@@ -1,0 +1,19 @@
+{
+  "version": 4,
+  "workload": {"id": "mlp-exact/1"},
+  "code": {"version": "0.1.0", "hash": "0x0000000000000000000000000000000000000000000000000000000000000000"},
+  "device": {"class": "cpu", "threads": 1},
+  "model": {"inputShape": [784], "outputs": 10, "hidden": 128, "task": "classification"},
+  "train": {"H": 200, "K": 4, "B": 64, "lr": "0.05", "epochs": 20, "innerReset": true},
+  "aggregate": {"kind": "trimmed-mean", "trim": "0.2", "clip": "median"},
+  "outer": {"kind": "avg", "lr": "1", "momentum": "0"},
+  "gate": {"relTol": "0.1", "absTol": "0.01"},
+  "data": {"datasetHash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+           "shards": [{"start": 0, "len": 6000}, {"start": 6000, "len": 6000}], "valFrac": "0.05", "testFrac": "0.1"},
+  "replay": {"class": "exact", "coverage": "full", "tauDrift": "0", "tauFraud": "0"},
+  "verifiers": 2,
+  "payout": {"mode": "equal", "floorBps": 5000},
+  "windows": {"commit": 45, "reveal": 30, "verify": 45, "finalize": 60, "stall": 3600},
+  "refWorkSecondsPerRound": 2,
+  "sandbox": null, "val": null, "detector": null
+}
