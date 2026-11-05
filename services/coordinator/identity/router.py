@@ -1,0 +1,301 @@
+"""Pool join: check the human, the pairing code and one nullifier per human, then sign the pool Invite."""
+import base64
+import json
+import os
+import secrets
+import sqlite3
+import time
+from pathlib import Path
+
+from eth_account import Account
+from eth_account.messages import encode_defunct
+from eth_utils import is_address, to_checksum_address
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
+from tod_core import encodings as enc
+from tod_core.hashing import k256
+
+from api import config
+
+from . import agentpass, worldid
+
+PAIR_PREFIX = "tod-pair:"
+INVITE_TTL = 30 * 60  # s; same lifetime as the operator's consent
+DEV_CHAIN = 31337
+
+MODE = os.environ.get("IDENTITY_MODE", "dev")
+# Same name as .env.example. On anvil the coordinator key may stand in for the admitter,
+# since both are team keys there; anywhere else a missing key would sign Invites the registry rejects.
+_admitter_key = os.environ.get("ADMITTER_PRIVATE_KEY")
+if not _admitter_key and config.CHAIN_ID != DEV_CHAIN:
+    raise RuntimeError("ADMITTER_PRIVATE_KEY is required off the local chain")
+ADMITTER = Account.from_key(_admitter_key or config.COORDINATOR_KEY)
+
+router = APIRouter(prefix="/v1/identity")
+db = sqlite3.connect(config.DB_PATH, check_same_thread=False)
+db.execute("CREATE TABLE IF NOT EXISTS humans (nullifier TEXT PRIMARY KEY, owner TEXT, credential TEXT, seen INTEGER)")
+# Agent Pass: the owner's World account (iss, sub), and approvals waiting on the owner.
+db.execute("CREATE TABLE IF NOT EXISTS agent_links (owner TEXT PRIMARY KEY, iss TEXT, sub TEXT, linked INTEGER)")
+db.execute("CREATE TABLE IF NOT EXISTS agent_pending (id TEXT PRIMARY KEY, kind TEXT, owner TEXT, operator TEXT,"
+           " consent TEXT, device_code TEXT, created INTEGER, expires INTEGER, state TEXT)")
+LINK_SIG_TTL = 300  # s; the owner's link signature is short-lived
+
+
+class JoinRequest(BaseModel):
+    owner: str
+    pairingCode: str
+    proof: dict = {}  # the IDKit result, forwarded unchanged; ignored in dev mode
+
+
+class RpSignatureRequest(BaseModel):
+    action: str
+
+
+class RpSignature(BaseModel):
+    """IDKit's rp_context, minus rp_id (the client has it from /v1/identity/config)."""
+    sig: str
+    nonce: str
+    created_at: int
+    expires_at: int
+
+
+class IdentityConfig(BaseModel):
+    mode: str
+    appId: str
+    rpId: str
+    action: str
+    environment: str
+
+
+class JoinResponse(BaseModel):
+    """Exactly the arguments of NodeRegistry.join, plus the recorded credential."""
+    operator: str
+    owner: str
+    nullifier: str
+    inviteDeadline: int
+    inviteSig: str
+    consentDeadline: int
+    consentSig: str
+    credential: str
+
+
+def decode_pairing_code(code: str) -> dict:
+    if not code.startswith(PAIR_PREFIX):
+        raise ValueError("not a tod pairing code")
+    body = code[len(PAIR_PREFIX):]
+    fields = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+    if set(fields) != {"consentDeadline", "operator", "owner", "signature"}:
+        raise ValueError("pairing code has the wrong fields")
+    return fields
+
+
+def verify_human(owner: str, proof: dict) -> tuple[str, str]:
+    """Returns (nullifier hex, credential)."""
+    if MODE == "dev":
+        if config.CHAIN_ID != DEV_CHAIN:
+            raise HTTPException(403, "IDENTITY_MODE=dev is refused off the local chain")
+        return "0x" + k256(b"tod-dev" + bytes.fromhex(owner[2:])).hex(), "dev"
+    try:
+        return worldid.verify(proof, owner)
+    except worldid.Rejected as e:
+        raise HTTPException(400, str(e))
+
+
+@router.get("/config", response_model=IdentityConfig)
+def identity_config():
+    """What the web join page needs to open IDKit (none of it is secret)."""
+    return IdentityConfig(mode=MODE, appId=worldid.APP_ID, rpId=worldid.RP_ID, action=worldid.ACTION,
+                          environment=worldid.ENVIRONMENT)
+
+
+@router.get("/test", response_class=HTMLResponse, include_in_schema=False)
+def test_page():
+    """Developer page to run a join end to end (World ID simulator in staging)."""
+    return (Path(__file__).parent / "test.html").read_text()
+
+
+@router.post("/rp-signature", response_model=RpSignature)
+def rp_signature(req: RpSignatureRequest):
+    # Only our own action, so this route can't be used to sign requests for anything else.
+    if req.action != worldid.ACTION:
+        raise HTTPException(400, f"only the {worldid.ACTION!r} action is signed")
+    if not worldid.RP_SIGNING_KEY:
+        raise HTTPException(503, "World ID is not configured (WORLD_ID_RP_SIGNING_KEY)")
+    return RpSignature(**worldid.sign_request(worldid.RP_SIGNING_KEY, req.action))
+
+
+def credentials() -> dict[str, str]:
+    """Lowercase owner -> recorded World ID credential, for the matcher (scheduler.pick)."""
+    return {owner.lower(): cred for owner, cred in db.execute("SELECT owner, credential FROM humans")}
+
+
+def checked_consent(owner: str, pairing_code: str) -> tuple[str, dict, bytes]:
+    """Pairing-code checks shared by /join and the agent path: (operator, consent, consent signature)."""
+    try:
+        code = decode_pairing_code(pairing_code)
+        operator = to_checksum_address(code["operator"])
+        consent = {"owner": to_checksum_address(code["owner"]), "operator": operator,
+                   "consentDeadline": int(code["consentDeadline"])}
+        consent_sig = bytes.fromhex(code["signature"].removeprefix("0x"))
+        signer = enc.recover("Consent", config.CHAIN_ID, config.NODE_REGISTRY, consent, consent_sig)
+    except (ValueError, KeyError, TypeError) as e:
+        raise HTTPException(400, f"bad pairing code: {e}")
+    if consent["owner"] != owner:
+        raise HTTPException(400, "pairing code was made for a different owner")
+    if signer != operator:
+        raise HTTPException(400, "pairing code signature does not match its operator")
+    if consent["consentDeadline"] <= int(time.time()):
+        raise HTTPException(400, "pairing code expired; run `tod-node pair` again")
+    return operator, consent, consent_sig
+
+
+def signed_invite(operator: str, owner: str, nullifier: str, consent: dict, consent_sig: bytes,
+                  credential: str) -> JoinResponse:
+    deadline = int(time.time()) + INVITE_TTL
+    invite = {"operator": operator, "owner": owner, "nullifier": bytes.fromhex(nullifier[2:]), "deadline": deadline}
+    invite_sig = enc.sign(ADMITTER.key, "Invite", config.CHAIN_ID, config.NODE_REGISTRY, invite)
+    return JoinResponse(operator=operator, owner=owner, nullifier=nullifier, inviteDeadline=deadline,
+                        inviteSig="0x" + invite_sig.hex(), consentDeadline=consent["consentDeadline"],
+                        consentSig="0x" + consent_sig.hex(), credential=credential)
+
+
+def checked_owner(owner: str) -> str:
+    if not is_address(owner):
+        raise HTTPException(400, "owner must be a 0x address")
+    return to_checksum_address(owner)
+
+
+@router.post("/join", response_model=JoinResponse)
+def join(req: JoinRequest):
+    owner = checked_owner(req.owner)
+    operator, consent, consent_sig = checked_consent(owner, req.pairingCode)
+    nullifier, credential = verify_human(owner, req.proof)
+    row = db.execute("SELECT owner FROM humans WHERE nullifier = ?", (nullifier,)).fetchone()
+    if row and row[0] != owner:
+        raise HTTPException(409, "this World ID already joined with another wallet")
+    db.execute("INSERT OR REPLACE INTO humans VALUES (?, ?, ?, ?)", (nullifier, owner, credential, int(time.time())))
+    db.commit()
+    return signed_invite(operator, owner, nullifier, consent, consent_sig, credential)
+
+
+class AgentLinkRequest(BaseModel):
+    owner: str
+    expiry: int
+    ownerSig: str  # EIP-191 by the owner over link_message(owner, expiry)
+
+
+class AgentPairRequest(BaseModel):
+    owner: str
+    pairingCode: str
+
+
+class AgentPending(BaseModel):
+    pendingId: str
+    userCode: str
+    verificationUriComplete: str
+    expiresIn: int
+    interval: int
+
+
+class AgentPoll(BaseModel):
+    status: str  # "pending" or "linked"; a pairing returns the JoinResponse instead
+    owner: str
+
+
+def link_message(owner: str, expiry: int) -> str:
+    return f"tod agent-pass link\nowner:{owner.lower()}\nexpiry:{expiry}"
+
+
+def _joined(owner: str) -> tuple[str, str]:
+    row = db.execute("SELECT nullifier, credential FROM humans WHERE owner = ?", (owner,)).fetchone()
+    if not row:
+        raise HTTPException(403, "owner has not joined the pool with World ID yet")
+    return row
+
+
+def _start(kind: str, owner: str, operator: str = "", consent: str = "") -> AgentPending:
+    try:
+        dev = agentpass.start_device()
+    except agentpass.Blocked as e:
+        raise HTTPException(503, str(e))
+    pid, now = secrets.token_hex(16), int(time.time())
+    db.execute("INSERT INTO agent_pending VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')",
+               (pid, kind, owner, operator, consent, dev["device_code"], now, now + int(dev["expires_in"])))
+    db.commit()
+    return AgentPending(pendingId=pid, userCode=dev["user_code"], verificationUriComplete=dev["verification_uri_complete"],
+                        expiresIn=int(dev["expires_in"]), interval=int(dev.get("interval", 5)))
+
+
+@router.post("/agent/link", response_model=AgentPending)
+def agent_link(req: AgentLinkRequest):
+    """Owner, present with their wallet, links their World account so later agent requests can be approved."""
+    owner = checked_owner(req.owner)
+    now = int(time.time())
+    if not now < req.expiry <= now + LINK_SIG_TTL:
+        raise HTTPException(400, "link signature expired or too far ahead")
+    try:
+        signer = Account.recover_message(encode_defunct(text=link_message(owner, req.expiry)), signature=req.ownerSig)
+    except (ValueError, TypeError):
+        signer = None
+    if signer != owner:
+        raise HTTPException(403, "link must be signed by the owner wallet")
+    _joined(owner)
+    return _start("link", owner)
+
+
+@router.post("/agent/pair", response_model=AgentPending)
+def agent_pair(req: AgentPairRequest):
+    """An agent asks to pair a node for this owner; nothing is signed until the owner approves in World App."""
+    owner = checked_owner(req.owner)
+    operator, consent, consent_sig = checked_consent(owner, req.pairingCode)
+    _joined(owner)
+    if not db.execute("SELECT 1 FROM agent_links WHERE owner = ?", (owner,)).fetchone():
+        raise HTTPException(403, "owner has not linked World ID for agent approvals")
+    return _start("pair", owner, operator, json.dumps({**consent, "sig": "0x" + consent_sig.hex()}))
+
+
+@router.post("/agent/{pid}/poll")
+def agent_poll(pid: str):
+    row = db.execute("SELECT kind, owner, operator, consent, device_code, created, expires, state FROM agent_pending"
+                     " WHERE id = ?", (pid,)).fetchone()
+    if not row:
+        raise HTTPException(404, "no such approval")
+    kind, owner, operator, consent, device_code, created, expires, state = row
+    if state != "pending":
+        raise HTTPException(409, f"this approval is already {state}")  # an approved action runs once
+
+    def block(msg: str):
+        db.execute("UPDATE agent_pending SET state = 'blocked' WHERE id = ?", (pid,))
+        db.commit()
+        raise HTTPException(403, msg)
+
+    if int(time.time()) > expires:
+        block("approval expired; the pairing stays blocked")
+    try:
+        token = agentpass.poll_device(device_code)
+        if token is None:
+            return AgentPoll(status="pending", owner=owner)
+        claims = agentpass.verify_id_token(token, agentpass._jwks(), not_before=created)
+    except agentpass.Blocked as e:
+        block(f"{e}; the pairing stays blocked" if kind == "pair" else str(e))
+
+    link = db.execute("SELECT iss, sub FROM agent_links WHERE owner = ?", (owner,)).fetchone()
+    if kind == "link":
+        if link and tuple(link) != (claims["iss"], claims["sub"]):
+            block("this wallet is already linked to a different World ID")  # never merge subjects
+        db.execute("INSERT OR REPLACE INTO agent_links VALUES (?, ?, ?, ?)",
+                   (owner, claims["iss"], claims["sub"], int(time.time())))
+        db.execute("UPDATE agent_pending SET state = 'done' WHERE id = ?", (pid,))
+        db.commit()
+        return AgentPoll(status="linked", owner=owner)
+    if not link or tuple(link) != (claims["iss"], claims["sub"]):
+        block("approved by a different World ID than the owner's; the pairing stays blocked")
+    c = json.loads(consent)
+    if c["consentDeadline"] <= int(time.time()):
+        block("pairing code expired while waiting; run `tod-node pair` again")
+    db.execute("UPDATE agent_pending SET state = 'done' WHERE id = ?", (pid,))
+    db.commit()
+    nullifier, credential = _joined(owner)
+    consent_fields = {k: c[k] for k in ("owner", "operator", "consentDeadline")}
+    return signed_invite(operator, owner, nullifier, consent_fields, bytes.fromhex(c["sig"][2:]), credential)
