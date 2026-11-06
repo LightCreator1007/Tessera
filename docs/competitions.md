@@ -54,6 +54,20 @@ $C status 1
 
 Hosts can use their own labels instead of MNIST (`--labels FILE`, one byte per item, with `--task` to say what's predicted), and entrants their own predictions (`--predictions FILE`, one byte per item). If a host misses the labels window, each entrant runs `$C claim-share ID --name NAME` for an equal part of the prize. A live competition's page says who acts next and shows the command.
 
+## The host's listing
+
+Prize, deadline, reveal window and item count are fixed on chain. Everything else the host sets from the competition's Settings page in the web app, and every change is signed by the host's wallet (EIP-191 over the competition id, what changed and its sha256), so the coordinator can't edit a listing and nobody else can:
+
+- `POST /v1/competitions/{id}/settings` takes the exact JSON the host signed: title, summary, extra rules, links, tags, class names and whether notebooks are optional, expected or off. Each save is a version, and `GET .../settings` returns every version.
+- `POST /v1/competitions/{id}/banner` takes a PNG, JPEG or WebP up to 1 MB, checked by its bytes. `GET .../banner` serves it.
+- `POST /v1/competitions/{id}/resources` attaches a download of up to 10 MB: a starter kit, data, or an RL environment with its entrypoint, evaluation seeds, episodes and step limit. `GET .../resources` lists them.
+
+All of it is editable until the deadline, except what entrants agreed to by entering: the extra rules, class names, notebook setting and any environment freeze once the first entry lands. Each competition in `GET /v1/competitions` carries its `listing`, `banner` and `resources`.
+
+## Hosting and entering from the web
+
+The web wallet signs everything: create (after approving the exact prize), enter or replace an entry, reveal labels, reveal an entry, settle and claim a share. Before a host creates or an entrant enters, the page makes them save a reveal file with the labels or predictions and the salt, and keeps a copy in the browser, because a commitment nobody can open is lost. The CLI below still works.
+
 ## Limits
 
-Scoring is classification accuracy on one byte per item, so up to 256 classes. AUC, regression and other metrics would need a different scoring rule. There's no entry fee or compute budget yet, though the web wizard has fields for both. Labels and predictions are revealed onchain, so they're public after the deadline. Don't host a competition on data you can't publish.
+Scoring is classification accuracy on one byte per item, so up to 256 classes. AUC, regression and other metrics would need a different scoring rule. There's no entry fee or compute budget yet. RL environments can be published and downloaded, but scoring RL entries needs the evaluator in `docs/rl-competitions.md`. Labels and predictions are revealed onchain, so they're public after the deadline. Don't host a competition on data you can't publish.
