@@ -161,9 +161,14 @@ class Driver:
             self.l.market.voidRound(job, rnd)
             log.info("job %s round %s: voided, %s of %s revealed", job, rnd, r["revealedCount"], quorum)
             return
-        # ponytail: finalizeFallback is left to anyone who gains from it; add here if nobody does
         if ph != Phase.FINALIZE:
             return  # nodes commit and reveal, verifiers lock the seed and attest
+        if self.now() > r["finalizeBy"]:
+            # The verifiers didn't co-sign in time (one was down, say), so finalizeRound now reverts TooLate forever
+            # and the round would hold its nodes busy for good. The fallback pays every eligible seat and frees them.
+            self.l.market.finalizeFallback(job, rnd)
+            log.warning("job %s round %s: missed the finalize window, settled by fallback", job, rnd)
+            return
         pending = tables.SETTLEMENTS.get((job, rnd))
         if pending is None:
             self.prepare(job, rnd)

@@ -65,7 +65,7 @@ def world(tmp_path, monkeypatch):
 
     nrs = {op: {"slot": i, "committed": True, "revealed": True, "noRevealReported": False, "confirmed": Kind.NONE,
                 "updateHash": put(start + np.float32(0.001) * (i + 1))} for i, op in enumerate(OPS[:3])}
-    s.rounds[(1, 1)] = {"status": RoundStatus.OPEN, "fallback_": False, "openedAt": 10, "nodes": OPS[:3],
+    s.rounds[(1, 1)] = {"status": RoundStatus.OPEN, "fallback_": False, "openedAt": 10, "finalizeBy": 2000, "nodes": OPS[:3],
                         "shards": [0, 1, 2], "nodeRounds": nrs, "revealedCount": 3, "budget": 300, "drip": 0,
                         "seed": b"\5" * 32, "aggregateHash": b"\0" * 32, "startWeightsHash": put(start)}
     market = Market({(1, 1): Phase.FINALIZE})
@@ -144,6 +144,12 @@ def test_state_comes_back_after_a_restart_from_the_stored_evidence(world):
     world.d.publish({})
     (st,) = tables.STATES[1].rounds
     assert (st.round, st.metric, st.seconds) == (1, json.loads(doc)["gate"]["valAfter"], None)
+
+
+def test_a_round_past_its_finalize_window_settles_by_fallback(world):
+    world.s.rounds[(1, 1)]["finalizeBy"] = 999  # the fixture's clock is 1000
+    world.d.tick()
+    assert world.market.calls == [("finalizeFallback", 1, 1)] and (1, 1) not in tables.SETTLEMENTS
 
 
 def test_voids_a_round_below_quorum(world):
