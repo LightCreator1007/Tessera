@@ -13,6 +13,28 @@ from tod_core.ledger import REPO, TOKEN_ABI, Network
 from tod_core.txmgr import ANVIL_CHAIN_ID, GAS_MARGIN, TxManager, signer_from_env
 
 
+def send_checked(w3, net, signer, to, data, detail, journal_dir, yes=False):
+    """Preflights one explicit wallet operation and confirms it before creating a sender journal."""
+    tx = {"from": signer.address, "data": data}
+    if to:
+        tx["to"] = to
+    gas = int(w3.eth.estimate_gas(tx) * GAS_MARGIN)
+    fee = 2 * w3.eth.get_block("latest")["baseFeePerGas"] + w3.eth.max_priority_fee
+    required = gas * fee + l1_fee(w3, len(data.removeprefix("0x")) // 2)
+    if w3.eth.get_balance(signer.address) < required:
+        raise SystemExit(f"Sender needs up to {required} wei for gas. Nothing was sent.")
+    print(f"Chain {net.chain_id}; TOD {net.token}; sender {signer.address}")
+    print(f"{detail}; estimated gas limit {gas}, up to {required} wei including the data fee")
+    if net.chain_id != ANVIL_CHAIN_ID and not yes:
+        try:
+            answer = input('Type "send" to continue: ')
+        except EOFError:
+            answer = ""
+        if answer.strip() != "send":
+            raise SystemExit("Stopped. Nothing was sent.")
+    return TxManager(w3, signer, journal_dir, poll_seconds=0.1).transact(to, data, gas=gas)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("action", choices=("deploy", "status", "claim"))
@@ -80,24 +102,7 @@ def main() -> None:
         to, data = args.faucet, faucet.encode_abi("claim")
         detail = f"Claim {allocation} TOD base units from {args.faucet} to {signer.address}"
 
-    tx = {"from": signer.address, "data": data}
-    if to:
-        tx["to"] = to
-    gas = int(w3.eth.estimate_gas(tx) * GAS_MARGIN)
-    fee = 2 * w3.eth.get_block("latest")["baseFeePerGas"] + w3.eth.max_priority_fee
-    required = gas * fee + l1_fee(w3, len(data.removeprefix("0x")) // 2)
-    if w3.eth.get_balance(signer.address) < required:
-        raise SystemExit(f"Sender needs up to {required} wei for gas. Nothing was sent.")
-    print(f"Chain {net.chain_id}; TOD {net.token}; sender {signer.address}")
-    print(f"{detail}; estimated gas limit {gas}, up to {required} wei including the data fee")
-    if net.chain_id != ANVIL_CHAIN_ID and not args.yes:
-        try:
-            answer = input('Type "send" to continue: ')
-        except EOFError:
-            answer = ""
-        if answer.strip() != "send":
-            raise SystemExit("Stopped. Nothing was sent.")
-    receipt = TxManager(w3, signer, args.journal_dir, poll_seconds=0.1).transact(to, data, gas=gas)
+    receipt = send_checked(w3, net, signer, to, data, detail, args.journal_dir, args.yes)
     result = {"chainId": net.chain_id, "token": net.token, "faucet": receipt["contractAddress"] if to is None else to,
               "allocation": allocation, "txHash": Web3.to_hex(receipt["transactionHash"])}
     if args.action == "deploy":
