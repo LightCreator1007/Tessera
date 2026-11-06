@@ -67,6 +67,7 @@ class NodeLog:
         self.started: dict = {}
         self.stopping = False
         self.draining: list[str] = []
+        self.at_risk: dict[tuple, dict] = {}  # rounds whose reveal is running late, cleared once it lands
         self.rounds: dict[tuple[int, int], str] = {}  # (job, round) -> committed, revealed, skipped
         self.counts = {"committed": 0, "revealed": 0, "skipped": 0, "reverted": 0}
         self.errors: list[dict] = []  # recent error and tx.reverted events, newest last
@@ -89,6 +90,10 @@ class NodeLog:
             step = t.split(".")[1]
             self.rounds[key] = step
             self.counts[step] += 1
+            if step != "committed":
+                self.at_risk.pop(key, None)
+        elif t == "reveal.at_risk":
+            self.at_risk[key] = e
         elif t == "tx.reverted":
             self.counts["reverted"] += 1
             self.errors.append(e)
@@ -144,6 +149,12 @@ def map_problems(st: dict | None, log: NodeLog, loop_age: float | None, coord_ch
     if (st.get("daemon") or {}).get("state") != "running":
         return [Problem("not_running", "Your node is set up but not running. Start it:", "tod-node run")]
     out: list[Problem] = []
+    for (job, rnd), e in log.at_risk.items():
+        due = float((e.get("data") or {}).get("revealDeadline") or 0)
+        left = f"due in {due - now:.0f} s" if due > now else "past its deadline"
+        out.append(Problem("reveal_at_risk", f"The reveal for job {job} round {rnd} is {left} and isn't in yet. "
+                           "Keep this machine awake and online, or it is slashed for a missed reveal. Check it:",
+                           "tod-node logs"))
     if log.draining:
         out.append(Problem("draining", f"Stopping after the reveals it owes: {', '.join(log.draining)}.", ""))
     if loop_age is not None and loop_age >= LOOP_STALE:
@@ -182,6 +193,9 @@ def map_event(e: dict) -> Event:
         step = t.split(".")[1]
         what, detail = STEP_WORDS[step], str(d.get("reason") or "")
         kind = "warn" if step == "skipped" else "ok"
+    elif t == "reveal.at_risk":
+        what, kind = "Reveal running late", "danger"
+        detail = f"{d.get('secondsLeft', '?')} s left, keep this machine awake and online"
     elif t == "round.waiting":
         what, detail, kind = "Waiting for this round's inputs", str(d.get("reason") or ""), "warn"
     elif t == "heartbeat.restored":
@@ -477,6 +491,10 @@ class LiveSource:
                 self.take(batch)  # the node's since is exclusive: the cursor is the last seq seen
             except (httpx.HTTPError, ValueError):  # node down or mid-restart: retry, the status poll shows it
                 await asyncio.sleep(NODE_EVERY * 2)
+
+    def owed(self) -> list[dict]:
+        """Reveals the running node owes, from GET /v1/status. Empty when unknown, such as a node without its API."""
+        return list((self.raw.get("status") or {}).get("owed") or [])
 
     async def stop_node(self) -> str:
         """POST /v1/stop with the token from the node's data dir. Returns what happened, in words."""

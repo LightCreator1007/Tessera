@@ -752,7 +752,13 @@ class ToDApp(App):
         now = time.monotonic()
         if now - getattr(self, "_stop_armed", -10.0) > 5:
             self._stop_armed = now
-            self.notify("Press s again to stop the node. It finishes the reveals it owes first.", timeout=5)
+            owed = self.source.owed() if hasattr(self.source, "owed") else []
+            if owed:
+                where = ", ".join(f"job {o['job']} round {o['round']}" for o in owed)
+                self.notify(f"Your node owes a reveal in {where}. Press s again to stop once it is in; "
+                            "a forced stop would be slashed for a missed reveal.", timeout=5, severity="warning")
+            else:
+                self.notify("Press s again to stop the node. It finishes the reveals it owes first.", timeout=5)
             return
         self._stop_armed = -10.0
 

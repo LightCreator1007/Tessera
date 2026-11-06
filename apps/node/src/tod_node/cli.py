@@ -173,7 +173,9 @@ def status_fields() -> dict:
     pid = daemon_pid()
     last = (events_log().read()[-1:] or [None])[0]
     return {"dataDir": str(data_dir()), "initialized": operator is not None, "operator": operator,
-            "daemon": {"state": "running" if pid else "stopped", "pid": pid}, "lastEvent": last}
+            "daemon": {"state": "running" if pid else "stopped", "pid": pid}, "lastEvent": last,
+            # Only the running daemon knows which reveals it owes; GET /v1/status fills this in, a CLI call can't.
+            "owed": None}
 
 
 @app.command()
@@ -257,7 +259,7 @@ def run(
         signal.signal(sig, on_signal)
     events.append("node.started", version=version("tod-node"), network=net.name, chainId=net.chain_id,
                   operator=account.address, mode=mode)
-    api, server = _start_api(events, stop)
+    api, server = _start_api(events, stop, loop)
     beat = _heartbeat(coordinator, account, events, prewarm) if coordinator else (lambda state: None)
     try:
         run_daemon(ledger, loop, stop, poll=poll, emit=events.append,
@@ -270,7 +272,7 @@ def run(
         lock.release()
 
 
-def _start_api(events, stop: threading.Event):
+def _start_api(events, stop: threading.Event, loop=None):
     """Serve the local API unless TOD_API_BIND is "off". A busy port is logged, not fatal: the node matters more."""
     from .api import Api, load_token
 
@@ -279,7 +281,10 @@ def _start_api(events, stop: threading.Event):
             events.append("node.stopping", source="api")
             stop.set()
 
-    api = Api(status_fields, events, api_stop, load_token(data_dir()))
+    def status():
+        return {**status_fields(), "owed": loop.owed if loop else None}
+
+    api = Api(status, events, api_stop, load_token(data_dir()))
     bind = os.environ.get("TOD_API_BIND", "127.0.0.1:7777")
     if bind == "off":
         return api, None

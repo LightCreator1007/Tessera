@@ -92,3 +92,16 @@ def test_run_keeps_going_when_the_port_is_taken(tmp_path, monkeypatch):
 
     monkeypatch.setenv("TOD_API_BIND", "off")
     assert _start_api(events, stop)[1] is None
+
+
+def test_status_serves_the_reveals_the_running_loop_owes(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from tod_node.cli import _start_api
+    monkeypatch.setenv("TOD_DATA", str(tmp_path))
+    monkeypatch.setenv("TOD_API_BIND", "off")
+    events, stop = EventLog(tmp_path / "events.ndjson"), threading.Event()
+    owed = [{"job": 7, "round": 4, "revealDeadline": 1100, "missed": 0, "penalty": 100_000}]
+    api, _ = _start_api(events, stop, SimpleNamespace(owed=owed))
+    assert api.status()["owed"] == owed
+    assert _start_api(events, stop)[0].status()["owed"] is None
