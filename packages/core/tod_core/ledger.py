@@ -86,6 +86,8 @@ class Network:
         if not c:
             raise RuntimeError(f"{path} has no [contracts]: run scripts/deploy.py first")
         url = rpc or os.environ.get(d.get("rpcEnv", ""), "") or d["rpc"]
+        if not url:
+            raise RuntimeError(f"RPC URL missing; set {d.get('rpcEnv', 'the network RPC')} or pass an override")
         return cls(d["name"], d["chainId"], url, c["market"], c["registry"], c["token"], c["deployBlock"],
                    d.get("logSpan", 2000), d["roles"], d.get("windows", {}))
 
