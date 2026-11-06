@@ -40,7 +40,8 @@ class Market:
 
 @pytest.fixture
 def world(tmp_path, monkeypatch):
-    for t in ("JOBS", "ROUNDS", "SPECS", "MODELS", "EVIDENCE", "SETTLEMENTS", "STATES", "CONTROL", "MISSED", "REARMED"):
+    for t in ("JOBS", "ROUNDS", "SPECS", "MODELS", "EVIDENCE", "SETTLEMENTS", "STATES", "CONTROL", "MISSED", "REARMED",
+              "SEATING"):
         monkeypatch.setattr(tables, t, {})
     store = DiskStore(tmp_path)
     spec_bytes = canonical(SPEC)
@@ -134,6 +135,7 @@ def test_opens_the_next_round_on_idle_nodes(world):
     world.d.tick()
     (name, job, ops, shards), = world.market.calls
     assert (name, job, len(ops)) == ("openRound", 1, 3) and OPS[3] in ops  # the node that sat out goes first
+    assert set(ops) <= blobs.allowed(1, 2)  # seated nodes can fetch the spec before the next tick publishes round 2
     assert tables.ROUNDS[1][1].status == "finalized" and tables.JOBS[1].workload == "mlp-exact/1"
 
 
@@ -144,6 +146,17 @@ def test_a_broken_round_does_not_stop_the_tick(world):
     world.d.datasets = offline
     world.d.tick()  # logged, and the rest of the tick still runs
     assert (1, 1) not in tables.SETTLEMENTS and tables.ROUNDS[1][1].status == "verifying"
+
+
+def test_a_sync_that_fails_part_way_starts_over(world):
+    def flaky(ledger):
+        world.s.nodes[OPS[0]]["stake"] += 15  # an event applied before the RPC error
+        raise OSError("rpc dropped")
+
+    world.s.sync = flaky
+    with pytest.raises(OSError):
+        world.d.tick()
+    assert world.d.state is not world.s and not world.d.state.nodes  # the next tick rebuilds from the deploy block
 
 
 def test_reports_no_reveals_before_voiding(world):

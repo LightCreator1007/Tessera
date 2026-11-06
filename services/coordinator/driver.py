@@ -60,7 +60,13 @@ class Driver:
         self._data: dict[str, tuple] = {}
 
     def tick(self):
-        self.state.sync(self.l)
+        try:
+            self.state.sync(self.l)
+        except Exception:
+            # A sync that fails part way has applied some events without moving last_block, and the retry would
+            # apply them again (a stake counted twice, say). Start over from the deploy block instead.
+            self.state = ChainState()
+            raise
         phases = {k: Phase(self.l.market.phase(*k)) for k, r in self.state.rounds.items()
                   if r["status"] == RoundStatus.OPEN}
         self.publish(phases)
@@ -192,6 +198,7 @@ class Driver:
         workloads = {job: spec["workload"]["id"] for job in self.state.jobs if (spec := self.spec(job))}
         for job, ops, shards in scheduler.queue(self.state, scheduler.rebuild(self.state), self.fleet(),
                                                 int(self.now()), workloads, tables.CONTROL, self.credentials()):
+            tables.SEATING[(job, self.state.jobs[job]["nextRound"])] = {op.lower() for op in ops}
             try:
                 self.l.market.openRound(job, ops, shards)
                 log.info("job %s: opened a round for %s on shards %s", job, ops, shards)
