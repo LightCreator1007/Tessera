@@ -7,6 +7,7 @@ import subprocess
 import sys
 import threading
 import time
+from decimal import Decimal
 
 import pytest
 from eth_account import Account
@@ -105,7 +106,7 @@ def join(chain, tag: int, i: int, stake: int, faucet=None):
     return owner, op
 
 
-def create_job(chain, tag: int, rounds: int = ROUNDS, budget: int = BUDGET, faucet=None) -> tuple[int, Actor]:
+def create_job(chain, tag: int, rounds: int = ROUNDS, budget: int = BUDGET, faucet=None, overrides=None) -> tuple[int, Actor]:
     l = chain[0]
     requester = Actor(chain, f"requester/{tag}/{rounds}", tokens=0 if faucet else budget / 1e6)
     if faucet:
@@ -118,6 +119,7 @@ def create_job(chain, tag: int, rounds: int = ROUNDS, budget: int = BUDGET, fauc
         "datasetHash": h("dataset"), "shardTableHash": h("shards"), "initialWeightsHash": h("w0"),
         "valCommit": bytes(32), "codeHash": bytes(32), "specURI": "https://coordinator.example/spec",
     }
+    params.update(overrides or {})
     requester.l.market.createJob(params, 0)
     return max(e.args["jobId"] for e in l.events() if e.name == "JobCreated"), requester
 
@@ -126,17 +128,19 @@ def ckpts(start: bytes, job: int, rnd: int, i: int) -> list[bytes]:
     return [start] + [h(f"{job}/{rnd}/{i}/{j}") for j in range(1, K + 1)]
 
 
-def commit_reveal(l, job: int, rnd: int, ops, reveal=None) -> None:
+def commit_reveal(l, job: int, rnd: int, ops, reveal=None, checkpoints=None) -> None:
     start = l.market.getRound(job, rnd).startWeightsHash
     salts = {op.address: h(f"salt/{job}/{rnd}/{i}") for i, op in enumerate(ops)}
     for i, op in enumerate(ops):
-        root = enc.checkpoint_root(ckpts(start, job, rnd, i))
+        hashes = checkpoints[op.address] if checkpoints else ckpts(start, job, rnd, i)
+        root = enc.checkpoint_root(hashes)
         commit = enc.commit_hash(enc.domain(l.net.chain_id, l.net.market), job, rnd, op.address, root, salts[op.address])
         assert commit == l.market.commitHashOf(job, rnd, op.address, root, salts[op.address])
         op.l.market.commit(job, rnd, commit)
     for i, op in enumerate(ops):
         if reveal is None or i in reveal:
-            op.l.market.reveal(job, rnd, ckpts(start, job, rnd, i), salts[op.address])
+            hashes = checkpoints[op.address] if checkpoints else ckpts(start, job, rnd, i)
+            op.l.market.reveal(job, rnd, hashes, salts[op.address])
 
 
 def past_reveal_deadline(l) -> None:
@@ -158,7 +162,7 @@ def finalize(l, coordinator, verifiers, job: int, rnd: int, payouts, outcome=Out
     settlement = {"outcome": int(outcome), "aggregateHash": agg, "flaggedBitmap": 0, "aggEvidenceHash": h("aggEv"),
                   "payEvidenceHash": h("payEv"), "payouts": [{"operator": o, "amount": a} for o, a in payouts]}
     assert l.market.finalizeDigest(job, rnd, settlement) == enc.digest("FinalizeRound", l.net.chain_id, l.net.market, msg)
-    coordinator.l.market.finalizeRound(job, rnd, settlement, sigs)
+    return coordinator.l.market.finalizeRound(job, rnd, settlement, sigs)
 
 
 def equal_split(budget: int, ops) -> list[tuple[str, int]]:
@@ -256,7 +260,16 @@ def claim_faucet(chain, actor, faucet):
 
 
 def test_faucet_to_stake_settlement_claim_and_withdrawal(chain):
-    """Contract handoff rehearsal; the separate runtime suite performs actual training/replay."""
+    """Real trainer/replay and onchain money flow; service processes and public deployment are separate."""
+    import numpy as np
+    from tod_core.aggregate import Outer, gate
+    from tod_core.blob import whash
+    from tod_core.evidence import canonical
+    from tod_datasets.canonical import from_arrays, split
+    from tod_workloads.mlp_exact import MLPExact
+    from tod_workloads.runner import run_round, sampler
+    from jsonschema import Draft202012Validator
+
     l, network, rpc, tmp = chain
     tag, coordinator, va, vb = actors(chain)
     deployed = script("faucet.py", "deploy", "--out", str(tmp / "faucet.json"),
@@ -270,7 +283,22 @@ def test_faucet_to_stake_settlement_claim_and_withdrawal(chain):
     stake = l.market.minStake(budget, 1, 3)
     pairs = [join(chain, tag, i, stake, faucet=faucet) for i in range(4)]
     ops = [op for _, op in pairs]
-    job, requester = create_job(chain, tag, rounds=1, budget=budget, faucet=faucet)
+    X = np.random.default_rng(0).random((1000, 4)).astype(np.float32)
+    data = from_arrays(X, (X[:, 0] > 0.5).astype(np.int64))
+    layout = split(len(data.y), 4, "0.05", "0.1")
+    spec = json.loads((REPO / "vectors/spec.example.mlp.json").read_text())
+    spec["model"].update(inputShape=[4], outputs=2, hidden=8)
+    spec["train"].update(H=64, K=K, B=8, lr="0.05", epochs=1)
+    spec["data"].update(datasetHash=data.card.hash, shards=layout["shards"], valFrac="0.05", testFrac="0.1")
+    spec["refWorkSecondsPerRound"] = 2
+    Draft202012Validator(json.loads((REPO / "vectors/spec.schema.json").read_text())).validate(spec)
+    spec_hash = enc.k256(canonical(spec))
+    workload = MLPExact(4, 2, hidden=8, lr="0.05")
+    weights = workload.init(int.from_bytes(spec_hash[:8], "big"))
+    job, requester = create_job(chain, tag, rounds=1, budget=budget, faucet=faucet, overrides={
+        "modelSpecHash": spec_hash, "initialWeightsHash": whash(spec_hash, weights),
+        "datasetHash": bytes.fromhex(data.card.hash[2:]), "shardTableHash": enc.k256(canonical(layout["shards"])),
+        "workloadId": h("mlp-exact/1"), "shards": 4})
     assert l.token.balanceOf(requester.address) == 100_000_000 - budget
     assert l.token.balanceOf(faucet) == 500_000_000
     before_nonce = l.w3.eth.get_transaction_count(requester.address)
@@ -280,16 +308,43 @@ def test_faucet_to_stake_settlement_claim_and_withdrawal(chain):
     assert l.w3.eth.get_transaction_count(requester.address) == before_nonce
 
     coordinator.l.market.openRound(job, [op.address for op in ops], list(range(4)))
-    commit_reveal(l, job, 1, ops)
+    domain = enc.domain(l.net.chain_id, l.net.market)
+
+    def train(shard):
+        result = {}
+        hashes = run_round(workload, weights, data.X, data.y,
+                           sampler(domain, job, shard, layout["shards"][shard], 0, 64, 8), 64, K, spec_hash,
+                           on_checkpoint=lambda _, w: result.update(weights=w))
+        return hashes, result["weights"]
+
+    checkpoints = {op.address: train(i)[0] for i, op in enumerate(ops[1:], start=1)}
+    checkpoints[ops[0].address] = [whash(spec_hash, weights)] + [
+        whash(spec_hash, weights + np.float32(0.001 * k)) for k in range(1, K + 1)]
+    commit_reveal(l, job, 1, ops, checkpoints=checkpoints)
     draw_seed(l, coordinator, job, 1)
-    failure = [{"operator": ops[0].address, "kind": int(Kind.REPLAY_MISMATCH), "blameFrom": False}]
+    aggregates = []
     for verifier in (va, vb):
-        verifier.l.market.attestRound(job, 1, h("faucet-rehearsal-report"), failure)
+        failures, updates = [], []
+        for i, op in enumerate(ops):
+            replayed, final_weights = train(i)
+            if replayed != checkpoints[op.address]:
+                failures.append({"operator": op.address, "kind": int(Kind.REPLAY_MISMATCH), "blameFrom": False})
+            else:
+                updates.append((op.address, final_weights))
+        assert [f["operator"] for f in failures] == [ops[0].address]
+        lo, length = layout["val"]
+        merged = gate(weights, updates, Outer(), None,
+                      lambda w: workload.evaluate(w, data.X[lo:lo + length], data.y[lo:lo + length])[0])
+        assert not merged.reverted and not merged.excluded
+        aggregates.append(whash(spec_hash, merged.w_new))
+        report_hash = enc.k256(canonical({"failures": failures, "aggregate": aggregates[-1].hex()}))
+        verifier.l.market.attestRound(job, 1, report_hash, failures)
+    assert aggregates[0] == aggregates[1]
     assert l.registry.getNode(ops[0].address).stake == 0
     round_state = l.market.getRound(job, 1)
     assert round_state.budget == budget + stake // 2
     payouts = equal_split(round_state.budget + round_state.drip, ops[1:])
-    finalize(l, coordinator, [va, vb], job, 1, payouts)
+    settlement_receipt = finalize(l, coordinator, [va, vb], job, 1, payouts, agg=aggregates[0])
     assert l.market.getRound(job, 1).status == RoundStatus.SETTLED
     assert l.market.claimable(pairs[0][0].address) == 0
     assert l.token.balanceOf(pairs[0][0].address) == 100_000_000 - stake
@@ -306,7 +361,63 @@ def test_faucet_to_stake_settlement_claim_and_withdrawal(chain):
     status = script("faucet.py", "status", "--faucet", faucet, "--account", requester.address,
                     net=str(network), rpc=rpc)
     assert json.loads(status.stdout)["inventory"] == 500_000_000
-    print(f"Faucet {faucet}; job {job}: settled, three honest owners claimed, bad node slashed and unpaid.")
+    print(f"Faucet {faucet}; job {job}: settled, three honest owners claimed, bad node slashed and unpaid. "
+          f"Settlement {Web3.to_hex(settlement_receipt['transactionHash'])}")
+
+    # The local fixture is never advertised as Circle USDC or deployed on a public network.
+    deployer = Actor(chain, "deployer")
+    usdc_art = json.loads((REPO / "contracts/out/MockUSDC.sol/MockUSDC.json").read_text())
+    data = l.w3.eth.contract(abi=usdc_art["abi"], bytecode=usdc_art["bytecode"]["object"]).constructor().data_in_transaction
+    usdc_address = deployer.tm.transact(None, data)["contractAddress"]
+    usdc = l.w3.eth.contract(address=usdc_address, abi=usdc_art["abi"])
+    desk_result = script("exchange.py", "deploy", "--usdc", usdc_address,
+                         "--out", str(tmp / "exchange.json"), net=str(network), rpc=rpc)
+    desk = json.loads(desk_result.stdout.splitlines()[-1])["exchange"]
+    deployer.tm = TxManager(l.w3, deployer.signer, tmp / "quote-seed", poll_seconds=0.02)
+    deployer.tm.transact(usdc_address, usdc.encode_abi("mint", args=[deployer.address, 100_000_000]))
+
+    def exchange(actor, action, *flags, check=True):
+        env = {k: v for k, v in os.environ.items() if not k.endswith("_PRIVATE_KEY")}
+        env["WALLET_PRIVATE_KEY"] = actor.key.hex()
+        return subprocess.run(
+            [sys.executable, str(REPO / "scripts/exchange.py"), action, "--network", str(network), "--rpc", rpc,
+             "--exchange", desk, "--journal-dir", str(tmp / "wallet-exchange"), *flags],
+            check=check, capture_output=True, text=True, env=env)
+
+    exchange(deployer, "seed", "--asset", "usdc", "--amount", "100")
+    owner, op = pairs[1]
+    pay = dict(payouts)[op.address]
+    formatted_pay = str(Decimal(pay) / Decimal(1_000_000))
+    owner_balance = l.token.balanceOf(owner.address)
+    before_nonce = l.w3.eth.get_transaction_count(owner.address)
+    no_approval = exchange(owner, "swap", "--amount", formatted_pay, check=False)
+    assert no_approval.returncode != 0 and "Approve the exact input" in no_approval.stderr
+    assert l.w3.eth.get_transaction_count(owner.address) == before_nonce
+    exchange(owner, "approve", "--amount", formatted_pay)
+    before_nonce = l.w3.eth.get_transaction_count(owner.address)
+    repeated_approval = exchange(owner, "approve", "--amount", formatted_pay, check=False)
+    assert repeated_approval.returncode != 0 and "Clear the existing allowance" in repeated_approval.stderr
+    too_large = exchange(owner, "swap", "--amount", "100.000001", check=False)
+    assert too_large.returncode != 0 and "output inventory" in too_large.stderr
+    expired = exchange(owner, "swap", "--amount", formatted_pay, "--deadline", "1", check=False)
+    assert expired.returncode != 0 and "deadline has expired" in expired.stderr
+    assert l.w3.eth.get_transaction_count(owner.address) == before_nonce
+    assert l.token.balanceOf(owner.address) == owner_balance
+    swapped = exchange(owner, "swap", "--amount", formatted_pay)
+    receipt = l.w3.eth.get_transaction_receipt(json.loads(swapped.stdout.splitlines()[-1])["txHash"])
+    assert receipt["status"] == 1
+    assert l.token.balanceOf(owner.address) == owner_balance - pay
+    assert usdc.functions.balanceOf(owner.address).call() == pay
+    assert l.token.allowance(owner.address, desk) == 0
+    exchange(owner, "approve", "--asset", "usdc", "--amount", formatted_pay)
+    exchange(owner, "swap", "--asset", "usdc", "--amount", formatted_pay)
+    assert l.token.balanceOf(owner.address) == owner_balance
+    assert usdc.functions.balanceOf(owner.address).call() == 0
+    assert usdc.functions.balanceOf(desk).call() == 100_000_000
+    assert l.token.totalSupply() == supply
+    status = exchange(owner, "status", "--account", owner.address)
+    assert json.loads(status.stdout)["todBalance"] == owner_balance
+    print(f"Exchange {desk}: {formatted_pay} earned TOD converted to test USDC and back with exact balances.")
 
 
 def test_rebuild_follows_slash_no_reveal_and_revert(chain):

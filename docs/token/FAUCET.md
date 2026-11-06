@@ -15,7 +15,7 @@ The caller receives the allocation; they cannot supply another recipient or cons
 
 Claims need native ETH. Anvil's local balance tools cover the deterministic rehearsal; Base Sepolia users need test ETH from a separately funded gas source. A TOD faucet cannot create ETH. Base Sepolia deployment and any funded-key operation require their own explicit authorization.
 
-Tests cover first claim, repeated claim, the exact cooldown boundary, independent users, exhaustion and refill, revoked mint authority, invalid configuration, and fuzzed allocation/cooldown values. Stateful invariants must conserve initial inventory across successful claims without issuing supply. The command-line rehearsal will connect faucet claims to existing stake, job, settlement, and withdrawal operations. Token conversion is a separate reserve/liquidity decision; this faucet creates no dollar value or redemption promise.
+Tests cover first claim, repeated claim, the exact cooldown boundary, independent users, exhaustion and refill, revoked mint authority, invalid configuration, and fuzzed allocation/cooldown values. Stateful invariants must conserve initial inventory across successful claims without issuing supply. The command-line rehearsal connects faucet claims to existing stake, job, settlement, and withdrawal operations. The separate [test exchange](TEST_EXCHANGE.md) exercises conversion using bounded test inventory; this faucet creates no dollar value or real-USDC redemption promise.
 
 ## Reproduce the local money flow
 
@@ -27,9 +27,9 @@ uv sync --locked --all-packages
 uv run pytest packages/core/tests/ledger_test.py::test_faucet_to_stake_settlement_claim_and_withdrawal -q -s
 ```
 
-This command starts an isolated Anvil, deploys the real TOD/registry/market/faucet contracts, prefunds the faucet, and claims 100 TOD into each participant's wallet. Four owners stake and one requester funds a job. Two verifier signatures confirm a bad node, its stake is slashed, and three honest owners receive the round budget plus the eligible half of the slash. They claim earnings and withdraw their remaining stake. The test checks every balance and unchanged total supply, then stops Anvil. It also rejects a repeated faucet claim without consuming a nonce.
+This command starts an isolated Anvil, deploys the real TOD/registry/market/faucet contracts, prefunds the faucet, and claims 100 TOD into each participant's wallet. Four owners stake and one requester funds a job. The shared exact MLP trains on a canonical synthetic dataset. Two verifier roles independently replay all four nodes, identify the deliberately wrong update, and agree on the merged model hash. The bad node is slashed, and three honest owners receive the round budget plus the eligible half of the slash. They claim earnings and withdraw their remaining stake. The test checks every balance and unchanged total supply, then tests the separate test-USDC conversion and reverse swap with exact approvals and balances, and stops Anvil. It also rejects a repeated faucet claim without consuming a nonce.
 
-This is a contract handoff rehearsal with synthetic checkpoints and explicit verifier signatures. Actual model training, replay, coordinator driving, wallet UI and public-network deployment have separate integration acceptance; do not describe this command as a complete running platform.
+This exercises the actual shared trainer, replay and merge code in one test process, together with real Anvil transactions and role signatures. Autonomous coordinator driving, separate node/verifier processes, wallet UI and public-network deployment have separate integration acceptance; do not describe this command as a complete running platform.
 
 ## Try claims interactively
 
