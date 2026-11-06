@@ -27,6 +27,8 @@ export type Competition = {
   items?: number;
   /** Seconds the host has to reveal labels after the deadline, and entrants then have to reveal entries. */
   revealWindow?: number;
+  /** Where this competition is listed on Arkiv, and its result once settled. */
+  arkiv?: { listing?: string; result?: string } | null;
 };
 
 export function labelBytes(seed: number) {
