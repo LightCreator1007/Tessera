@@ -1,0 +1,307 @@
+/* Landing page styles: poster type, stepped motion and the cheat-demo tile states, all on the mosaic tokens. */
+.ld {
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  overflow-x: clip;
+}
+.ld-wrap {
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+@media (min-width: 900px) {
+  .ld-wrap { padding: 0 48px; }
+}
+
+/* Type */
+.ld-display {
+  font-size: clamp(2.6rem, 6.4vw, 6.4rem);
+  line-height: 0.94;
+  letter-spacing: -0.045em;
+  font-weight: 600;
+  max-width: 11.5ch;
+  color: var(--ink);
+  text-wrap: balance;
+}
+.ld-h2 {
+  font-size: clamp(2rem, 3.6vw, 3.4rem);
+  line-height: 1;
+  letter-spacing: -0.035em;
+  font-weight: 600;
+  text-wrap: balance;
+}
+.ld-h3 {
+  font-size: clamp(1.5rem, 2.2vw, 2rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  font-weight: 600;
+  margin-top: 28px;
+}
+.ld-lede {
+  font-size: clamp(1rem, 1.25vw, 1.2rem);
+  line-height: 1.5;
+  color: var(--ink-muted);
+  max-width: 44ch;
+  text-wrap: pretty;
+}
+.ld-body {
+  font-size: 1rem;
+  line-height: 1.55;
+  color: var(--ink-muted);
+  max-width: 46ch;
+  margin: 12px 0 24px;
+  text-wrap: pretty;
+}
+
+/* Actions */
+.ld-btn {
+  display: inline-flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 2px;
+  background: var(--mz-bone);
+  color: var(--mz-ground);
+  font-size: 0.95rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  transition: background-color 120ms steps(2), transform 80ms steps(2);
+}
+.ld-btn:hover { background: var(--mz-l7); }
+.ld-btn:active { transform: translateY(1px); }
+.ld-btn:disabled { background: var(--mz-l3); color: var(--mz-l7); cursor: progress; }
+.ld-btn-ghost {
+  background: transparent;
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--rule-strong);
+}
+.ld-btn-ghost:hover { background: var(--surface-hover); }
+.ld :focus-visible { outline: 2px solid var(--mz-l7); outline-offset: 3px; border-radius: 2px; }
+.ld-link {
+  height: 40px;
+  align-items: center;
+  padding: 0 12px;
+  font-size: 0.92rem;
+  color: var(--ink-muted);
+}
+.ld-link:hover, .ld-link-plain:hover { color: var(--ink); }
+.ld-link-plain { font-size: 0.9rem; color: var(--ink-subtle); }
+
+/* Nav */
+.ld-nav {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  height: 64px;
+  padding: 0 16px 0 20px;
+  border-bottom: 1px solid transparent;
+  transition: background-color 160ms steps(3), border-color 160ms steps(3);
+}
+.ld-nav.is-solid { background: var(--surface); border-color: var(--rule); }
+@media (min-width: 900px) { .ld-nav { padding: 0 32px 0 40px; } }
+
+/* Hero */
+.ld-hero { position: relative; }
+.ld-hero-art { position: relative; height: 44svh; min-height: 300px; margin-top: 64px; }
+.ld-hero-copy { position: relative; display: flex; flex-direction: column; gap: 22px; padding: 8px 24px 72px; }
+@media (min-width: 900px) {
+  .ld-hero { height: 100svh; min-height: 680px; }
+  .ld-hero-art { position: absolute; inset: 0; height: auto; margin: 0; }
+  .ld-hero-copy { position: absolute; left: 0; bottom: 0; padding: 0 48px 9svh; gap: 26px; pointer-events: none; }
+  .ld-hero-copy a { pointer-events: auto; }
+}
+.ld-rise { animation: ld-rise 560ms steps(7) both; }
+@keyframes ld-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* The round */
+.ld-round { position: relative; border-top: 1px solid var(--rule-row); }
+.ld-round-stick {
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 16px;
+  padding: 80px 24px 24px;
+  max-width: 1340px;
+  margin: 0 auto;
+}
+.ld-round-art { position: relative; min-height: 0; order: -1; }
+@media (min-width: 900px) {
+  .ld-round-stick { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); grid-template-rows: none; align-items: center; gap: 56px; padding: 64px 48px 24px; }
+  .ld-round-art { order: 0; height: 72svh; }
+}
+.ld-steps { list-style: none; margin: 32px 0 0; padding: 0; }
+.ld-steps li { border-top: 1px solid var(--rule-row); }
+.ld-steps li:last-child { border-bottom: 1px solid var(--rule-row); }
+.ld-steps button {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  width: 100%;
+  padding: 14px 0;
+  text-align: left;
+  color: var(--ink-subtle);
+  transition: color 160ms steps(3);
+}
+.ld-steps button:hover { color: var(--ink-muted); }
+.ld-step-n { font-family: var(--font-mono); font-size: 0.8rem; width: 2ch; }
+.ld-step-name { font-size: clamp(1.25rem, 1.8vw, 1.6rem); letter-spacing: -0.025em; font-weight: 500; }
+.ld-steps .is-on button { color: var(--ink); }
+.ld-steps .is-on .ld-step-n { color: var(--mz-l5); }
+.ld-steps .is-past .ld-step-n { color: var(--mz-l3); }
+.ld-step-body {
+  display: grid;
+  max-height: 0;
+  overflow: hidden;
+  padding-left: calc(2ch + 16px);
+  color: var(--ink-muted);
+  line-height: 1.55;
+  max-width: 48ch;
+  transition: max-height 240ms steps(5), padding 240ms steps(5);
+}
+.ld-steps .is-on .ld-step-body { max-height: 9rem; padding-bottom: 18px; }
+@media (max-width: 899px) {
+  .ld-steps { margin-top: 16px; }
+  .ld-steps li:not(.is-on) .ld-step-name { font-size: 1.05rem; }
+  .ld-steps button { padding: 9px 0; }
+  .ld-round-copy .ld-h2 { display: none; }
+}
+
+/* Try to cheat */
+.ld-cheat { padding: 120px 0 128px; border-top: 1px solid var(--rule-row); }
+.ld-cheat .ld-lede { margin-top: 14px; }
+.ld-grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 44px;
+}
+@media (min-width: 900px) { .ld-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; } }
+.ld-node { display: flex; flex-direction: column; gap: 6px; }
+.ld-node-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 10px 9px;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px var(--rule);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow 120ms steps(2), background-color 120ms steps(2);
+}
+.ld-node-head:hover:not(:disabled) { background: var(--surface-hover); box-shadow: inset 0 0 0 1px var(--rule-strong); }
+.ld-node-head:disabled { cursor: default; }
+.ld-node-tag { font-family: var(--font-sans); font-size: 0.78rem; color: var(--ink-subtle); }
+.ld-node.is-lazy .ld-node-head { box-shadow: inset 0 0 0 1px var(--mz-l5); }
+.ld-node.is-lazy .ld-node-tag { color: var(--mz-l5); }
+.ld-tiles { display: flex; flex-wrap: wrap; gap: 3px; }
+.ld-tile.is-top { flex-basis: 100%; letter-spacing: 0.06em; }
+.ld-tile {
+  flex-basis: 34%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  border-radius: 1px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
+  color: var(--mz-tex);
+  background: var(--surface-card);
+  transition: background-color 0s, color 0s, box-shadow 0s;
+}
+@media (min-width: 900px) { .ld-tile { height: 34px; } }
+.ld-node-foot { font-family: var(--font-mono); font-size: 0.8rem; color: var(--mz-l6); padding: 2px 2px 0; min-height: 1.4em; }
+.ld-node.is-caught .ld-node-foot { color: var(--mz-l5); }
+
+/* Train: honest tiles light bottom up, row by row; a skipping node rushes dim padding to the top. */
+.ld-grid:not(.is-idle) .ld-tile {
+  background: var(--mz-l3);
+  color: var(--mz-t3);
+  transition-delay: calc(var(--r) * 300ms + var(--n) * 60ms);
+}
+.ld-grid:not(.is-idle) .ld-tile:nth-child(3n) { background: var(--mz-l4); }
+.ld-grid:not(.is-idle) .ld-node.is-lazy .ld-tile:not(.is-low) {
+  background: var(--mz-l1);
+  color: var(--mz-t1);
+  transition-delay: calc(var(--r) * 70ms);
+}
+/* Commit: each top row seals with its fingerprint. */
+.ld .ld-grid:is(.is-commit, .is-replay, .is-settle) .ld-tile.is-top.is-top {
+  background: var(--mz-l7);
+  color: var(--mz-t7);
+  transition-delay: calc(var(--n) * 120ms);
+}
+/* Replay: a stepped band crosses the round; the skipping node turns to a void when the band reaches it. */
+.ld-scan {
+  position: absolute;
+  top: 52px;
+  bottom: 24px;
+  left: 0;
+  width: 3px;
+  background: var(--mz-l7);
+  opacity: 0;
+  pointer-events: none;
+}
+.ld-grid.is-replay .ld-scan { animation: ld-scan 1500ms steps(24) forwards; }
+@keyframes ld-scan {
+  0% { opacity: 1; left: 0; }
+  96% { opacity: 1; }
+  100% { opacity: 0; left: 100%; }
+}
+.ld .ld-grid:is(.is-replay, .is-settle) .ld-node.is-caught .ld-tile.ld-tile {
+  background: var(--mz-void);
+  color: transparent;
+  box-shadow: inset 0 0 0 1px var(--mz-l4);
+  transition-delay: calc((var(--n) + 0.6) * 250ms);
+}
+.ld .ld-grid.is-settle .ld-node.is-caught .ld-tile.ld-tile { transition-delay: 0s; }
+/* Settle: honest work turns bone, tile by tile. */
+.ld-grid.is-settle .ld-node:not(.is-caught) .ld-tile {
+  background: var(--mz-l6);
+  color: var(--mz-t6);
+  transition-delay: calc(var(--n) * 110ms + (4 - var(--r)) * 50ms);
+}
+.ld-grid.is-settle .ld-node:not(.is-caught) .ld-tile.is-top { background: var(--mz-l7); }
+@media (max-width: 899px) { .ld-scan { display: none; } }
+
+.ld-cheat-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; margin-top: 32px; }
+.ld-result { color: var(--ink-muted); max-width: 64ch; line-height: 1.5; }
+
+/* Two sides */
+.ld-sides { padding: 40px 0 140px; }
+.ld-sides-grid { display: grid; gap: 64px; }
+@media (min-width: 900px) { .ld-sides-grid { grid-template-columns: 1fr 1fr; gap: 48px; } }
+.ld-poster {
+  position: relative;
+  aspect-ratio: 5 / 4;
+  background: var(--mz-ground);
+  box-shadow: inset 0 0 0 1px var(--rule-row);
+}
+
+/* Close */
+.ld-close { padding: 40px 0 96px; border-top: 1px solid var(--rule-row); }
+.ld-close-art { position: relative; height: clamp(160px, 24vw, 380px); padding: 0 12px; }
+.ld-close-copy { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px; margin-top: 28px; }
+.ld-close-copy .ld-lede { color: var(--ink); font-size: clamp(1.15rem, 1.6vw, 1.5rem); letter-spacing: -0.015em; }
+
+.ld-foot { padding: 28px 0 40px; border-top: 1px solid var(--rule-row); font-size: 0.9rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ld-rise { animation: none; }
+  .ld *, .ld *::before { transition-duration: 0s !important; transition-delay: 0s !important; }
+}

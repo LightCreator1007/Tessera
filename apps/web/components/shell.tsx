@@ -93,6 +93,9 @@ export function AppFrame({ children }: { children: ReactNode }) {
     timer.current = window.setTimeout(() => setPeek(false), 120);
   };
 
+  // The marketing site renders full-bleed, outside the app rail.
+  if (path?.startsWith("/landing")) return <>{children}</>;
+
   return (
     <div className="min-h-dvh bg-sunken md:flex md:h-dvh md:gap-0 md:p-2">
       <aside data-peek={peek || undefined} className="rail-aside relative hidden shrink-0 md:block">

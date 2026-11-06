@@ -5,6 +5,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
 import { useHealth } from "@/lib/api/hooks";
 import { isDemo } from "@/lib/api/client";
 import { readPrefs, reducedMotion, usePrefs } from "@/lib/prefs";
@@ -40,6 +41,7 @@ export function Splash() {
   const resolved = checks.filter((c) => c.ok !== null).length;
   const progress = Math.min(shown, resolved) / checks.length;
 
+  const path = usePathname();
   const prefs = usePrefs();
   useEffect(() => {
     if (!readPrefs().splash || reducedMotion()) return;
@@ -80,7 +82,7 @@ export function Splash() {
     };
   }, [g, crow, progress]);
 
-  if (!show) return null;
+  if (!show || path?.startsWith("/landing")) return null;
   return (
     <div role="dialog" aria-modal="true" aria-label="Tessera is starting" className={`fixed inset-0 z-50 bg-surface transition-opacity duration-300 ${leaving ? "opacity-0" : "opacity-100"}`}>
       <PosterThumb field={field} label="Cawing crow, developing while the app starts" cell={8} vocab={VOCAB_FINE} live className="absolute inset-0" />
