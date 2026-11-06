@@ -25,8 +25,7 @@ class Sched:
 
 
 def rebuild(state: ChainState) -> Sched:
-    # ponytail: recounts missed commits from scratch, so a node re-armed by an admin is benched again on the next
-    # rebuild; call it on restart only, or keep re-arms apart from the counts if it ever runs every round
+    """Recount everything from chain events. The driver calls it every tick, so a re-arm is kept apart in REARMED."""
     s = Sched()
     s.missed.clear()
     by_open_time = sorted(state.rounds.items(), key=lambda kv: (kv[1]["openedAt"], kv[0]))
@@ -40,6 +39,8 @@ def rebuild(state: ChainState) -> Sched:
         if r["status"] == RoundStatus.OPEN:
             continue  # its commits are not final yet
         for op, nr in r["nodeRounds"].items():
+            if r["openedAt"] <= tables.REARMED.get(op.lower(), 0):
+                continue  # ponytail: compares chain time with our clock; fine while they agree within a round
             s.missed[op.lower()] = 0 if nr["committed"] else s.missed.get(op.lower(), 0) + 1
     return s
 
@@ -85,14 +86,16 @@ def queue(state: ChainState, sched: Sched, fleet: dict, now: int, workloads: dic
     """Rosters for every job that can open a round now, as [(job, nodes, shards)], best-paying job first.
 
     A job's price is its next round budget as the contract computes it; ties go to the older job.
-    workloads: job -> workload id. control: job -> {"auto", "paused"}, set through the admin routes.
+    workloads: job -> workload id; jobs missing here are skipped.
+    control: job -> {"auto", "paused"}, set through the admin routes.
     """
     fleet = dict(fleet)
     ready = []
     for job, j in state.jobs.items():
         p, c = j["params"], control.get(job, {"auto": True, "paused": False})
         last = state.rounds.get((job, j["nextRound"] - 1))
-        if (j["status"] != JobStatus.ACTIVE or j["roundsOpened"] >= p.rounds or not c["auto"] or c["paused"]
+        if (job not in workloads or j["status"] != JobStatus.ACTIVE or j["roundsOpened"] >= p.rounds
+                or not c["auto"] or c["paused"]
                 or (last and last["status"] == RoundStatus.OPEN)):
             continue
         ready.append((-(j["remaining"] // (p.rounds - j["roundsOpened"])), job))

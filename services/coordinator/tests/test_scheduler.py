@@ -47,12 +47,13 @@ def test_ineligible_nodes_are_skipped():
     assert match(s, f) is None  # only OPS[5] is left, and the quorum is 2
 
 
-def test_two_missed_commits_bench_a_node_until_rearm():
+def test_two_missed_commits_bench_a_node_until_rearm(monkeypatch):
     s = state([(OPS[0:3], [0, 1, 2], OPS[1:3], b"\0" * 32), (OPS[0:3], [3, 4, 0], OPS[1:3], b"\0" * 32)])
     sc = rebuild(s)
     assert tables.MISSED[OPS[0]] == 2
     assert OPS[0] not in pick(s, sc, 1, fleet(), NOW, "w", CREDS)[0]
-    tables.MISSED.pop(OPS[0])  # what POST /v1/admin/nodes/{op}/rearm does
+    monkeypatch.setitem(tables.REARMED, OPS[0], 2)  # POST /v1/admin/nodes/{op}/rearm after both rounds opened
+    sc = rebuild(s)  # the driver rebuilds every tick, and the re-arm must survive that
     two = {op: v for op, v in fleet().items() if op in OPS[:2]}  # two nodes online, quorum 2: OPS[0] must be seated
     assert OPS[0] in pick(s, sc, 1, two, NOW, "w", CREDS)[0]
 
