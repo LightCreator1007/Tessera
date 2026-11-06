@@ -298,6 +298,6 @@ interface IJobMarket {
 
     function claimable(address owner) external view returns (uint256);
     function communityPool() external view returns (uint256);
-    /// @notice Slash and leftover amounts kept locked in the contract (USDC can't go to address(0)).
+    /// @notice Slash and leftover amounts kept locked in the contract (ERC-20 transfers cannot target address(0)).
     function burned() external view returns (uint256);
 }

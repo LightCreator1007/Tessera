@@ -71,12 +71,12 @@ def ledger(chain):
 class Actor:
     """One funded key with its own queue, in the role a teammate's process would hold it."""
 
-    def __init__(self, chain, label: str, usdc: float = 0):
+    def __init__(self, chain, label: str, tokens: float = 0):
         l, out, rpc, tmp = chain
         self.key = dev_key(label)
         self.signer = LocalSigner(self.key)
         self.address = self.signer.address
-        script("fund.py", self.address, "--usdc", str(usdc), "--journal-dir", str(tmp / "faucet"), rpc=rpc, net=str(out))
+        script("fund.py", self.address, "--tokens", str(tokens), "--journal-dir", str(tmp / "faucet"), rpc=rpc, net=str(out))
         self.tm = TxManager(l.w3, self.signer, tmp / "actors", poll_seconds=0.02)
         self.l = l.using(self.tm)
 
@@ -89,7 +89,7 @@ def actors(chain):
 def join(chain, tag: int, i: int, stake: int):
     """A paired owner and operator with `stake` deposited, through the two signatures a real join needs."""
     l = chain[0]
-    owner, op = Actor(chain, f"owner/{tag}/{i}", usdc=stake / 1e6), Actor(chain, f"op/{tag}/{i}")
+    owner, op = Actor(chain, f"owner/{tag}/{i}", tokens=stake / 1e6), Actor(chain, f"op/{tag}/{i}")
     deadline = l.head()[1] + 1800
     nullifier = h(f"human/{tag}/{i}")
     invite = enc.sign(dev_key("admitter"), "Invite", l.net.chain_id, l.net.registry,
@@ -104,7 +104,7 @@ def join(chain, tag: int, i: int, stake: int):
 
 def create_job(chain, tag: int, rounds: int = ROUNDS, budget: int = BUDGET) -> tuple[int, Actor]:
     l = chain[0]
-    requester = Actor(chain, f"requester/{tag}/{rounds}", usdc=budget / 1e6)
+    requester = Actor(chain, f"requester/{tag}/{rounds}", tokens=budget / 1e6)
     requester.l.token.approve(l.net.market, budget)
     params = {
         "budget": budget, "stakePerNode": l.market.minStake(budget, rounds, 3), "rounds": rounds, "segments": K,
@@ -372,13 +372,25 @@ class Manual:
         self.l.w3.provider.make_request("anvil_mine", [hex(n)])
 
 
+class MintActor(Actor):
+    """A queue-test actor explicitly authorized by the token admin to send valid mint intents."""
+
+    def __init__(self, chain, label):
+        super().__init__(chain, label)
+        l, _, _, tmp = chain
+        abi = json.loads((REPO / "contracts/out/ToDToken.sol/ToDToken.json").read_text())["abi"]
+        token = l.w3.eth.contract(address=l.net.token, abi=abi)
+        admin = TxManager(l.w3, LocalSigner(dev_key("deployer")), tmp / "admin", poll_seconds=0.02)
+        admin.transact(l.net.token, token.encode_abi("grantRole", args=[enc.k256(b"MINTER_ROLE"), self.address]))
+
+
 def mint_call(l, to: str, amount: int) -> tuple[str, str]:
     return l.net.token, l.token._c.encode_abi("mint", args=[to, amount])
 
 
 def test_restart_with_a_pending_tx_neither_resends_nor_loses_the_nonce(chain):
     l, _, _, tmp = chain
-    a = Actor(chain, f"restart/{next(counter)}")
+    a = MintActor(chain, f"restart/{next(counter)}")
     to, data = mint_call(l, a.address, 7)
     with Manual(l) as m:
         first = a.tm.send(to, data, gas=200_000)
@@ -398,7 +410,7 @@ def test_restart_with_a_pending_tx_neither_resends_nor_loses_the_nonce(chain):
 
 def test_restart_recovers_a_tx_the_pool_forgot(chain):
     l, _, _, tmp = chain
-    a = Actor(chain, f"dropped/{next(counter)}")
+    a = MintActor(chain, f"dropped/{next(counter)}")
     to, data = mint_call(l, a.address, 5)
     with Manual(l) as m:
         tx = a.tm.send(to, data, gas=200_000)
@@ -412,7 +424,7 @@ def test_restart_recovers_a_tx_the_pool_forgot(chain):
 
 def test_restart_settles_what_was_mined_while_down(chain):
     l, _, _, tmp = chain
-    a = Actor(chain, f"mined/{next(counter)}")
+    a = MintActor(chain, f"mined/{next(counter)}")
     to, data = mint_call(l, a.address, 3)
     with Manual(l) as m:
         tx = a.tm.send(to, data, gas=200_000)
@@ -425,7 +437,7 @@ def test_restart_settles_what_was_mined_while_down(chain):
 
 def test_journal_from_another_chain_is_not_replayed(chain):
     l, _, _, tmp = chain
-    a = Actor(chain, f"genesis/{next(counter)}")
+    a = MintActor(chain, f"genesis/{next(counter)}")
     to, data = mint_call(l, a.address, 9)
     with Manual(l) as m:
         tx = a.tm.send(to, data, gas=200_000)
@@ -442,7 +454,7 @@ def test_journal_from_another_chain_is_not_replayed(chain):
 
 def test_stuck_tx_is_replaced_at_the_same_nonce(chain):
     l = chain[0]
-    a = Actor(chain, f"stuck/{next(counter)}")
+    a = MintActor(chain, f"stuck/{next(counter)}")
     to, data = mint_call(l, a.address, 13)
     with Manual(l) as m:
         tx = a.tm.send(to, data, gas=200_000)
@@ -465,7 +477,7 @@ def test_stuck_tx_is_replaced_at_the_same_nonce(chain):
 
 def test_replacement_respects_the_fee_cap(chain):
     l, _, _, tmp = chain
-    a = Actor(chain, f"cap/{next(counter)}")
+    a = MintActor(chain, f"cap/{next(counter)}")
     capped = TxManager(l.w3, a.signer, tmp / "capped", max_fee_cap=1, poll_seconds=0.02)
     to, data = mint_call(l, a.address, 1)
     with Manual(l) as m:
@@ -478,7 +490,7 @@ def test_replacement_respects_the_fee_cap(chain):
 
 def test_a_second_sender_on_the_same_key_surfaces(chain):
     l, _, _, tmp = chain
-    a = Actor(chain, f"second/{next(counter)}")
+    a = MintActor(chain, f"second/{next(counter)}")
     to, data = mint_call(l, a.address, 21)
     with Manual(l) as m:
         tx = a.tm.send(to, data, gas=200_000)
@@ -500,6 +512,7 @@ def public(tmp_path):
     signers = {r: LocalSigner(dev_key(f"public/{r}")) for r in ("deployer", "coordinator", "admitter", "faucet", "a", "b")}
     roles = {r: signers[r].address for r in ("deployer", "coordinator", "admitter", "faucet")}
     roles["verifiers"] = [signers["a"].address, signers["b"].address]
+    roles["tokenAdmin"] = roles["deployer"]
     text = (REPO / "networks" / "anvil.toml").read_text().split("[roles]")[0]
     text = text.replace('chainId = 31337', 'chainId = 84532').replace('probationSeconds = 0', 'probationSeconds = 300')
     text += "[roles]\n"
@@ -594,7 +607,7 @@ def test_fund_on_a_public_chain_stops_for_a_human(public):
     assert run("--yes").returncode == 0
     target = LocalSigner(dev_key("public/operator")).address
     cmd = [sys.executable, str(REPO / "scripts" / "fund.py"), target, "--network", str(tmp / "out.toml"), "--rpc",
-           w3.provider.endpoint_uri, "--eth", "0.5", "--usdc", "0", "--journal-dir", str(tmp / "j")]
+           w3.provider.endpoint_uri, "--eth", "0.5", "--tokens", "0", "--journal-dir", str(tmp / "j")]
     r = subprocess.run(cmd, capture_output=True, text=True, env=env, stdin=subprocess.DEVNULL)
     assert r.returncode != 0 and "Nothing was sent" in r.stderr and target in r.stdout
     assert w3.eth.get_balance(target) == 0
@@ -605,7 +618,7 @@ def test_fund_on_a_public_chain_stops_for_a_human(public):
 
 def test_threads_sharing_a_key_get_distinct_nonces(chain):
     l = chain[0]
-    a = Actor(chain, f"threads/{next(counter)}")
+    a = MintActor(chain, f"threads/{next(counter)}")
     start = l.w3.eth.get_transaction_count(a.address)
     amounts = list(range(1, 9))
     txs = []
@@ -628,7 +641,7 @@ def test_threads_sharing_a_key_get_distinct_nonces(chain):
 
 def test_revert_after_a_clean_estimate_is_still_named(chain, monkeypatch):
     l = chain[0]
-    a = Actor(chain, f"race/{next(counter)}")
+    a = MintActor(chain, f"race/{next(counter)}")
     monkeypatch.setattr(l.w3.eth, "estimate_gas", lambda *_: 200_000)
     with pytest.raises(Reverted) as e:
         a.l.market.openRound(1, [], [])
@@ -638,7 +651,7 @@ def test_revert_after_a_clean_estimate_is_still_named(chain, monkeypatch):
 
 def test_wait_survives_an_rpc_hiccup(chain, monkeypatch):
     l = chain[0]
-    a = Actor(chain, f"hiccup/{next(counter)}")
+    a = MintActor(chain, f"hiccup/{next(counter)}")
     tx = a.tm.send(*mint_call(l, a.address, 2), gas=200_000)
     real, calls = a.tm.poll, []
 
@@ -661,3 +674,70 @@ def test_dev_keys_are_refused_off_anvil(monkeypatch):
     key = dev_key("from-env")
     monkeypatch.setenv("COORDINATOR_PRIVATE_KEY", key.hex())
     assert signer_from_env("COORDINATOR_PRIVATE_KEY", "x", 84532).address == LocalSigner(key).address
+
+
+def funded_public(public):
+    w3, run, roles, env, tmp = public
+    w3.provider.make_request("anvil_setBalance", [roles["faucet"], hex(10**19)])
+    result = run("--yes")
+    assert result.returncode == 0, result.stderr
+    return Ledger(Network.load(tmp / "out.toml", w3.provider.endpoint_uri))
+
+
+def public_fund(public, addresses, *flags):
+    w3, _, _, env, tmp = public
+    return subprocess.run(
+        [sys.executable, str(REPO / "scripts/fund.py"), *addresses,
+         "--network", str(tmp / "out.toml"), "--rpc", w3.provider.endpoint_uri,
+         "--journal-dir", str(tmp / "fund-journal"), *flags],
+        capture_output=True, text=True, env=env, stdin=subprocess.DEVNULL)
+
+
+def test_token_only_funding_requires_confirmation(public):
+    l = funded_public(public)
+    w3, _, roles, _, _ = public
+    target = LocalSigner(dev_key("public/token-only")).address
+    before = w3.eth.get_transaction_count(roles["faucet"])
+    result = public_fund(public, [target], "--tokens", "1.000001", "--eth", "0")
+    assert result.returncode != 0 and "Nothing was sent" in result.stderr
+    assert "1000001 base units" in result.stdout and "TOD" in result.stdout
+    assert w3.eth.get_transaction_count(roles["faucet"]) == before
+    assert l.token.totalSupply() == 0
+    assert l.token.hasRole(bytes(32), roles["tokenAdmin"])
+    assert l.token.hasRole(l.token.MINTER_ROLE(), roles["faucet"])
+    assert not l.token.hasRole(l.token.MINTER_ROLE(), target)
+    result = public_fund(public, [target], "--tokens", "1.000001", "--eth", "0", "--yes")
+    assert result.returncode == 0, result.stderr
+    assert l.token.balanceOf(target) == 1000001
+
+
+def test_batch_cap_preflight_sends_no_eth_or_tokens(public):
+    l = funded_public(public)
+    w3, _, roles, env, tmp = public
+    faucet = TxManager(w3, LocalSigner(env["FAUCET_PRIVATE_KEY"]), tmp / "cap", poll_seconds=0.02)
+    l.using(faucet).token.mint(roles["faucet"], l.token.cap() - 3)
+    targets = [LocalSigner(dev_key(f"public/cap/{i}")).address for i in range(2)]
+    before = w3.eth.get_transaction_count(roles["faucet"])
+    result = public_fund(public, targets, "--tokens", "0.000002", "--eth", "0.01", "--yes")
+    assert result.returncode != 0 and "remaining TOD cap" in result.stderr
+    assert w3.eth.get_transaction_count(roles["faucet"]) == before
+    assert l.token.totalSupply() == l.token.cap() - 3
+    assert all(w3.eth.get_balance(address) == l.token.balanceOf(address) == 0 for address in targets)
+
+
+def test_revoked_minter_can_still_fund_eth_only(public):
+    l = funded_public(public)
+    w3, _, roles, env, tmp = public
+    abi = json.loads((REPO / "contracts/out/ToDToken.sol/ToDToken.json").read_text())["abi"]
+    token = w3.eth.contract(address=l.net.token, abi=abi)
+    admin = TxManager(w3, LocalSigner(env["DEPLOYER_PRIVATE_KEY"]), tmp / "admin", poll_seconds=0.02)
+    admin.transact(l.net.token, token.encode_abi("revokeRole", args=[l.token.MINTER_ROLE(), roles["faucet"]]))
+    target = LocalSigner(dev_key("public/revoked-target")).address
+    before = w3.eth.get_transaction_count(roles["faucet"])
+    result = public_fund(public, [target], "--tokens", "1", "--eth", "0.01", "--yes")
+    assert result.returncode != 0 and "no MINTER_ROLE" in result.stderr
+    assert w3.eth.get_transaction_count(roles["faucet"]) == before
+    assert w3.eth.get_balance(target) == l.token.balanceOf(target) == 0
+    result = public_fund(public, [target], "--tokens", "0", "--eth", "0.001", "--yes")
+    assert result.returncode == 0, result.stderr
+    assert w3.eth.get_balance(target) == 10**15

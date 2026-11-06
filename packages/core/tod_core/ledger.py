@@ -17,7 +17,7 @@ REPO = Path(__file__).resolve().parents[3]
 ABI_DIR = REPO / "packages" / "abi" / "json"
 ZERO32 = b"\0" * 32
 
-# The token's own surface: it is an ERC-20 plus MockUSDC's open mint, and its errors surface through createJob.
+# Token metadata, controlled issuance views and ERC-20 calls used by funding and settlement.
 TOKEN_ABI = [
     *({"type": "function", "name": n, "stateMutability": m, "inputs": [{"name": "", "type": t} for t in i],
        "outputs": [{"name": "", "type": o} for o in os_]} for n, m, i, os_ in [
@@ -27,10 +27,17 @@ TOKEN_ABI = [
         ("allowance", "view", ["address", "address"], ["uint256"]),
         ("balanceOf", "view", ["address"], ["uint256"]),
         ("decimals", "view", [], ["uint8"]),
+        ("symbol", "view", [], ["string"]),
+        ("totalSupply", "view", [], ["uint256"]),
+        ("cap", "view", [], ["uint256"]),
+        ("MINTER_ROLE", "view", [], ["bytes32"]),
+        ("hasRole", "view", ["bytes32", "address"], ["bool"]),
     ]),
     *({"type": "error", "name": n, "inputs": [{"name": "", "type": t} for t in i]} for n, i in [
         ("ERC20InsufficientBalance", ["address", "uint256", "uint256"]),
         ("ERC20InsufficientAllowance", ["address", "uint256", "uint256"]),
+        ("AccessControlUnauthorizedAccount", ["address", "bytes32"]),
+        ("ERC20ExceededCap", ["uint256", "uint256"]),
     ]),
 ]
 

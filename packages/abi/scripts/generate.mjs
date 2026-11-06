@@ -7,7 +7,7 @@ const pkg = join(dirname(fileURLToPath(import.meta.url)), '..')
 const out = join(pkg, '..', '..', 'contracts', 'out')
 const outputs = new Map()
 let ts = '// Generated from compiled contract interfaces. Do not edit.\n'
-for (const name of ['IJobMarket', 'INodeRegistry']) {
+for (const name of ['IJobMarket', 'INodeRegistry', 'ToDToken']) {
   const { abi } = JSON.parse(readFileSync(join(out, `${name}.sol`, `${name}.json`), 'utf8'))
   const json = JSON.stringify(abi, null, 2)
   outputs.set(join(pkg, 'json', `${name}.json`), json + '\n')
@@ -27,5 +27,5 @@ if (process.argv.includes('--check')) {
     mkdirSync(dirname(path), { recursive: true })
     writeFileSync(path, content)
   }
-  console.log('Wrote registry and market ABIs')
+  console.log('Wrote registry, market and TOD token ABIs')
 }

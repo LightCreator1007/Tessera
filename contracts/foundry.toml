@@ -21,6 +21,7 @@ remappings = [
 runs = 512
 
 [profile.default.invariant]
+fail_on_revert = true
 runs = 128
 depth = 64
 
