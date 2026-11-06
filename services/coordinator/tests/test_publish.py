@@ -21,17 +21,23 @@ class FakeArkiv:
 
     def __init__(self):
         self.sent, self.existing, self.outcome, self.fail = [], None, ("ok", "0x" + "ee" * 32), None
+        self.broadcasts, self.send_fail = [], None  # sent = signatures; broadcasts = raw txs handed to a node
 
     def find(self, rec):
         if self.fail:
             raise self.fail
         return self.existing
 
-    def send_create(self, attrs, lifetime):
+    def sign_create(self, attrs, lifetime):
         if self.fail:
             raise self.fail
         self.sent.append((attrs, lifetime))
-        return "0x" + "77" * 32
+        return "0x" + "77" * 32, f"0xraw{len(self.sent)}"
+
+    def broadcast(self, raw):
+        self.broadcasts.append(raw)
+        if self.send_fail:
+            raise self.send_fail
 
     def confirm(self, tx):
         return self.outcome
@@ -124,6 +130,38 @@ def test_restart_after_send_confirms_instead_of_sending_again(on):
     assert P.step(7, store, ark, {}) == "pending"  # not mined yet
     ark.outcome = ("ok", "0x" + "ee" * 32)
     assert P.step(7, store, ark, {}) == "indexed" and len(ark.sent) == 1
+
+
+def test_a_lost_send_is_settled_by_its_receipt_without_resending(on):
+    store, ark = on
+    ark.send_fail = TimeoutError("reply lost")  # the tx may or may not have reached the node
+    P.enqueue(7, 12, store.put(b"weights"))
+    assert P.step(7, store, ark, {}) == "pending"
+    ark.outcome = ("pending", None)
+    assert P.step(7, store, ark, {}) == "pending"
+    ark.send_fail, ark.outcome = None, ("ok", "0x" + "ee" * 32)
+    assert P.step(7, store, ark, {}) == "indexed"
+    assert len(ark.sent) == 1 and ark.broadcasts == ["0xraw1"]  # one signature, one send, nothing automatic after
+
+
+def test_an_unconfirmed_tx_stops_for_a_human_then_retry_signs_once(on, monkeypatch):
+    store, ark = on
+    monkeypatch.setattr(P, "STUCK_TX", 3)
+    ark.outcome = ("pending", None)
+    P.enqueue(7, 12, store.put(b"weights"))
+    states = [P.step(7, store, ark, {}) for _ in range(4)]
+    assert states == ["pending", "pending", "pending", "failed"] and len(ark.sent) == 1
+    assert "check the explorer" in P.db.execute("SELECT error FROM published WHERE job = 7").fetchone()[0]
+    ark.existing = "0x" + "dd" * 32  # the human's retry looks for the record before signing anything
+    assert P.retry(7) == "pending" and P.step(7, store, ark, {}) == "indexed" and len(ark.sent) == 1
+
+
+def test_a_reverted_create_is_not_retried_automatically(on):
+    store, ark = on
+    P.enqueue(7, 12, store.put(b"weights"))
+    P.step(7, store, ark, {})
+    ark.outcome = ("reverted", None)
+    assert P.step(7, store, ark, {}) == "failed" and P.due() == [] and len(ark.sent) == 1
 
 
 def test_record_from_an_earlier_run_is_adopted(on):

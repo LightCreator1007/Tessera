@@ -17,6 +17,7 @@ PERMISSIONLESS_EXTENSION = 0b10
 INDEXED = 0x80
 U64, BYTES, STR, ADDR = 3, 7, 8, 9
 MAX_LIFETIME = 7_884_000  # blocks, about 182 days
+GAS_FLOOR = 1_000_000  # Arkiv's guidance for a single create: max(1M, 2 x estimate)
 MAX_STR = 128
 MAX_BYTES = 128 * 1024
 
@@ -95,21 +96,25 @@ class Arkiv:
         rows = self.query(q, limit=1, attributes=False)
         return rows[0]["key"] if rows else None
 
-    def send_create(self, attrs: dict, lifetime_blocks: int) -> str:
-        """Signs and sends the create; returns the transaction hash without waiting for it."""
+    def sign_create(self, attrs: dict, lifetime_blocks: int) -> tuple[str, str]:
+        """Builds and signs the create without sending it; returns (tx hash, raw signed tx), so the caller can save
+        both before anything leaves this machine. Gas, nonce and price follow Arkiv's Rabdi write-safety guidance."""
         data = create_calldata(attrs, lifetime_blocks, secrets.randbits(128))
+        # Rabdi serves state at the chain head only, so the nonce is read at latest; "pending" is rejected.
         tx = {"to": to_checksum_address(ARKIV), "value": 0, "data": data, "from": self.owner,
-              "chainId": self.w3.eth.chain_id, "nonce": self.w3.eth.get_transaction_count(self.owner, "pending")}
-        tx["gas"] = int(self.w3.eth.estimate_gas(tx) * 1.2)  # reverts here with the contract's error, before spending
-        base = self.w3.eth.get_block("latest").get("baseFeePerGas")
-        if base is None:
-            tx["gasPrice"] = self.w3.eth.gas_price
-        else:
-            tip = self.w3.eth.max_priority_fee
-            tx.update(maxPriorityFeePerGas=tip, maxFeePerGas=2 * base + tip)
+              "chainId": self.w3.eth.chain_id, "nonce": self.w3.eth.get_transaction_count(self.owner, "latest")}
+        estimate = self.w3.eth.estimate_gas(tx, "latest")  # reverts here with the contract's error, before signing
+        tx["gas"] = max(GAS_FLOOR, 2 * estimate)
+        if tx["gas"] > self.w3.eth.get_block("latest")["gasLimit"] // 2:
+            raise RuntimeError(f"create needs {tx['gas']} gas, over half a block; not signing")
+        tx["gasPrice"] = self.w3.eth.gas_price
         del tx["from"]
         signed = self.acct.sign_transaction(tx)
-        return "0x" + bytes(self.w3.eth.send_raw_transaction(signed.raw_transaction)).hex()
+        return "0x" + bytes(signed.hash).hex(), "0x" + bytes(signed.raw_transaction).hex()
+
+    def broadcast(self, raw: str):
+        """Sends a signed tx once. Arkiv's guidance: never resend a write automatically, even these same bytes."""
+        self.w3.eth.send_raw_transaction(raw)
 
     def confirm(self, tx_hash: str) -> tuple[str, str | None]:
         """('pending', None) until mined; then ('ok', entity key) or ('reverted', None)."""

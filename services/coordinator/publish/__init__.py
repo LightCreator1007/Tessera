@@ -16,12 +16,12 @@ SCHEMA = "tod.model"  # Arkiv's arkiv.schema tag; readers filter on it plus our 
 RECORD_VERSION = 1
 CONTENT_TYPE = "application/x-tod-weights"
 MAX_ATTEMPTS = 8
-STUCK_TX = 30  # checks 5 s apart; a tx unmined for that long on 2 s blocks was dropped, so look again and resend
+STUCK_TX = 30  # checks 5 s apart; after that a human looks at the tx before anything is signed again
 
 db = sqlite3.connect(config.DB_PATH, check_same_thread=False)
 db.execute("""CREATE TABLE IF NOT EXISTS published (
-    job INTEGER PRIMARY KEY, round INTEGER, keccak TEXT, state TEXT, arkiv_key TEXT, tx TEXT, tx_checks INTEGER DEFAULT 0,
-    error TEXT, attempts INTEGER DEFAULT 0, next_try REAL DEFAULT 0, updated INTEGER)""")
+    job INTEGER PRIMARY KEY, round INTEGER, keccak TEXT, state TEXT, arkiv_key TEXT, tx TEXT,
+    tx_checks INTEGER DEFAULT 0, error TEXT, attempts INTEGER DEFAULT 0, next_try REAL DEFAULT 0, updated INTEGER)""")
 db.commit()
 _lock = threading.Lock()  # the worker thread and request threads share this connection
 HASH = re.compile(r"0x[0-9a-f]{64}")
@@ -98,16 +98,8 @@ def step(job: int, store, client, specs: dict) -> str:
         return row[2] if row else "absent"
     round_, h, _, attempts, tx, tx_checks = row
     try:
-        if tx:  # sent before, maybe before a crash: settle that transaction before sending anything new
-            outcome, key = client.confirm(tx)
-            if outcome == "ok":
-                return _indexed(job, round_, key, tx)
-            if outcome == "pending" and tx_checks + 1 < STUCK_TX:
-                _set(job, tx_checks=tx_checks + 1, next_try=time.time() + 5)
-                return "pending"
-            _set(job, tx=None, tx_checks=0)  # reverted or dropped: fall through and look before resending
-            if outcome == "reverted":
-                return _retry(job, attempts, "Arkiv create reverted")
+        if tx:  # signed before, maybe before a crash: settle that transaction, never sign a second one
+            return _settle(job, round_, tx, tx_checks, client)
         blob = store.get(h)
         if blob is None:
             return _retry(job, attempts, "model blob is not in the store yet")
@@ -120,11 +112,37 @@ def step(job: int, store, client, specs: dict) -> str:
         key = client.find(rec)  # a record from an earlier run that crashed after it was mined
         if key:
             return _indexed(job, round_, key, None)
-        tx = client.send_create(attributes(rec), config.ARKIV_LIFETIME_BLOCKS)
+        tx, raw = client.sign_create(attributes(rec), config.ARKIV_LIFETIME_BLOCKS)
+        # The hash is saved before sending, so an unknown send outcome is settled by its receipt, never a resend.
         _set(job, tx=tx, tx_checks=0, next_try=time.time() + 4)  # one Arkiv block is 2 s
+        _broadcast(job, raw, client)
         return "pending"
-    except Exception as e:  # any Arkiv or network error only delays indexing; settlement never waits on it
+    except Exception as e:  # nothing was signed yet, so retrying is safe; settlement never waits on any of this
         return _retry(job, attempts, f"{type(e).__name__}: {str(e)[:200]}")
+
+
+def _broadcast(job, raw, client):
+    try:
+        client.broadcast(raw)
+    except Exception as e:  # "already known", a timeout or a lost reply: the receipt decides, not this error
+        log.warning("publish job %s: send returned %s; waiting for the receipt", job,
+                    _scrub(f"{type(e).__name__}: {str(e)[:200]}"))
+
+
+def _settle(job, round_, tx, tx_checks, client):
+    """Follows one signed create to its receipt. Arkiv's guidance is zero automatic re-signs, so a revert or a tx
+    that never confirms stops at 'failed' for a human, who checks the explorer before the admin retry."""
+    outcome, key = client.confirm(tx)
+    if outcome == "ok":
+        return _indexed(job, round_, key, tx)
+    if outcome == "reverted":
+        _set(job, state="failed", error=f"Arkiv create {tx} reverted")
+        return "failed"
+    if tx_checks + 1 >= STUCK_TX:
+        _set(job, state="failed", error=f"Arkiv create {tx} not confirmed; check the explorer before retrying")
+        return "failed"
+    _set(job, tx_checks=tx_checks + 1, next_try=time.time() + 5)
+    return "pending"
 
 
 def _indexed(job, round_, key, tx):
@@ -133,9 +151,13 @@ def _indexed(job, round_, key, tx):
     return "indexed"
 
 
+def _scrub(text):
+    """Backstop: the access key never reaches the log or the table, whatever an error message carries."""
+    return text.replace(config.ARKIV_ACCESS_KEY, "<access key>") if config.ARKIV_ACCESS_KEY else text
+
+
 def _retry(job, attempts, error):
-    if config.ARKIV_ACCESS_KEY:  # backstop: never let the key reach the log or the table
-        error = error.replace(config.ARKIV_ACCESS_KEY, "<access key>")
+    error = _scrub(error)
     attempts += 1
     if attempts >= MAX_ATTEMPTS:
         _set(job, state="failed", error=error, attempts=attempts)
@@ -152,7 +174,8 @@ def retry(job: int) -> str | None:
     if row is None:
         return None
     if row["state"] == "failed":
-        _set(job, state="pending", attempts=0, next_try=0, error=None)
+        # A human chose this. The next step looks for an existing record first, then signs a fresh create.
+        _set(job, state="pending", attempts=0, next_try=0, error=None, tx=None, tx_checks=0)
     return status(job)["state"]
 
 
