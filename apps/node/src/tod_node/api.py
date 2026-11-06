@@ -54,8 +54,10 @@ def _handler(api: Api):
 
         def _allowed(self) -> bool:
             # A page on another site can reach 127.0.0.1 by DNS rebinding; it can't fake Host or drop Origin.
-            port = self.server.server_address[1]
-            if self.headers.get("Host") not in {f"127.0.0.1:{port}", f"localhost:{port}", f"[::1]:{port}"}:
+            # Only the name matters: Docker can publish us on another host port, and a rebound page sends its own name.
+            host = self.headers.get("Host") or ""
+            name = host if host.endswith("]") else host.rsplit(":", 1)[0]
+            if name not in {"127.0.0.1", "localhost", "[::1]"}:
                 self._send(421, {"code": "bad_host"})
                 return False
             if self.headers.get("Origin") is not None:
