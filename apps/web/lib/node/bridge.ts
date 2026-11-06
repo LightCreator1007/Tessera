@@ -1,5 +1,8 @@
 // Server-side bridge to the tod-node on this machine: reads its local API on :7777 and runs `tod-node selftest`.
 import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 // The node API refuses any request carrying an Origin header (DNS-rebinding guard), so browsers can't call it.
 // A server-side fetch sends none, which is why reads go through here.
@@ -41,4 +44,23 @@ export function runSelftest(): Promise<BridgeResult> {
     });
   }).finally(() => { running = null; });
   return running;
+}
+
+// The node writes its stop token to <data dir>/api.token (0600). Only a process on this machine that can read it may stop the node.
+const DATA_DIR = process.env.TOD_DATA || join(homedir(), ".tod");
+
+/** POST /v1/stop with the bearer token. Under Docker the token is in the container's volume, so the CLI wrapper is the fallback. */
+export async function nodeStop(): Promise<BridgeResult> {
+  let token: string;
+  try {
+    token = (await readFile(join(DATA_DIR, "api.token"), "utf8")).trim();
+  } catch {
+    return fail(409, "token_unreadable");
+  }
+  try {
+    const res = await fetch(`${NODE_API}/v1/stop`, { method: "POST", headers: { authorization: `Bearer ${token}` }, cache: "no-store", signal: AbortSignal.timeout(5000) });
+    return { status: res.status, body: await res.text(), type: res.headers.get("content-type") ?? "application/json" };
+  } catch {
+    return fail(502, "node_unreachable");
+  }
 }
