@@ -2,7 +2,7 @@
 
 `anvil.toml` is a reproducible local fixture. Its role addresses come from public test labels and must only be used on Anvil. `base-sepolia.toml` is an undeployed template for Base Sepolia, chain 84532, with Alchemy RPC supplied by `BASE_SEPOLIA_RPC_URL`. ETH pays gas; the deployment script currently deploys a six-decimal ToD Test Token (TOD) with no economic value.
 
-`base-sepolia-demo.toml` is the confirmed public demo bundle, with zero probation and the deployed faucet/exchange addresses. Use it with a private Alchemy RPC; do not redeploy it. The [deployment record](../docs/token/BASE_SEPOLIA_DEPLOYMENT.md) links source verification and confirmed funding/conversion receipts. In this profile, `roles.faucet` is the minter EOA and `contracts.faucet` is the claim contract; they are different addresses.
+`base-sepolia-demo.toml` is the confirmed public demo bundle, with zero probation and the deployed faucet/exchange addresses. It defaults to the public RPC, and `BASE_SEPOLIA_RPC_URL` overrides that with a private one; do not redeploy it. The [deployment record](../docs/token/BASE_SEPOLIA_DEPLOYMENT.md) links source verification and confirmed funding/conversion receipts. In this profile, `roles.faucet` is the minter EOA and `contracts.faucet` is the claim contract; they are different addresses.
 
 For local setup, install the Python workspace, initialize the contract submodules, and have Node and Foundry on PATH. Run `anvil` in one terminal and `python scripts/deploy.py --network anvil` in another. The deploy command rebuilds contracts, generates ABIs, deploys the token/registry/market, binds the market and writes fresh addresses and the deployment block. `python scripts/fund.py ADDRESS --network anvil --tokens 100` supplies local test ETH and TOD.
 

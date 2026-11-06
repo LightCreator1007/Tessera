@@ -1,7 +1,7 @@
-# Confirmed Base Sepolia test deployment; supply a private Alchemy RPC at runtime.
+# Confirmed Base Sepolia test deployment. Defaults to the public RPC; set BASE_SEPOLIA_RPC_URL for a private one.
 name = "base-sepolia-demo"
 chainId = 84532
-rpc = ""
+rpc = "https://sepolia.base.org"
 rpcEnv = "BASE_SEPOLIA_RPC_URL"
 verifierUrl = "https://base-sepolia.blockscout.com/api/"
 logSpan = 200
