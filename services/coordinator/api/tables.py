@@ -1,7 +1,7 @@
 """In-memory state behind the read routes, filled by the scheduler and the round driver."""
 from .models import Evidence, Job, JobState, Round, Selftest, Workload
 
-# ponytail: in memory, so a restart empties them until they are rebuilt from chain events
+# In memory. The driver rebuilds the chain-derived ones every tick; api.persist keeps CONTROL and REARMED in SQLite.
 WORKLOADS: dict[str, Workload] = {}
 SELFTESTS: dict[str, Selftest] = {}
 JOBS: dict[int, Job] = {}
