@@ -1,6 +1,9 @@
 """Local-chain helpers for tests and the dev stack: start anvil, fund keys, join nodes, create a job, open a round."""
+import hashlib
 import http.server
+import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -93,12 +96,25 @@ def open_round(ledger: Ledger, net_file: str, workdir, tag: str, nodes: int = 3,
 
 
 class BlobServer:
-    """In-memory stand-in for the coordinator's blob routes, with the same BlobAccess signature check."""
+    """In-memory stand-in for the coordinator: blob routes with the same BlobAccess check, plus the settlement,
+    evidence and signature routes a verifier co-signs through."""
 
     def __init__(self, net):
         self.blobs: dict[str, bytes] = {}
         self.put_signers: list[str] = []
+        self.settlements: dict[tuple[int, int], dict] = {}  # (job, round) -> Settlement as finalize returns it
+        self.sigs: dict[tuple[int, int], dict[str, bytes]] = {}
         outer = self
+
+        def settlement_json(job, rnd):
+            from tod_core.finalize import message
+            s, x = outer.settlements[(job, rnd)], lambda b: "0x" + b.hex()
+            return {"jobId": job, "roundId": rnd, "outcome": s["outcome"], "aggregateHash": x(s["aggregateHash"]),
+                    "flaggedBitmap": s["flaggedBitmap"], "aggEvidenceHash": x(s["aggEvidenceHash"]),
+                    "payEvidenceHash": x(s["payEvidenceHash"]),
+                    "payouts": [{"op": op, "amount": a} for op, a in s["payouts"]],
+                    "digest": x(enc.digest("FinalizeRound", net.chain_id, net.market, message(job, rnd, s))),
+                    "collected": len(outer.sigs.get((job, rnd), {}))}
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def _auth(self, blob_hash):
@@ -107,13 +123,47 @@ class BlobServer:
                      "expiry": int(self.headers["X-Expiry"])}
                 return enc.recover("BlobAccess", net.chain_id, net.market, m, bytes.fromhex(self.headers["X-Signature"][2:]))
 
+            def _json(self, code, body):
+                data = json.dumps(body).encode()
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(data)
+
             def do_GET(self):
+                if m := re.fullmatch(r"/v1/jobs/(\d+)/rounds/(\d+)/(settlement|evidence)", self.path):
+                    key = (int(m[1]), int(m[2]))
+                    if key not in outer.settlements:
+                        return self._json(404, {"detail": "settlement not found"})
+                    if m[3] == "settlement":
+                        return self._json(200, settlement_json(*key))
+                    h_ = "0x" + outer.settlements[key]["aggEvidenceHash"].hex()
+                    return self._json(200, {"job": key[0], "round": key[1], "reports": [], "pay": None,
+                                            "aggregate": {"hash": h_, "url": f"/v1/blobs/{h_}"}})
                 blob_hash = self.path.rsplit("/", 1)[-1]
                 self._auth(blob_hash)
                 body = outer.blobs.get(blob_hash)
                 self.send_response(200 if body else 404)
                 self.end_headers()
                 self.wfile.write(body or b"")
+
+            def do_POST(self):
+                from eth_account import Account
+                from eth_account.messages import encode_defunct
+                from tod_core.finalize import message
+
+                m = re.fullmatch(r"/v1/jobs/(\d+)/rounds/(\d+)/signatures", self.path)
+                body = self.rfile.read(int(self.headers["Content-Length"]))
+                msg = f"POST\n{self.path}\n{self.headers['X-Timestamp']}\n{hashlib.sha256(body).hexdigest()}"
+                op = Account.recover_message(encode_defunct(text=msg), signature=self.headers["X-Signature"])
+                b, key = json.loads(body), (int(m[1]), int(m[2]))
+                sig = bytes.fromhex(b["signature"][2:])
+                signer = enc.recover("FinalizeRound", net.chain_id, net.market,
+                                     message(*key, outer.settlements[key]), sig)
+                if not (op.lower() == b["verifier"].lower() == signer.lower()):
+                    return self._json(422, {"detail": "signature is not over this Settlement"})
+                outer.sigs.setdefault(key, {})[op.lower()] = sig
+                self._json(200, {"collected": len(outer.sigs[key]), "threshold": 2})
 
             def do_PUT(self):
                 blob_hash = self.path.rsplit("/", 1)[-1]
@@ -143,8 +193,6 @@ class BlobServer:
 def mlp_job(srv: BlobServer, segments: int = 4):
     """A small exact-MLP job on synthetic data: stores its spec and start weights, and returns
     (createJob overrides, spec, start weights, datasets loader)."""
-    import json
-
     import numpy as np
     from tod_core.blob import to_blob
 
@@ -153,7 +201,9 @@ def mlp_job(srv: BlobServer, segments: int = 4):
     spec = {"workload": {"id": "mlp-exact/1"},
             "model": {"inputShape": [16], "outputs": 3, "hidden": 16, "task": "classification"},
             "train": {"H": 20, "K": segments, "B": 32, "lr": "0.05"},
-            "data": {"shards": [{"start": i * 250, "len": 250} for i in range(4)]}}
+            "gate": {"relTol": "0.1", "absTol": "0.01"},
+            # split(1000, 4, 0.1, 0.1) gives 800 train rows in these shards, then val 800..900 and test 900..1000.
+            "data": {"shards": [{"start": i * 200, "len": 200} for i in range(4)], "valFrac": "0.1", "testFrac": "0.1"}}
     rng = np.random.default_rng(0)
     X = rng.random((1000, 16), dtype=np.float32)
     Y = X[:, :3].argmax(1).astype(np.int64)

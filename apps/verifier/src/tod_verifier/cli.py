@@ -99,14 +99,17 @@ def run(
     from tod_node.daemon import run as run_daemon
     from tod_node.events import EventLog
 
+    from .cosign import CoordinatorApi, CoSigner
     from .verify import VerifierLoop
 
     net, ledger, runner, key = _setup(network, coordinator, key_env, as_json)
     signer = LocalSigner(key)
     events = EventLog(data_dir() / "events.ndjson")
     sender = TxManager(ledger.w3, signer, data_dir() / "journal")
-    loop = VerifierLoop(ledger.using(sender).market, signer.address, runner, emit=events.append,
-                        upload=runner.c.put)
+    market = ledger.using(sender).market
+    cosigner = CoSigner(market, ledger.registry, runner, CoordinatorApi(coordinator, key), key, net.chain_id,
+                        emit=events.append)
+    loop = VerifierLoop(market, signer.address, runner, emit=events.append, upload=runner.c.put, cosigner=cosigner)
     stop = threading.Event()
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: stop.set())

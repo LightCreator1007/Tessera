@@ -1,4 +1,4 @@
-"""Verifier side of a round: replay every revealed node, make sure the seed is drawn, then attest once."""
+"""Verifier side of a round: replay every revealed node, make sure the seed is drawn, attest once, then co-sign."""
 import json
 import logging
 
@@ -29,8 +29,8 @@ def report_bytes(job: int, rnd: int, verifier: str, results: dict) -> bytes:
 
 
 class VerifierLoop:
-    def __init__(self, market, verifier: str, runner, emit=lambda *a, **k: None, upload=None):
-        self.market, self.runner, self.emit, self.upload = market, runner, emit, upload
+    def __init__(self, market, verifier: str, runner, emit=lambda *a, **k: None, upload=None, cosigner=None):
+        self.market, self.runner, self.emit, self.upload, self.cosigner = market, runner, emit, upload, cosigner
         self.verifier = verifier
         self.accepting = True
         self.done: set[tuple[int, int]] = set()
@@ -53,6 +53,8 @@ class VerifierLoop:
                 if str(e) == "AlreadyReported":
                     self.done.add((job, rnd))
                 log.warning("job %s round %s: %s", job, rnd, e)
+        if self.cosigner and self.accepting:
+            self.cosigner.tick(state)
 
     def _seed(self, job: int, rnd: int, r: dict) -> None:
         """Lock, then draw two blocks later. The coordinator usually does this; racing it costs at most a revert."""
