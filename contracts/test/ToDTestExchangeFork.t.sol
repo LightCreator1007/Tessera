@@ -29,6 +29,14 @@ contract ToDTestExchangeForkTest is Test {
         deal(CIRCLE_TEST_USDC, address(desk), 100e6);
         vm.startPrank(user);
         tod.approve(address(desk), 100e6);
+        vm.expectRevert(ToDTestExchange.BelowMinimumRedemption.selector);
+        desk.swap(true, 10e6 - 1, 10e6 - 1, block.timestamp);
+        assertEq(tod.balanceOf(user), 100e6);
+        assertEq(usdc.balanceOf(address(desk)), 100e6);
+        desk.swap(true, 10e6, 10e6, block.timestamp);
+        usdc.approve(address(desk), 10e6);
+        desk.swap(false, 10e6, 10e6, block.timestamp);
+        tod.approve(address(desk), 100e6);
         desk.swap(true, 100e6, 100e6, block.timestamp);
         assertEq(usdc.balanceOf(user), 100e6);
         usdc.approve(address(desk), 100e6);

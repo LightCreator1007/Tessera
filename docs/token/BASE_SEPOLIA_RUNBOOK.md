@@ -48,7 +48,7 @@ The recommended faucet allocation is 100 TOD with a 24-hour address cooldown. Th
 
 The exchange has separate TOD and test-USDC reserves. Mint only the agreed test TOD budget to the exchange; transfer existing Circle test USDC from the reserve owner's wallet using `exchange.py seed --asset usdc --amount AMOUNT`. These transfers supply test inventory, not LP shares or a claim against all TOD supply.
 
-The test quote is fixed at **1 TOD for 1 test USDC** in either direction. With 20 test USDC in stock, at most 20 TOD can be redeemed until USDC is refilled or a reverse swap returns USDC. The million-TOD supply cap does not promise million-USDC backing. This is not a market-price discovery mechanism or a real-dollar peg.
+The test quote is fixed at **1 TOD for 1 test USDC** in either direction. Each TOD redemption requires at least **10 TOD**; smaller balances can accumulate until they reach the floor. Reverse test-USDC → TOD swaps accept any positive amount. With 20 test USDC in stock, at most 20 TOD can be redeemed until USDC is refilled or a reverse swap returns USDC. Fewer than 10 test USDC remaining cannot satisfy a redemption. The million-TOD supply cap does not promise million-USDC backing. This is not a market-price discovery mechanism or a real-dollar peg.
 
 ## Provider redemption and acceptance
 

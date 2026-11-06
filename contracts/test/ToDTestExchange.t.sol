@@ -78,10 +78,57 @@ contract ToDTestExchangeTest is Test {
         desk.swap(true, 100e6 + 1, 1, block.timestamp);
         tod.approve(address(desk), 0);
         vm.expectRevert();
-        desk.swap(true, 1, 1, block.timestamp);
+        desk.swap(true, 10e6, 10e6, block.timestamp);
         vm.stopPrank();
         assertEq(tod.balanceOf(alice), 100e6);
         assertEq(usdc.balanceOf(address(desk)), 100e6);
+    }
+
+    function test_minimumRedemptionRejectsDustWithoutMovingFunds() public {
+        vm.startPrank(alice);
+        vm.expectRevert(ToDTestExchange.BelowMinimumRedemption.selector);
+        desk.swap(true, 10e6 - 1, 10e6 - 1, block.timestamp);
+        vm.stopPrank();
+        assertEq(tod.balanceOf(alice), 100e6);
+        assertEq(tod.balanceOf(address(desk)), 0);
+        assertEq(usdc.balanceOf(alice), 0);
+        assertEq(usdc.balanceOf(address(desk)), 100e6);
+        assertEq(tod.allowance(alice, address(desk)), 100e6);
+    }
+
+    function test_exactMinimumAndNextUnitRedeemButReverseDustIsAllowed() public {
+        vm.startPrank(alice);
+        desk.swap(true, 10e6, 10e6, block.timestamp);
+        desk.swap(true, 10e6 + 1, 10e6 + 1, block.timestamp);
+        usdc.approve(address(desk), 1);
+        desk.swap(false, 1, 1, block.timestamp);
+        vm.stopPrank();
+        assertEq(tod.balanceOf(alice), 80e6);
+        assertEq(tod.balanceOf(address(desk)), 20e6);
+        assertEq(usdc.balanceOf(alice), 20e6);
+        assertEq(usdc.balanceOf(address(desk)), 80e6);
+    }
+
+    function testFuzz_belowMinimumRedemptionAlwaysReverts(uint256 seed) public {
+        uint256 amount = bound(seed, 1, 10e6 - 1);
+        vm.prank(alice);
+        vm.expectRevert(ToDTestExchange.BelowMinimumRedemption.selector);
+        desk.swap(true, amount, amount, block.timestamp);
+        assertEq(tod.balanceOf(alice), 100e6);
+        assertEq(usdc.balanceOf(address(desk)), 100e6);
+        assertEq(tod.allowance(alice, address(desk)), 100e6);
+    }
+
+    function test_minimumIsNotARetainedBalance() public {
+        address bob = makeAddr("bob");
+        tod.mint(bob, 10e6);
+        vm.startPrank(bob);
+        tod.approve(address(desk), 10e6);
+        desk.swap(true, 10e6, 10e6, block.timestamp);
+        vm.stopPrank();
+        assertEq(tod.balanceOf(bob), 0);
+        assertEq(usdc.balanceOf(bob), 10e6);
+        assertEq(tod.allowance(bob, address(desk)), 0);
     }
 
     function test_mainnetAndInvalidTokensRejected() public {
@@ -119,7 +166,7 @@ contract ToDTestExchangeTest is Test {
     }
 
     function testFuzz_fullDomainRoundTrip(uint256 seed) public {
-        uint256 amount = bound(seed, 1, type(uint256).max);
+        uint256 amount = bound(seed, 10e6, type(uint256).max);
         ToDToken t = new ToDToken(address(this), address(this), amount);
         MockUSDC u = new MockUSDC();
         ToDTestExchange d = new ToDTestExchange(address(t), address(u));
@@ -156,8 +203,9 @@ contract ToDExchangeHandler is Test {
         uint256 balance = toUsdc ? tod.balanceOf(actor) : usdc.balanceOf(actor);
         uint256 inventory = toUsdc ? usdc.balanceOf(address(desk)) : tod.balanceOf(address(desk));
         uint256 maximum = balance < inventory ? balance : inventory;
-        if (maximum == 0) return;
-        uint256 amount = bound(amountSeed, 1, maximum);
+        uint256 minimum = toUsdc ? desk.MIN_REDEEM() : 1;
+        if (maximum < minimum) return;
+        uint256 amount = bound(amountSeed, minimum, maximum);
         vm.prank(actor);
         desk.swap(toUsdc, amount, amount, block.timestamp);
         if (toUsdc) todIn += amount;
