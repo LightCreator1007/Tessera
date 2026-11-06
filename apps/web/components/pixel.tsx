@@ -170,15 +170,6 @@ export function WorkloadArt({ workload, className }: { workload: string; classNa
   );
 }
 
-/** Logo: three tiles stepping down a diagonal, a loss curve at 3x3. */
-export function BrandMark({ className }: { className?: string }) {
-  return (
-    <span aria-hidden className={cx("inline-flex size-8 shrink-0 rounded-md bg-brand-ink p-1.5", className)}>
-      <PixelArt grid={["a..", "bc.", "dde"]} palette={{ a: "coral", b: "amber-dim", c: "amber", d: "lime-dim", e: "lime" }} gap={0.22} className="h-full w-full" />
-    </span>
-  );
-}
-
 /** A row or grid of tiles, one per item, for count meters (nodes online, threshold, rounds settled). */
 export function TileMeter({ tiles, cols, className, label }: { tiles: (Paint | Ink)[]; cols: number; className?: string; label?: string }) {
   const rows: string[] = [];

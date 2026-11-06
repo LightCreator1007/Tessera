@@ -20,7 +20,7 @@ export function ConnectGate({ title, children, figure = "crow", onConnect = open
         <div>
           <Button variant="primary" icon={Wallet} onClick={onConnect}>Connect wallet</Button>
         </div>
-        <p className="max-w-md font-mono text-xs leading-relaxed text-subtle">ToD never asks for a seed phrase. Connecting shares your address only; every payment is a transaction you sign.</p>
+        <p className="max-w-md font-mono text-xs leading-relaxed text-subtle">Tessera never asks for a seed phrase. Connecting shares your address only; every payment is a transaction you sign.</p>
       </div>
     </section>
   );

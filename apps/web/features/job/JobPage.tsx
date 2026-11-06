@@ -10,6 +10,9 @@ import { ownsJob, setWallet, useWallet } from "@/lib/wallet";
 import { useTx } from "@/lib/tx";
 import { formatToken } from "@/lib/money";
 import { TxButton, TxStatus } from "@/components/flow";
+import { f64 } from "@/lib/api/metric";
+import { Problem, errorKind } from "@/components/problem";
+import { ModelPanel } from "./ModelPanel";
 import { useConfig, useJob, useJobState, useNodes, useRound, useRounds, useSpec, useVerdicts } from "@/lib/api/hooks";
 import type { Job, Round, RoundSummary } from "@/lib/api/types";
 import { LossChart, toPoints } from "@/components/charts";
@@ -19,7 +22,7 @@ import { coverFor } from "@/components/mosaic/figures";
 import type { RoundStatus, Trust } from "@/lib/api/types";
 import {
   AddressChip, Banner, Button, ButtonLink, Card, Crumbs, EmptyState, HashChip, IconButton, JobStatusPill, Money, Null, PageHeader, PhaseStrip, PillTabs, Progress, PropRow, PropsRail, RoundStatusPill,
-  SectionTitle, Segmented, Skeleton, SourceBadge, TD, TH, THead, TrustLabel, cx, duration,
+  SectionTitle, Segmented, Skeleton, SourceBadge, TD, TH, THead, TrustLabel, cx, duration, short,
 } from "@/components/primitives";
 
 const TABS = ["overview", "rounds", "contributors", "model", "spec"] as const;
@@ -38,9 +41,12 @@ export function JobPage({ id, tab: rawTab }: { id: number; tab?: string }) {
   if (job.isError) {
     return (
       <div className="pt-16">
-        <EmptyState icon={Layers} title={`Job #${id} isn't here`} action={<Link href="/jobs" className="text-sm text-ink underline underline-offset-4">Back to jobs</Link>}>
-          Either it was never created, or the coordinator hasn't indexed it yet. Jobs appear within a block of their JobCreated event.
-        </EmptyState>
+        <Problem
+          error={job.error}
+          retry={() => job.refetch()}
+          action={errorKind(job.error) === "not_found" ? <Link href="/jobs" className="text-sm text-ink underline underline-offset-4">Back to jobs</Link> : undefined}
+          overrides={{ not_found: { title: `Job #${id} isn't here`, body: "Either it was never created, or the coordinator hasn't indexed it yet. Jobs appear within a block of their JobCreated event." } }}
+        />
       </div>
     );
   }
@@ -87,7 +93,7 @@ export function JobPage({ id, tab: rawTab }: { id: number; tab?: string }) {
           {tab === "overview" && <Overview job={j} />}
           {tab === "rounds" && <RoundsTab job={j} />}
           {tab === "contributors" && <Contributors job={j} />}
-          {tab === "model" && <ModelTab job={j} />}
+          {tab === "model" && <ModelPanel job={j} />}
           {tab === "spec" && <SpecTab job={j} />}
         </div>
         <Properties job={j} />
@@ -334,7 +340,7 @@ function RoundsTable({ job, limit, compact }: { job: Job; limit?: number; compac
                 <tr key={r.round} className={cx("relative transition-colors hover:bg-hover", compact ? "border-t border-rule" : "border-b border-rule")}>
                   <Td><Link href={`/jobs/${job.id}/rounds/${r.round}`} className="font-mono text-ink after:absolute after:inset-0" aria-label={`Round ${r.round} receipt`}>R{r.round}</Link></Td>
                   <Td><RoundStatusPill status={r.status} /></Td>
-                  <Td className="text-right font-mono tabular">{m?.metric ? Number(m.metric).toFixed(4) : <Null>–</Null>}</Td>
+                  <Td className="text-right font-mono tabular">{f64(m?.metric) !== null ? f64(m?.metric)!.toFixed(4) : <Null>-</Null>}</Td>
                   <Td className="text-right font-mono tabular text-muted">{duration(m?.seconds ?? null) ?? <Null>–</Null>}</Td>
                   {!compact && <Td className="font-mono text-xs text-muted">{r.aggregateHash ? `${r.aggregateHash.slice(0, 14)}…` : <Null>Not aggregated</Null>}</Td>}
                 </tr>
@@ -391,55 +397,24 @@ function Contributors({ job }: { job: Job }) {
   );
 }
 
-type DL = { kind: "idle" } | { kind: "fetching" } | { kind: "hashing" } | { kind: "ok" } | { kind: "mismatch"; got: string; want: string };
-function ModelTab({ job }: { job: Job }) {
-  const rounds = useRounds(job.id);
-  const lastFinal = rounds.data?.data.find((r) => r.aggregateHash);
-  const [dl, setDl] = useState<DL>({ kind: "idle" });
-  if (rounds.isPending) return <Skeleton className="h-32 w-full" />;
-  if (!lastFinal) return <EmptyState icon={Box} title="No model yet">The first weights are published when round 1 finalizes.</EmptyState>;
-  const want = lastFinal.aggregateHash!;
-  const run = async () => {
-    // Demo: the fixture blob store has no bytes, so this walks the same states the real hash check will.
-    setDl({ kind: "fetching" });
-    await new Promise((r) => setTimeout(r, 700));
-    setDl({ kind: "hashing" });
-    await new Promise((r) => setTimeout(r, 500));
-    setDl(job.trust === "untrusted" ? { kind: "mismatch", got: want.replace(/.{6}$/, "c0ffee"), want } : { kind: "ok" });
-  };
-  return (
-    <Card className="flex max-w-2xl flex-col gap-5 p-6">
-      <SectionTitle title={`Weights after round ${lastFinal.round}`} sub="checked against the aggregate hash on chain before saving" />
-      <dl className="flex flex-col">
-        <PropRow label="Expected hash"><HashChip value={want} label="aggregate hash" /></PropRow>
-        <PropRow label="Format"><span className="font-mono text-sm">safetensors</span></PropRow>
-      </dl>
-      <div className="flex flex-wrap items-center gap-3">
-        <Button variant="primary" icon={Download} onClick={run} disabled={dl.kind === "fetching" || dl.kind === "hashing"}>
-          {dl.kind === "fetching" ? "Downloading…" : dl.kind === "hashing" ? "Checking hash…" : "Download weights"}
-        </Button>
-        {dl.kind === "ok" && <span className="text-sm text-ok">Hash matches. Saved model-r{lastFinal.round}.safetensors</span>}
-      </div>
-      {dl.kind === "mismatch" && (
-        <Banner tone="danger" title="Hash mismatch, file discarded">
-          The coordinator served bytes hashing to {dl.got.slice(0, 12)}…, but the chain says {dl.want.slice(0, 12)}…. Nothing was saved.
-        </Banner>
-      )}
-    </Card>
-  );
-}
-
 function SpecTab({ job }: { job: Job }) {
-  const spec = useSpec(job.id);
+  const spec = useSpec(job.id, job.modelSpecHash);
   return (
     <Card className="flex flex-col gap-4 p-5">
       <SectionTitle title="Job spec" sub="the exact config every node trains with">
         <HashChip value={job.modelSpecHash} label="spec hash" />
       </SectionTitle>
       {spec.isPending ? <Skeleton className="h-40 w-full" /> : spec.isError ? (
-        <EmptyState icon={FileCode2} title="Couldn't load the spec">The spec hash above is still on chain.</EmptyState>
+        <Problem error={spec.error} retry={() => spec.refetch()} overrides={{ upstream: { title: "The spec isn't readable", body: "The coordinator's copy isn't valid JSON. The spec hash above is still on chain." }, not_found: { title: "The coordinator has no spec for this job", body: "The spec hash above is still on chain." } }} />
       ) : (
-        <pre className="overflow-x-auto rounded-lg border border-rule bg-sunken p-4 font-mono text-xs leading-5 text-ink">{JSON.stringify(spec.data.data, null, 2)}</pre>
+        <>
+          {!spec.data.data.matches && (
+            <Banner tone="danger" title="This spec doesn't match the chain">
+              The coordinator served a spec hashing to {short(spec.data.data.keccak, 10, 6)}, but the job on chain commits to {short(job.modelSpecHash, 10, 6)}. Nodes refuse a spec like this, and so should you.
+            </Banner>
+          )}
+          <pre className="overflow-x-auto rounded-lg border border-rule bg-sunken p-4 font-mono text-xs leading-5 text-ink">{JSON.stringify(spec.data.data.spec, null, 2)}</pre>
+        </>
       )}
     </Card>
   );

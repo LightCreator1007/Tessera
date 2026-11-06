@@ -11,7 +11,7 @@ const sans = Instrument_Sans({ subsets: ["latin"], variable: "--font-instrument"
 const mono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" });
 
 export const metadata: Metadata = {
-  title: { default: "ToD", template: "%s · ToD" },
+  title: { default: "Tessera", template: "%s · Tessera" },
   description: "ML training on idle laptops, with every round verified and paid on chain.",
 };
 

@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Bell, BookOpen, ChevronDown, ChevronsUpDown, Coins, Cpu, House, Laptop, Layers, LogOut, Trophy, Menu,
-  PanelLeftClose, PanelLeftOpen, Plus, Rocket, Settings, Terminal, UserRound, Wallet, X, type LucideIcon,
+  PanelLeftClose, PanelLeftOpen, Plus, Rocket, Settings, Terminal, UserRound, Wallet, X, Boxes, type LucideIcon,
 } from "lucide-react";
 import { useWallet } from "@/lib/wallet";
 import { ConnectDialog, openConnect } from "./connect";
@@ -17,7 +17,7 @@ import { isDemo } from "@/lib/api/client";
 import { formatToken, TOKEN_SYMBOL } from "@/lib/money";
 import { Button, Count, Identicon, MenuItem, Money, Popover, cx, short } from "./primitives";
 import { Flap, useGain } from "./mosaic/Flap";
-import { BrandMark } from "./pixel";
+import { BrandMark } from "./brand";
 
 export function Providers({ children }: { children: ReactNode }) {
   const [qc] = useState(() => new QueryClient({ defaultOptions: { queries: { staleTime: 4_000, refetchOnWindowFocus: false } } }));
@@ -29,6 +29,7 @@ const NAV: NavItem[] = [
   { href: "/", label: "home", icon: House, match: (p) => p === "/" },
   { href: "/jobs", label: "jobs", icon: Layers, match: (p) => p.startsWith("/jobs") && p !== "/jobs/new" },
   { href: "/nodes", label: "nodes", icon: Cpu, match: (p) => p.startsWith("/nodes") && p !== "/nodes/add" },
+  { href: "/models", label: "models", icon: Boxes, match: (p) => p.startsWith("/models") },
   { href: "/competitions", label: "competitions", icon: Trophy, match: (p) => p.startsWith("/competitions") && p !== "/competitions/new" },
   { href: "/balance", label: "balance", icon: Coins, match: (p) => p.startsWith("/balance") },
 ];
@@ -131,7 +132,7 @@ function MobileBar({ onMenu }: { onMenu: () => void }) {
       </button>
       <Link href="/" className="flex items-center gap-2">
         <BrandMark className="size-6 p-1" />
-        <span className="text-sm font-medium text-ink">ToD</span>
+        <span className="text-sm font-medium text-ink">Tessera</span>
       </Link>
       <span className="ml-auto">
         {w.connected && w.address ? <Link href="/me" aria-label="Your profile"><Identicon value={w.address} className="size-6" /></Link> : <Button onClick={openConnect}>Connect</Button>}
@@ -229,9 +230,9 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle?: () =>
             </button>
           </Tip>
         ) : (
-          <Link href="/" aria-label="ToD home" className={cx(ROW, "min-w-0 flex-1 rounded-md")}>
+          <Link href="/" aria-label="Tessera home" className={cx(ROW, "min-w-0 flex-1 rounded-md")}>
             <Slot><BrandMark className="-m-0.5 size-6 p-1" /></Slot>
-            <Label className="font-medium text-ink">ToD</Label>
+            <Label className="font-medium text-ink">Tessera</Label>
           </Link>
         )}
         {onToggle && (
@@ -343,18 +344,23 @@ function SettingsRow() {
   );
 }
 
+const CHAINS: Record<number, string> = { 84532: "Base Sepolia", 8453: "Base", 31337: "Local Anvil" };
+export const chainName = (id: number | undefined) => (id === undefined ? "Base Sepolia" : CHAINS[id] ?? `Chain ${id}`);
+
 function StatusLine() {
   const h = useHealth();
   const state = h.isPending ? "checking" : h.isError || !h.data.data.ok ? "down" : isDemo ? "demo" : "up";
   const block = h.data?.data.block ?? null;
+  // The chain comes from the coordinator; a local stack runs on Anvil, not Base Sepolia.
+  const net = chainName(h.data?.data.chainId);
   const dot = { checking: "bg-subtle", down: "bg-danger", demo: "bg-demo", up: "bg-ok" }[state];
   const title = { checking: "Checking the coordinator", down: "Coordinator unreachable. Chain history is still readable.", demo: "No coordinator URL is set, so the app shows demo data", up: "Coordinator live" }[state];
   return (
-    <Tip label={state === "demo" ? "Base Sepolia, demo data" : state === "down" ? "Coordinator offline" : "Base Sepolia"}>
+    <Tip label={state === "demo" ? `${net}, demo data` : state === "down" ? "Coordinator offline" : net}>
       <p title={title} className={cx(ROW, "h-6 font-mono text-xs text-subtle")}>
         <Slot><span className={cx("size-1.5 rounded-full", dot)} aria-hidden /></Slot>
         <Label>
-          <span className="truncate">Base Sepolia{block !== null && <> · #<Flap text={block.toLocaleString("en-US")} /></>}</span>
+          <span className="truncate">{net}{block !== null && <> · #<Flap text={block.toLocaleString("en-US")} /></>}</span>
           {state === "demo" && <span className="ml-auto shrink-0 text-demo">demo</span>}
           {state === "down" && <span className="ml-auto shrink-0 text-danger">offline</span>}
         </Label>

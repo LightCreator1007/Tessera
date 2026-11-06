@@ -81,7 +81,7 @@ export function HeroBanner({ round, job, status, nodes, curve, total, dismissibl
 
   if (variant === "field") {
     return (
-      <section className="relative isolate overflow-hidden rounded-xl border border-rule bg-brand-ink" aria-label="ToD">
+      <section className="relative isolate overflow-hidden rounded-xl border border-rule bg-brand-ink" aria-label="Tessera">
         <HeroField curve={curve} className="mosaic-mask absolute inset-0 -z-10 py-3" />
         {dismiss}
         <div className="flex min-h-80 flex-col justify-between gap-10 px-6 py-8 md:px-10 md:py-10">
@@ -95,7 +95,7 @@ export function HeroBanner({ round, job, status, nodes, curve, total, dismissibl
 
   const grid = banded(laptop({ w: W, h: H, state: "training", curve: curve.length ? curve : undefined }));
   return (
-    <section className="relative isolate overflow-hidden rounded-xl border border-rule bg-brand-ink" aria-label="ToD">
+    <section className="relative isolate overflow-hidden rounded-xl border border-rule bg-brand-ink" aria-label="Tessera">
       {dismiss}
       <div className="flex flex-col gap-8 p-6 md:p-8 lg:flex-row lg:items-center lg:gap-10">
         <div className="flex flex-col gap-6 lg:w-5/12">

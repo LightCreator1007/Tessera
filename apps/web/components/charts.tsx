@@ -1,5 +1,6 @@
 "use client";
 // Hand-drawn SVG charts. Unparseable or null metrics are gaps in the line, never zeros.
+import { f64 } from "@/lib/api/metric";
 import { scaleLinear } from "d3-scale";
 import { line } from "d3-shape";
 import { useEffect, useId, useRef, useState } from "react";
@@ -8,8 +9,7 @@ import type { RoundState } from "@/lib/api/types";
 type Pt = { x: number; y: number | null };
 export function toPoints(rounds: RoundState[]): Pt[] {
   return rounds.map((r) => {
-    const n = r.metric === null ? NaN : Number(r.metric);
-    return { x: r.round, y: Number.isFinite(n) ? n : null };
+    return { x: r.round, y: f64(r.metric) };
   });
 }
 

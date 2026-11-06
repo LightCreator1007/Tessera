@@ -82,10 +82,10 @@ export function Splash() {
 
   if (!show) return null;
   return (
-    <div role="dialog" aria-modal="true" aria-label="ToD is starting" className={`fixed inset-0 z-50 bg-surface transition-opacity duration-300 ${leaving ? "opacity-0" : "opacity-100"}`}>
+    <div role="dialog" aria-modal="true" aria-label="Tessera is starting" className={`fixed inset-0 z-50 bg-surface transition-opacity duration-300 ${leaving ? "opacity-0" : "opacity-100"}`}>
       <PosterThumb field={field} label="Cawing crow, developing while the app starts" cell={8} vocab={VOCAB_FINE} live className="absolute inset-0" />
       <div className="absolute left-0 top-0 flex flex-col gap-4 bg-surface p-6 md:p-10">
-        <span className="text-hero font-medium tracking-tight text-muted">ToD</span>
+        <span className="text-hero font-medium tracking-tight text-muted">Tessera</span>
         <ol className="flex flex-col gap-1 font-mono text-xs uppercase tracking-wide">
           {checks.slice(0, shown).map((c) => (
             <li key={c.k} className={c.ok === false ? "text-danger" : c.ok ? "text-ink" : "text-subtle"}>

@@ -107,7 +107,7 @@ export function ConnectDialog() {
               })}
             </ul>
             <More label="New to wallets?">
-              <p>A wallet holds the keys to your account. ToD never sees them: every payment, stake or claim opens in the wallet and waits for you to approve it.</p>
+              <p>A wallet holds the keys to your account. Tessera never sees them: every payment, stake or claim opens in the wallet and waits for you to approve it.</p>
               <p>This is a test network. Any wallet works, and the money on it is test money you can get for free.</p>
             </More>
           </>
@@ -154,7 +154,7 @@ const TITLE = { pick: "Connect a wallet", approve: "Approve in your wallet", rej
 function lede(view: keyof typeof TITLE, choice: Option | null) {
   switch (view) {
     case "pick": return "It pays, stakes and collects. Nothing moves without your approval.";
-    case "approve": return `Open ${choice?.name ?? "your wallet"} and approve the request. ToD sees your address and nothing else.`;
+    case "approve": return `Open ${choice?.name ?? "your wallet"} and approve the request. Tessera sees your address and nothing else.`;
     case "rejected": return "Nothing was shared. Try again, or pick a different wallet.";
     case "network": return "Your wallet is on another network. Everything here runs on Base Sepolia, a test network.";
     case "ready": return "You're on Base Sepolia.";

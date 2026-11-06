@@ -42,7 +42,7 @@ export function RolePicker() {
     <div className="relative mx-4 my-6 flex max-w-flow flex-col gap-8 border border-rule bg-surface px-4 py-8 md:mx-auto md:my-12 md:px-8">
       <header className="flex flex-col gap-2">
         <Eyebrow>Start</Eyebrow>
-        <h1 className="text-xl font-medium text-ink">What brings you to ToD?</h1>
+        <h1 className="text-xl font-medium text-ink">What brings you to Tessera?</h1>
         <p className="text-sm text-muted">Pick one. You can switch any time, and every path starts by showing you a real check before asking for anything.</p>
       </header>
       <ul className="grid gap-3 md:grid-cols-3" role="radiogroup" aria-label="Your role">
