@@ -229,6 +229,8 @@ def run(
 
     coordinator = config.resolve(data_dir())["coordinator"][0]
     if coordinator:
+        from .gas import ensure_gas
+        ensure_gas(ledger.w3, coordinator, account.key, emit=events.append)
         from .trainer import Coordinator, LazyTrainer, Trainer, preset_datasets
         train = (LazyTrainer if mode == "fake:lazy" else Trainer)(Coordinator(coordinator, account.key, net.chain_id, net.market),
                         preset_datasets(data_dir() / "datasets"), account.address, net.chain_id, net.market)
