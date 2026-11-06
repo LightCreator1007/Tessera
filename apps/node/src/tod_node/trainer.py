@@ -96,8 +96,8 @@ class RoundRunner:
     """Fetches a round's inputs and runs one shard's training. The node trains with it and verifiers replay with it,
     so both sides compute the same bytes by construction."""
 
-    def __init__(self, coordinator: Coordinator, datasets: Datasets, chain_id: int, market: str):
-        self.c, self.datasets = coordinator, datasets
+    def __init__(self, coordinator: Coordinator, datasets: Datasets, chain_id: int, market: str, sandbox=None):
+        self.c, self.datasets, self.sandbox = coordinator, datasets, sandbox  # sandbox: a DockerSandbox, or None
         self.dom = enc.domain(chain_id, market)
         self._data: dict[str, tuple] = {}  # one dataset stays in memory across rounds
         self._inputs: dict[tuple[int, int], tuple] = {}  # a verifier replays many shards of one round
@@ -116,6 +116,7 @@ class RoundRunner:
             if data_hash not in self._data:
                 self._data = {data_hash: self.datasets(data_hash)}
             self._inputs = {(job, rnd): (spec_hash, spec, wl, start, *self._data[data_hash])}
+            self._raw = (spec_bytes, data_hash)
         return self._inputs[(job, rnd)]
 
     def run(self, state, job: int, rnd: int, shard: int) -> tuple[list[bytes], np.ndarray, bytes]:
@@ -124,15 +125,22 @@ class RoundRunner:
         train = spec["train"]
         rows = sampler(self.dom, job, shard, spec["data"]["shards"][shard], rounds_done(state, job, rnd, shard),
                        train["H"], train["B"])
+        K = state.jobs[job]["params"].segments
+        if self.sandbox:
+            # The batches are worked out here, so the container needs no chain state and nothing beyond the arrays.
+            spec_bytes, data_hash = self._raw
+            batches = np.stack([rows(s) for s in range(train["H"])])
+            hs, w = self.sandbox.train(spec_bytes, spec_hash, start, data_hash, X, y, batches, train["H"], K)
+            return hs, w, spec_hash
         final = {}
-        hs = run_round(wl, start, X, y, rows, train["H"], state.jobs[job]["params"].segments, spec_hash,
-                       on_checkpoint=lambda k, w: final.update(w=w))
+        hs = run_round(wl, start, X, y, rows, train["H"], K, spec_hash, on_checkpoint=lambda k, w: final.update(w=w))
         return hs, final["w"], spec_hash
 
 
 class Trainer:
-    def __init__(self, coordinator: Coordinator, datasets: Datasets, operator: str, chain_id: int, market: str):
-        self.runner, self.operator = RoundRunner(coordinator, datasets, chain_id, market), operator.lower()
+    def __init__(self, coordinator: Coordinator, datasets: Datasets, operator: str, chain_id: int, market: str,
+                 sandbox=None):
+        self.runner, self.operator = RoundRunner(coordinator, datasets, chain_id, market, sandbox), operator.lower()
 
     def __call__(self, state, job: int, rnd: int) -> list[bytes]:
         r = state.rounds[(job, rnd)]

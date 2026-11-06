@@ -18,6 +18,7 @@ x-app: &app
     TOPUP_JOURNAL_DIR: /dev-data/topup
     DRIVER_JOURNAL_DIR: /dev-data/driver  # the round driver's signed-transaction journal, kept across restarts
     DATASET_CACHE: /dev-data/datasets
+    TOD_SANDBOX: "off"  # the nodes here are containers already, so they train in-process
     IDENTITY_MODE: dev
 
 # The same ceiling the tod-node wrapper sets, per process.
