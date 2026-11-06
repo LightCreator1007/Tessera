@@ -1,4 +1,6 @@
 """Admin routes for operating the coordinator: job mode and pause, node re-arm, transaction queue."""
+import time
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
@@ -31,6 +33,7 @@ def pause(job: int):
 def rearm(op: str):
     """Clear a node's missed-commit streak so the matcher seats it again."""
     tables.MISSED.pop(op.lower(), None)
+    tables.REARMED[op.lower()] = int(time.time())
     return {"op": op, "missedCommitsInARow": 0}
 
 

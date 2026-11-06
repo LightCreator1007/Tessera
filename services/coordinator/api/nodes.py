@@ -77,6 +77,15 @@ def fleet():
     return out
 
 
+def heartbeats() -> dict:
+    """Lowercase operator -> {seen, busy, selftest}: the fleet as the matcher (scheduler.pick) reads it."""
+    out = {}
+    for op, seen, raw in db.execute("SELECT op, seen, hb FROM nodes"):
+        hb = Heartbeat.model_validate_json(raw)
+        out[op.lower()] = {"seen": seen, "busy": hb.busy, "selftest": hb.selftest or {}}
+    return out
+
+
 @router.get("/nodes", response_model=list[Node])
 def nodes():
     return fleet()

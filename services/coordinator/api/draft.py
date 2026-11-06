@@ -42,7 +42,7 @@ def min_stake(budget: int, rounds: int, quorum: int) -> int:
     return max(MIN_STAKE, 2 * budget // rounds // quorum)
 
 
-def _mlp(model: dict, lr: str):
+def mlp(model: dict, lr: str):
     loss = "mse" if model["task"] == "regression" else "ce"
     return base.get(DRAFTABLE, d_in=math.prod(model["inputShape"]), n_out=model["outputs"],
                     hidden=model.get("hidden", 128), loss=loss, lr=lr)
@@ -78,7 +78,7 @@ def build(req: DraftRequest, store) -> Draft:
     card = DatasetCard(**{**raw_card, "x_shape": tuple(raw_card["x_shape"])})
 
     model = {"inputShape": [math.prod(card.x_shape)], "outputs": card.classes or 1, "hidden": 128, "task": card.task}
-    d = _mlp(model, "0.05").defaults()
+    d = mlp(model, "0.05").defaults()
     sp = split(card.rows, req.maxPerRound, VAL_FRAC, TEST_FRAC)
     spec = {
         "version": 4,
@@ -106,7 +106,7 @@ def build(req: DraftRequest, store) -> Draft:
         raise HTTPException(422, f"overrides not allowed: {sorted(bad)}")
     for k, v in req.overrides.items():
         spec[k] = {**spec[k], **v} if isinstance(spec.get(k), dict) and isinstance(v, dict) else v
-    wl = _mlp(spec["model"], spec["train"]["lr"])
+    wl = mlp(spec["model"], spec["train"]["lr"])
     if not wl.fits(card):
         raise HTTPException(422, f"{req.workload} does not fit this dataset")
 

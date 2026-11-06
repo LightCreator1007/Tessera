@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.responses import RedirectResponse, Response
 
+import driver
 from identity import router as identity
 from tod_core import encodings
 from tod_core.finalize import message
@@ -25,6 +26,7 @@ if config.COORDINATOR_KEY is None:
 @asynccontextmanager
 async def lifespan(_):
     blobs.store.self_test()  # never serve from a store that cannot read back what it wrote
+    driver.start(blobs.store)  # off unless TOD_NETWORK is set
     yield
 
 
