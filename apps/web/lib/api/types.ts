@@ -1,0 +1,107 @@
+// Response shapes from services/coordinator/openapi.json (components.schemas), plus the chain-read shapes the web needs. Kept by hand until gen:api runs in CI.
+export type Trust = "chain" | "hash-checked" | "untrusted";
+export type JobStatus = "open" | "running" | "completed" | "abandoned" | "invalid";
+export type RoundStatus =
+  | "open"
+  | "committing"
+  | "revealing"
+  | "verifying"
+  | "finalized"
+  | "reverted"
+  | "voided"
+  | "fallback";
+
+export type Config = {
+  chainId: number;
+  coordinator: string;
+  jobMarket: string;
+  nodeRegistry: string;
+  threshold: number;
+  token: string;
+  verifiers: string[];
+};
+export type Health = { block: number | null; chainId: number; ok: boolean; storeOk: boolean; version: string };
+export type Job = {
+  id: number;
+  budget: number;
+  remaining: number;
+  currentRound: number | null;
+  rounds: number;
+  modelSpecHash: string;
+  requester: string;
+  stakePerNode: number;
+  status: JobStatus;
+  trust: Trust;
+  workload: string;
+};
+export type RoundState = { round: number; metric: string | null; seconds: number | null };
+export type JobState = { job: number; rounds: RoundState[]; trust: Trust };
+export type Seat = { op: string; shard: number };
+export type Payout = { op: string; amount: number };
+export type RoundSummary = { round: number; status: RoundStatus; startHash: string; aggregateHash: string | null };
+export type Round = RoundSummary & {
+  job: number;
+  seed: string | null;
+  outcome: "Accepted" | "Reverted" | null;
+  committed: string[];
+  revealed: string[];
+  roster: Seat[];
+  payouts: Payout[];
+  confirmed: Record<string, unknown>[];
+  trust: Trust;
+};
+/** GET /v1/jobs/{id}/rounds/{r}/settlement: what the coordinator will post, and how many verifiers co-signed it so far. */
+export type Settlement = {
+  jobId: number;
+  roundId: number;
+  outcome: number; // contract enum: 0 Accepted, 1 Reverted
+  aggregateHash: string;
+  flaggedBitmap: number;
+  aggEvidenceHash: string;
+  payEvidenceHash: string;
+  payoutsHash: string;
+  payouts: Payout[];
+  digest: string;
+  collected: number;
+};
+export type EvidenceRef = { hash: string; url: string };
+export type Evidence = {
+  job: number;
+  round: number;
+  aggregate: EvidenceRef | null;
+  pay: EvidenceRef | null;
+  reports: EvidenceRef[];
+  trust: Trust;
+};
+export type Node = {
+  op: string;
+  arch: string | null;
+  idle: boolean;
+  online: boolean;
+  version: string;
+  workloads: string[];
+  prewarm: Record<string, unknown>;
+};
+export type Pool = { online: number; idle: number; busy: number };
+
+// Chain reads (JobMarket events, NodeRegistry.getNode). Demo-only until a chain is wired.
+export type Verdict = "pass" | "fail" | "pending" | "absent";
+export type RoundVerdicts = { verifier: string; verdict: Verdict; target?: string }[];
+export type NodeChain = {
+  op: string;
+  stake: number | null;
+  graduated: boolean;
+  joinedAt: number;
+  graduatedAt: number | null;
+  probationSeconds: number;
+  verifiedWorkSeconds: number;
+  missedReveals: number;
+  earned: number | null;
+  penalties: { job: number; round: number; kind: "Slashed" | "NoReveal"; amount: number | null; at: number }[];
+  /** Every round this node sat in, from RoundStarted rosters and settlement events. */
+  history: { job: number; round: number; result: NodeRoundResult }[];
+};
+export type NodeRoundResult = "paid" | "fallback" | "slashed" | "reverted" | "voided" | "live";
+
+export type Source = "live" | "demo";
+export type Sourced<T> = { data: T; source: Source };
