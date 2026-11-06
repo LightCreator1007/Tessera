@@ -142,3 +142,11 @@ def test_banner_shows_off_the_node_tab_only():
             assert banner.display and "Press 1" in str(banner.render())
 
     asyncio.run(go())
+
+
+def test_a_live_node_record_without_pay_or_slashes_still_shows():
+    from dataclasses import replace
+    s = snap()
+    live = [("committed", "2"), ("revealed", "1"), ("skipped", "0"), ("reverted txs", "0")]  # live.py's record
+    text = str(facts(replace(s, node=replace(s.node, record=live))))
+    assert "2 committed, 1 revealed" in text and "slashed" not in text

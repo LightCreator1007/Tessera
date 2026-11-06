@@ -195,10 +195,13 @@ def facts(s: Snapshot, earned: float | None = None) -> Text:
     rows = []
     if n.earned:  # the node CLI does not report pay yet; no row beats a false 0.00
         rows.append(("Earned today", Text(f"{shown} TOD", style=FG)))
-    if rec:
-        rows.append(("Track record", Text(f"{rec.get('accepted', '0')} rounds accepted, " + (
-            "never slashed" if rec.get("slashed", "0").startswith("0.00") else f"{rec['slashed']} slashed"),
-            style=FG)))
+    if "accepted" in rec:  # the demo's record: pay and slashes
+        slashed = rec.get("slashed", "")
+        rows.append(("Track record", Text(f"{rec['accepted']} rounds accepted, " + (
+            f"{slashed} slashed" if slashed and not slashed.startswith("0.00") else "never slashed"), style=FG)))
+    elif rec:  # a live node's own log has no pay or slash counts yet, only what it sent
+        rows.append(("Track record", Text(f"{rec.get('committed', '0')} committed, {rec.get('revealed', '0')} revealed",
+                                          style=FG)))
     rows.append(("Health", Text("✓ All good", style=FG) if not issues else
                  Text("! " + ", ".join(f"{h.key} {h.detail}" for h in issues), style=WARN)))
     for i, (k, v) in enumerate(rows):
