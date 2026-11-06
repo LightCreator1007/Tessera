@@ -41,6 +41,8 @@ def test_reads_refuse_foreign_hosts_and_any_origin(node):
     assert call(port, "GET", "/v1/status")[0] == 200
     assert call(port, "GET", "/v1/status", host=f"localhost:{port}")[0] == 200
     assert call(port, "GET", "/v1/status", host="evil.example:7777")[0] == 421
+    assert call(port, "GET", "/v1/status", host="127.0.0.1.evil.example")[0] == 421
+    assert call(port, "GET", "/v1/status", host="localhost:7787")[0] == 200  # published on another host port
     assert call(port, "GET", "/v1/status", headers={"Origin": "http://evil.example"})[0] == 403
     assert json.loads(call(port, "GET", "/v1/status")[1]) == {"daemon": {"state": "running"}}
 
