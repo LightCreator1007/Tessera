@@ -1,5 +1,4 @@
 """Verifier co-signing: recompute the coordinator's Settlement from chain state and sign FinalizeRound only on a full match."""
-import hashlib
 import json
 import logging
 import time
@@ -8,13 +7,13 @@ import urllib.request
 
 import numpy as np
 from eth_account import Account
-from eth_account.messages import encode_defunct
 from tod_core import encodings as enc
 from tod_core.blob import from_blob
 from tod_core.finalize import message
 from tod_core.ledger import Phase, RoundStatus
 from tod_core.settle import needs_weights, settle
 from tod_datasets.canonical import split
+from tod_node.gas import node_post
 
 log = logging.getLogger(__name__)
 RESEND_SECONDS = 30  # how often a kept signature is offered again while the coordinator lacks the threshold
@@ -24,7 +23,7 @@ class CoordinatorApi:
     """The coordinator's JSON routes. Writes carry the node signature that api.auth.node checks."""
 
     def __init__(self, url: str, key: bytes):
-        self.url, self.account = url.rstrip("/"), Account.from_key(key)
+        self.url, self.key = url.rstrip("/"), key
 
     def get_json(self, path: str) -> dict | None:
         try:
@@ -36,15 +35,7 @@ class CoordinatorApi:
             raise
 
     def post_signed(self, path: str, body: dict) -> dict:
-        data = json.dumps(body).encode()
-        ts = int(time.time())
-        msg = f"POST\n{path}\n{ts}\n{hashlib.sha256(data).hexdigest()}"
-        sig = self.account.sign_message(encode_defunct(text=msg)).signature
-        req = urllib.request.Request(self.url + path, data=data, method="POST", headers={
-            "Content-Type": "application/json", "X-Operator": self.account.address, "X-Timestamp": str(ts),
-            "X-Signature": "0x" + sig.hex().removeprefix("0x")})
-        with urllib.request.urlopen(req, timeout=30) as r:
-            return json.loads(r.read())
+        return node_post(self.url, self.key, path, body)
 
 
 def val_rows(spec: dict, n_rows: int) -> np.ndarray:
