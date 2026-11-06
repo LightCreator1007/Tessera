@@ -5,6 +5,7 @@ import socket
 import subprocess
 import sys
 import time
+from decimal import Decimal
 
 import pytest
 from web3 import Web3
@@ -52,11 +53,12 @@ def chain(tmp_path_factory):
 
 
 class Actor:
-    def __init__(self, chain, label: str, usdc: float = 0):
+    def __init__(self, chain, label: str, units: int = 0):
         l, out, rpc, tmp = chain
         self.key = dev_key(label)
         self.address = LocalSigner(self.key).address
-        script("fund.py", self.address, "--usdc", str(usdc), "--journal-dir", str(tmp / "faucet"), rpc=rpc, net=str(out))
+        # fund.py takes TOD with six decimals and defaults to 1000, so always pass the exact amount.
+        script("fund.py", self.address, "--tokens", str(Decimal(units).scaleb(-6)), "--journal-dir", str(tmp / "faucet"), rpc=rpc, net=str(out))
         self.l = l.using(TxManager(l.w3, LocalSigner(self.key), tmp / "actors", poll_seconds=0.02))
 
 
@@ -66,7 +68,7 @@ def open_round(chain, tag: str, nodes: int = 3):
     stake = l.market.minStake(BUDGET, ROUNDS, 3)
     ops = []
     for i in range(nodes):
-        owner, op = Actor(chain, f"owner/{tag}/{i}", usdc=stake / 1e6), Actor(chain, f"op/{tag}/{i}")
+        owner, op = Actor(chain, f"owner/{tag}/{i}", units=stake), Actor(chain, f"op/{tag}/{i}")
         deadline = l.head()[1] + 1800
         nullifier = h(f"human/{tag}/{i}")
         invite = enc.sign(dev_key("admitter"), "Invite", l.net.chain_id, l.net.registry,
@@ -77,7 +79,7 @@ def open_round(chain, tag: str, nodes: int = 3):
         owner.l.token.approve(l.net.registry, stake)
         owner.l.registry.depositStake(op.address, stake)
         ops.append(op)
-    requester = Actor(chain, f"requester/{tag}", usdc=BUDGET / 1e6)
+    requester = Actor(chain, f"requester/{tag}", units=BUDGET)
     requester.l.token.approve(l.net.market, BUDGET)
     requester.l.market.createJob({
         "budget": BUDGET, "stakePerNode": stake, "rounds": ROUNDS, "segments": K, "minQuorum": 3, "maxPerRound": 6,
