@@ -232,7 +232,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle?: () =>
         ) : (
           <Link href="/" aria-label="Tessera home" className={cx(ROW, "min-w-0 flex-1 rounded-md")}>
             <Slot><BrandMark className="-m-0.5 size-6 p-1" /></Slot>
-            <Label className="font-medium text-ink">Tessera</Label>
+            <Label className="text-lg font-semibold tracking-tight text-ink">Tessera</Label>
           </Link>
         )}
         {onToggle && (
@@ -349,19 +349,18 @@ export const chainName = (id: number | undefined) => (id === undefined ? "Base S
 
 function StatusLine() {
   const h = useHealth();
-  const state = h.isPending ? "checking" : h.isError || !h.data.data.ok ? "down" : isDemo ? "demo" : "up";
+  const state = h.isPending ? "checking" : h.isError || !h.data.data.ok ? "down" : "up";
   const block = h.data?.data.block ?? null;
   // The chain comes from the coordinator; a local stack runs on Anvil, not Base Sepolia.
   const net = chainName(h.data?.data.chainId);
-  const dot = { checking: "bg-subtle", down: "bg-danger", demo: "bg-demo", up: "bg-ok" }[state];
-  const title = { checking: "Checking the coordinator", down: "Coordinator unreachable. Chain history is still readable.", demo: "No coordinator URL is set, so the app shows demo data", up: "Coordinator live" }[state];
+  const dot = { checking: "bg-subtle", down: "bg-danger", up: "bg-ok" }[state];
+  const title = { checking: "Checking the coordinator", down: "Coordinator unreachable. Chain history is still readable.", up: "Coordinator live" }[state];
   return (
-    <Tip label={state === "demo" ? `${net}, demo data` : state === "down" ? "Coordinator offline" : net}>
+    <Tip label={state === "down" ? "Coordinator offline" : net}>
       <p title={title} className={cx(ROW, "h-6 font-mono text-xs text-subtle")}>
         <Slot><span className={cx("size-1.5 rounded-full", dot)} aria-hidden /></Slot>
         <Label>
           <span className="truncate">{net}{block !== null && <> · #<Flap text={block.toLocaleString("en-US")} /></>}</span>
-          {state === "demo" && <span className="ml-auto shrink-0 text-demo">demo</span>}
           {state === "down" && <span className="ml-auto shrink-0 text-danger">offline</span>}
         </Label>
         <span className="sr-only">{title}</span>
@@ -395,6 +394,7 @@ function ConnectedWalletRow({ address }: { address: string }) {
     <div className="border-t border-rule pt-2">
       <Popover
         width="w-menu"
+        side="top"
         trigger={({ open, toggle, ref }) => (
           <Tip label={short(address)} hint={w.wrongNetwork ? "wrong network" : `${formatToken(w.usdc)} ${TOKEN_SYMBOL}`}>
             <button ref={ref} type="button" onClick={toggle} aria-expanded={open} aria-label={`Wallet ${short(address)}`} className={cx(ROW, "h-10 rounded-md text-left", HOVER)}>

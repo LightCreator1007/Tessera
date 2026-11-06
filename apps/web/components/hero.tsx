@@ -48,9 +48,7 @@ export function HeroBanner({ round, job, status, nodes, curve, total, dismissibl
       <h2 className="max-w-xl text-xl font-medium tracking-tight sm:text-2xl">
         <span className="text-brand-cream">train on idle laptops.</span>
         <br />
-        <span className="text-px-coral">pay for </span>
-        <span className="text-px-amber">verified </span>
-        <span className="text-px-lime">work.</span>
+        <span className="text-mosaic">pay for verified work.</span>
       </h2>
       <dl className="flex flex-col gap-0.5 font-mono text-sm uppercase tracking-widest text-brand-cream/80">
         <div className="flex gap-2"><dt className="sr-only">Job</dt><dd>job {pad(job)} / round {pad(round)}{total ? ` of ${total}` : ""}</dd></div>
@@ -88,7 +86,7 @@ export function HeroBanner({ round, job, status, nodes, curve, total, dismissibl
           {copy}
           {actions}
         </div>
-        <p className="absolute bottom-3 right-4 hidden font-mono text-xs uppercase tracking-wider text-brand-cream/45 md:block">live loss, job {pad(job)} · breaks are rounds with no metric</p>
+        <p className="absolute bottom-3 right-4 hidden bg-brand-ink px-1.5 py-0.5 font-mono text-xs uppercase tracking-wider text-brand-cream/60 md:block">live loss, job {pad(job)} · breaks are rounds with no metric</p>
       </section>
     );
   }

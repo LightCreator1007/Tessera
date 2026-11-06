@@ -1,20 +1,20 @@
 "use client";
-// Full-bleed hero field: rows of protocol words whose tiles draw the live job's loss curve across the card. The curve is the real series (warm bands for high loss, lime for low), rounds with no metric break it, the newest point glows cream. Deterministic: no random tone picks.
+// Full-bleed hero field: rows of protocol words whose tiles draw the live job's loss curve across the card. One hue, brand red: high loss sits in the deep reds and the curve brightens as loss falls, rounds with no metric break it, the newest point glows cream. Deterministic: no random tone picks.
 import { useMemo } from "react";
 import { cx } from "./primitives";
 
 const WORDS = ["SHARD", "COMMIT", "REVEAL", "REPLAY", "SEED", "STAKE", "VERIFY", "PAY", "ROUND", "LOSS", "GRAD", "NODE", "IDLE", "HASH", "BLOB", "EPOCH", "WEIGHTS", "ATTEST", "FINAL", "SLASH"];
 
-type Tone = "void" | "off" | "coral" | "coral-dim" | "amber" | "amber-dim" | "lime" | "lime-dim" | "gap" | "head";
+type Tone = "void" | "off" | "deep" | "deep-dim" | "mid" | "mid-dim" | "bright" | "bright-dim" | "gap" | "head";
 const TONE: Record<Tone, string> = {
   void: "text-px-off",
   off: "bg-px-off text-px-frame-dim",
-  coral: "bg-px-coral text-brand-ink",
-  "coral-dim": "bg-px-coral-dim text-px-coral",
-  amber: "bg-px-amber text-brand-ink",
-  "amber-dim": "bg-px-amber-dim text-px-amber",
-  lime: "bg-px-lime text-brand-ink",
-  "lime-dim": "bg-px-lime-dim text-px-lime",
+  deep: "bg-red-3 text-brand-cream",
+  "deep-dim": "bg-red-1 text-red-3",
+  mid: "bg-red-4 text-brand-cream",
+  "mid-dim": "bg-red-1 text-red-4",
+  bright: "bg-red-5 text-brand-ink",
+  "bright-dim": "bg-red-2 text-red-5",
   gap: "text-px-frame-dim line-through",
   head: "bg-brand-cream text-brand-ink tile-flicker",
 };
@@ -53,7 +53,7 @@ export function HeroField({ curve, rows = 22, cols = 150, start = 0.38, classNam
             const u = (x - start) / (1 - start);
             const band = 0.06 + 0.06 * (1 - u);
             const f = Math.abs(y - cy) / band;
-            const hue = cy < 0.4 ? "coral" : cy < 0.62 ? "amber" : "lime";
+            const hue = cy < 0.4 ? "deep" : cy < 0.62 ? "mid" : "bright";
             if (u > 0.93 && f < 0.7) tone = "head";
             else if (f < 0.55) tone = hue;
             else if (y > cy && f < 1.4) tone = `${hue}-dim` as Tone;
