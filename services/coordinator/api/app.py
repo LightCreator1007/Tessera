@@ -23,8 +23,9 @@ from tod_core.finalize import message
 from . import admin, auth, blobs, config, nodes, persist
 from .draft import build as build_draft
 from .models import (OwnerHistory, Collected, Config, Dispute, DisputeIn, Draft, DraftRequest, Evidence, Health, Job, JobState,
-                     ModelRecord, Payout, Published, Round, RoundSummary, Selftest, SettlementOut, SignatureIn, Workload)
-from .tables import DISPUTES, EVIDENCE, JOBS, MODELS, ROUNDS, SELFTESTS, SETTLEMENTS, SPECS, STATES, WORKLOADS
+                     ModelRecord, Payout, ProviderCompute, Published, Round, RoundSummary, Selftest, SettlementOut,
+                     SignatureIn, Workload)
+from .tables import DISPUTES, EVIDENCE, JOBS, MODELS, PROVIDERS, ROUNDS, SELFTESTS, SETTLEMENTS, SPECS, STATES, WORKLOADS
 
 if config.COORDINATOR_KEY is None:
     raise RuntimeError("COORDINATOR_PRIVATE_KEY is required on any chain other than the local one")
@@ -116,6 +117,12 @@ def jobs():
 @v1.get("/jobs/{job}", response_model=Job)
 def job(job: int):
     return _with_published(_found(JOBS, job, "job"))
+
+
+@v1.get("/providers/{owner}/compute", response_model=ProviderCompute)
+def provider_compute(owner: str):
+    """How much verified training an owner has done: exact, where NodeRegistry.verifiedWorkSeconds rounds each round up."""
+    return PROVIDERS.get(owner.lower()) or ProviderCompute(owner=owner, rounds=0, ops=0)
 
 
 _models_cache: dict = {"at": 0.0, "rows": []}

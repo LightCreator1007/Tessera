@@ -44,7 +44,7 @@ class Selftest(BaseModel):
 class DraftRequest(BaseModel):
     workload: str
     datasetHash: Hex32
-    budget: int  # token units
+    budget: int | None = None  # token units; the spec sets the price, so leave it out. Any other number is refused
     epochs: int
     minQuorum: int = 3
     maxPerRound: int = 6
@@ -56,8 +56,17 @@ class Draft(BaseModel):
     modelSpecHash: Hex32
     initialWeightsHash: Hex32
     windows: dict
+    budget: int  # token units, what createJobCalldata asks for: 1 TOD pays for 1 Gop
+    computeOps: int  # the float ops that budget buys: rounds x minQuorum x ops per node per round
     minStake: int
     createJobCalldata: str
+
+
+class ProviderCompute(BaseModel):
+    owner: Address
+    rounds: int  # accepted rounds this owner was credited for
+    ops: int  # float ops those rounds ran, each replayed by the verifiers. 10**9 ops is 1 Gop
+    trust: Trust = "chain"
 
 
 class Job(BaseModel):

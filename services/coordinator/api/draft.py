@@ -15,7 +15,7 @@ from tod_core.encodings import shard_table_hash
 from tod_core.evidence import canonical
 from tod_datasets.canonical import split
 from tod_datasets.schema import DatasetCard
-from tod_workloads import base  # importing the package registers the workloads
+from tod_workloads import base, compute  # importing the package registers the workloads
 
 from .models import Draft, DraftRequest
 
@@ -34,7 +34,7 @@ CREATE_JOB = f"createJob({PARAMS_T},uint256)"  # test_draft checks this against 
 WINDOW_KEYS = ("commit", "reveal", "verify", "finalize", "stall")
 DEFAULT_WINDOW = 45  # s, the floor for the commit and verify windows
 # A requester may tune these; workload, replay class and data stay fixed by the checks in build().
-TUNABLE = {"train", "outer", "gate", "windows", "aggregate", "model", "refWorkSecondsPerRound"}
+TUNABLE = {"train", "outer", "gate", "windows", "aggregate", "model"}
 
 
 def min_stake(budget: int, rounds: int, quorum: int) -> int:
@@ -72,8 +72,8 @@ def build(req: DraftRequest, store) -> Draft:
         raise HTTPException(501, f"only {DRAFTABLE} can be drafted until the tolerance bands are calibrated")
     if req.datasetHash not in CARDS:
         raise HTTPException(422, "unknown dataset: only the preset datasets are available")
-    if not (req.budget > 0 and req.epochs >= 1 and 1 <= req.minQuorum <= req.maxPerRound <= 32):
-        raise HTTPException(422, "need budget > 0, epochs >= 1 and 1 <= minQuorum <= maxPerRound <= 32")
+    if not (req.epochs >= 1 and 1 <= req.minQuorum <= req.maxPerRound <= 32):
+        raise HTTPException(422, "need epochs >= 1 and 1 <= minQuorum <= maxPerRound <= 32")
     raw_card = CARDS[req.datasetHash]
     card = DatasetCard(**{**raw_card, "x_shape": tuple(raw_card["x_shape"])})
 
@@ -110,12 +110,13 @@ def build(req: DraftRequest, store) -> Draft:
     if not wl.fits(card):
         raise HTTPException(422, f"{req.workload} does not fit this dataset")
 
-    ref = _dry_run(wl, spec)
-    if "refWorkSecondsPerRound" not in req.overrides:
-        spec["refWorkSecondsPerRound"] = ref
+    measured = _dry_run(wl, spec)
+    spec["refWorkSecondsPerRound"] = compute.ref_work(spec)
     if "windows" not in req.overrides:
-        # Verifiers replay the whole round, so commit and verify get three times the measured work.
-        spec["windows"].update(commit=max(DEFAULT_WINDOW, 3 * ref), verify=max(DEFAULT_WINDOW, 3 * ref))
+        # Verifiers replay the whole round, so commit and verify get three times the measured work. The contract
+        # also wants refWork <= commit, and refWork counts Gops, not this machine's seconds.
+        spec["windows"].update(commit=max(DEFAULT_WINDOW, 3 * measured, spec["refWorkSecondsPerRound"]),
+                               verify=max(DEFAULT_WINDOW, 3 * measured))
     try:
         jsonschema.validate(spec, SCHEMA)
     except jsonschema.ValidationError as e:
@@ -125,15 +126,22 @@ def build(req: DraftRequest, store) -> Draft:
         raise HTTPException(422, "refWorkSecondsPerRound must not exceed windows.commit")
     # Count rounds at the smallest quorum: fewer nodes per round means more rounds to cover the epochs.
     rounds = base.rounds_for_epochs(train["epochs"], sum(s["len"] for s in shards), req.minQuorum, train["H"], train["B"])
-    if len(shards) < req.minQuorum or req.budget < rounds:
-        raise HTTPException(422, "need at least minQuorum shards and a budget of at least one unit per round")
-    stake = min_stake(req.budget, rounds, req.minQuorum)
+    if len(shards) < req.minQuorum:
+        raise HTTPException(422, "need at least minQuorum shards")
+    # Priced at minQuorum: with more nodes in a round each is paid less, so a TOD still buys at least a Gop.
+    budget = compute.job_budget(spec, rounds, req.minQuorum)
+    if budget < rounds:
+        raise HTTPException(422, f"this job prices at {budget} base units, which can't pay for {rounds} rounds")
+    if req.budget not in (None, budget):
+        raise HTTPException(422, f"this job costs {budget} base units, because 1 TOD pays for 1 Gop. "
+                                 "Leave budget out to use that price.")
+    stake = min_stake(budget, rounds, req.minQuorum)
 
     spec_bytes = canonical(spec)
     spec_hash = keccak(spec_bytes)
     spec_blob = store.put(spec_bytes)
     weights_hash = store.put(to_blob(spec_hash, wl.init(int.from_bytes(spec_hash[:8], "big"))))
-    params = (req.budget, stake, rounds, train["K"], req.minQuorum, req.maxPerRound, len(shards), True, 0,
+    params = (budget, stake, rounds, train["K"], req.minQuorum, req.maxPerRound, len(shards), True, 0,
               spec["refWorkSecondsPerRound"], tuple(windows[k] for k in WINDOW_KEYS),
               keccak(text=req.workload), spec_hash, bytes.fromhex(card.hash[2:]), shard_table_hash(shards),
               bytes.fromhex(weights_hash[2:]), ZERO32, bytes.fromhex(spec["code"]["hash"][2:]),
@@ -141,4 +149,5 @@ def build(req: DraftRequest, store) -> Draft:
     # fromBalance is 0: the draft request has no field for paying from earnings yet.
     calldata = keccak(text=CREATE_JOB)[:4] + encode([PARAMS_T, "uint256"], [params, 0])
     return Draft(spec=spec, modelSpecHash="0x" + spec_hash.hex(), initialWeightsHash=weights_hash, windows=windows,
+                 budget=budget, computeOps=rounds * req.minQuorum * compute.round_ops(spec),
                  minStake=stake, createJobCalldata="0x" + calldata.hex())

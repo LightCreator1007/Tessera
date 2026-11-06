@@ -10,11 +10,12 @@ from tod_core.blob import from_blob, k256
 from tod_core.ledger import ChainState, JobStatus, Kind, Phase, Reverted, RoundStatus
 from tod_core.settle import KIND_NAMES, needs_weights, settle
 from tod_datasets.canonical import split
+from tod_workloads import compute
 
 import scheduler
 from api import config, nodes, tables
 from api.draft import mlp
-from api.models import Evidence, EvidenceRef, Job, JobState, Payout, Round, RoundState, Seat, Waiting
+from api.models import Evidence, EvidenceRef, Job, JobState, Payout, ProviderCompute, Round, RoundState, Seat, Waiting
 from identity import router as identity
 
 log = logging.getLogger(__name__)
@@ -126,6 +127,16 @@ class Driver:
                         _loss(job, rnd, doc, None)
             if r["status"] in (RoundStatus.SETTLED, RoundStatus.REVERTED):
                 self.publish_evidence(job, rnd, r)
+        for owner, credited in self.state.work.items():
+            tables.PROVIDERS[owner.lower()] = ProviderCompute(owner=owner, rounds=len(credited),
+                                                              ops=sum(self.round_ops(job) for job, _ in credited))
+
+    def round_ops(self, job: int) -> int:
+        try:
+            spec = self.spec(job)
+            return compute.round_ops(spec) if spec else 0
+        except (KeyError, ValueError):
+            return 0  # ponytail: a job we can't count adds nothing here, and a bad spec must not stop the driver
 
     def publish_evidence(self, job: int, rnd: int, r: dict):
         """After finalize, open the round's evidence and weights to everyone, and rebuild its evidence entry from

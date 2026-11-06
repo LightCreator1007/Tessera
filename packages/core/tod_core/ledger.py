@@ -238,8 +238,8 @@ class Ledger:
 class ChainState:
     """Jobs, rounds and the node pool from events, with the same field names as the Solidity structs.
 
-    `jobs[id]`, `rounds[(job, round)]` (with `nodes`, `shards`, `nodeRounds[op]`), `nodes[op]`. Call `sync` once on
-    restart, then again to tail new blocks.
+    `jobs[id]`, `rounds[(job, round)]` (with `nodes`, `shards`, `nodeRounds[op]`), `nodes[op]`, and `work[owner]`, the
+    (job, round) of each round the owner was credited for. Call `sync` once on restart, then again to tail new blocks.
     ponytail: applies blocks at `latest` and never unwinds, so a reorg needs a fresh rebuild.
     """
 
@@ -247,6 +247,7 @@ class ChainState:
         self.jobs: dict[int, dict] = {}
         self.rounds: dict[tuple[int, int], dict] = {}
         self.nodes: dict[str, dict] = {}
+        self.work: dict[str, list[tuple[int, int]]] = {}
         self.last_block: int | None = None
 
     def sync(self, ledger: Ledger) -> "ChainState":
@@ -340,3 +341,5 @@ class ChainState:
                 self.jobs[a["jobId"]]["remaining"] += r["budget"]
             case "JobClosed":
                 self.jobs[a["jobId"]].update(status=JobStatus(a["status"]), remaining=0)
+            case "WorkCredited":
+                self.work.setdefault(a["owner"], []).append(key)

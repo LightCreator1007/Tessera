@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from api import app as A, tables as T
 from api.export import render
-from api.models import Job, Round, Workload
+from api.models import Job, ProviderCompute, Round, Workload
 
 c = TestClient(A.app)
 H = "0x" + "11" * 32
@@ -46,6 +46,12 @@ def test_job_routes_return_their_shapes(monkeypatch):
     assert c.get("/v1/workloads/mlp-exact/1").json()["replayClass"] == "exact"
 
 
+def test_provider_compute_is_zero_until_work_is_credited(monkeypatch):
+    assert c.get(f"/v1/providers/{OP}/compute").json() == {"owner": OP, "rounds": 0, "ops": 0, "trust": "chain"}
+    monkeypatch.setitem(T.PROVIDERS, OP, ProviderCompute(owner=OP, rounds=2, ops=10_570_094_400))
+    assert c.get(f"/v1/providers/{OP.upper().replace('0X', '0x')}/compute").json()["ops"] == 10_570_094_400
+
+
 # The routes clients are built against; the exported schema must keep every one.
 ROUTES = """
 GET /v1/health                                  GET /v1/config
@@ -62,7 +68,7 @@ POST /v1/nodes/heartbeat                        GET /v1/nodes
 GET /v1/pool                                    POST /v1/admin/jobs/{job}/mode
 POST /v1/admin/jobs/{job}/pause                 POST /v1/admin/nodes/{op}/rearm
 GET /v1/admin/txs                               GET /v1/models
-POST /v1/admin/jobs/{job}/publish
+POST /v1/admin/jobs/{job}/publish               GET /v1/providers/{owner}/compute
 """
 
 

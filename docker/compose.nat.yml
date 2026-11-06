@@ -41,6 +41,10 @@ services:
     <<: *router
     networks: {wan: {ipv4_address: 10.10.0.23}, lan-c: {ipv4_address: 192.168.23.254}}
     command: sh -c "apk add -q iptables && iptables -t nat -A POSTROUTING -s 192.168.23.0/24 ! -d 192.168.23.0/24 -j MASQUERADE && exec sleep infinity"
+  nat-d:
+    <<: *router
+    networks: {wan: {ipv4_address: 10.10.0.24}, lan-d: {ipv4_address: 192.168.24.254}}
+    command: sh -c "apk add -q iptables && iptables -t nat -A POSTROUTING -s 192.168.24.0/24 ! -d 192.168.24.0/24 -j MASQUERADE && exec sleep infinity"
 
   host-a:
     <<: *host
@@ -57,6 +61,11 @@ services:
     networks: {lan-c: {ipv4_address: 192.168.23.10}}
     command: sh -c "ip route replace default via 192.168.23.254 && exec sleep infinity"
     depends_on: {nat-c: {condition: service_healthy}}
+  host-d:
+    <<: *host
+    networks: {lan-d: {ipv4_address: 192.168.24.10}}
+    command: sh -c "ip route replace default via 192.168.24.254 && exec sleep infinity"
+    depends_on: {nat-d: {condition: service_healthy}}
 
   node-0:
     network_mode: service:host-a
@@ -70,6 +79,10 @@ services:
     network_mode: service:host-c
     environment: {<<: *nodeenv, TOD_DATA: /dev-data/node2}
     depends_on: {seed: {condition: service_completed_successfully}, host-c: {condition: service_healthy}}
+  node-3:
+    network_mode: service:host-d
+    environment: {<<: *nodeenv, TOD_DATA: /dev-data/node3}
+    depends_on: {seed: {condition: service_completed_successfully}, host-d: {condition: service_healthy}}
 
 networks:
   wan: {ipam: {config: [{subnet: 10.10.0.0/24}]}}
@@ -77,3 +90,4 @@ networks:
   lan-a: {internal: true, ipam: {config: [{subnet: 192.168.21.0/24}]}}
   lan-b: {internal: true, ipam: {config: [{subnet: 192.168.22.0/24}]}}
   lan-c: {internal: true, ipam: {config: [{subnet: 192.168.23.0/24}]}}
+  lan-d: {internal: true, ipam: {config: [{subnet: 192.168.24.0/24}]}}

@@ -1,5 +1,5 @@
 """In-memory state behind the read routes, filled by the scheduler and the round driver."""
-from .models import Evidence, Job, JobState, Round, Selftest, Workload
+from .models import Evidence, Job, JobState, ProviderCompute, Round, Selftest, Workload
 
 # In memory. The driver rebuilds the chain-derived ones every tick; api.persist keeps CONTROL and REARMED in SQLite.
 WORKLOADS: dict[str, Workload] = {}
@@ -10,6 +10,7 @@ STATES: dict[int, JobState] = {}
 ROUNDS: dict[int, dict[int, Round]] = {}  # job -> round id on chain (from 1) -> round
 EVIDENCE: dict[tuple[int, int], Evidence] = {}
 MODELS: dict[int, str] = {}  # job -> latest aggregate hash
+PROVIDERS: dict[str, ProviderCompute] = {}  # lowercase owner -> verified work, from WorkCredited events and specs
 CONTROL: dict[int, dict] = {}  # job -> {auto, paused}, read by the round driver
 DISPUTES: list[dict] = []  # open {job, round, verifier, operator, segments, deadline}; a verifier reopens after a restart
 SEATING: dict[tuple[int, int], set[str]] = {}  # (job, round) -> lowercase operators, set just before openRound

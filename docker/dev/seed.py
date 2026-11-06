@@ -19,8 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 DATA = Path(os.environ.get("DEV_DATA", "/dev-data"))
 NET_FILE = os.environ["TOD_NETWORK"]
 COORD = os.environ.get("TOD_COORDINATOR", "http://127.0.0.1:8000")
-NODES = int(os.environ.get("DEV_NODES", "3"))
-BUDGET = 30_000_000  # 30 TOD
+NODES = int(os.environ.get("DEV_NODES", "4"))
 
 l = Ledger(Network.load(NET_FILE))
 if l.net.chain_id != ANVIL_CHAIN_ID:
@@ -46,10 +45,10 @@ def node_cli(i, *args):
 if not any(e.name == "JobCreated" for e in l.events()):
     mnist = json.loads((ROOT / "vectors/kernel/presets.json").read_text())["mnist"]["card"]["hash"]
     # One under the node count: node-0 cheats and loses its stake, and the honest nodes must still fill later rounds.
-    draft = http("/v1/jobs/draft", {"workload": "mlp-exact/1", "datasetHash": mnist, "budget": BUDGET, "epochs": 1,
+    draft = http("/v1/jobs/draft", {"workload": "mlp-exact/1", "datasetHash": mnist, "epochs": 1,
                                     "minQuorum": max(1, NODES - 1), "maxPerRound": NODES})
-    requester = Actor(l, NET_FILE, DATA, "requester/dev", units=BUDGET)
-    requester.l.token.approve(l.net.market, BUDGET)
+    requester = Actor(l, NET_FILE, DATA, "requester/dev", units=draft["budget"])
+    requester.l.token.approve(l.net.market, draft["budget"])
     requester.l.sender.transact(l.net.market, draft["createJobCalldata"])
 state = l.rebuild()
 job = max(state.jobs)
