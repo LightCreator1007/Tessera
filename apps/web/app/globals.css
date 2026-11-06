@@ -111,6 +111,12 @@
 @theme inline {
   --color-mosaic: var(--mz-vermilion);
   --color-bone: var(--mz-bone);
+  /* The red ramp as utilities, darkest to brightest, for art that stays on brand red instead of the state hues. */
+  --color-red-1: var(--mz-l1);
+  --color-red-2: var(--mz-l2);
+  --color-red-3: var(--mz-l3);
+  --color-red-4: var(--mz-l4);
+  --color-red-5: var(--mz-l5);
   --color-surface: var(--surface);
   --color-sunken: var(--surface-sunken);
   --color-raised: var(--surface-raised);
@@ -212,6 +218,8 @@
 
 @layer base {
   html {
+    /* 110% root: every rem in the type, spacing and layout tokens scales with it, so the whole UI reads one step larger. */
+    font-size: 110%;
     background: var(--surface-sunken);
     color: var(--ink);
     font-family: var(--font-sans);
@@ -294,6 +302,61 @@
   animation: pop-in 150ms var(--ease-out);
   transform-origin: top left;
 }
+/* Live progress: a soft cream sheen runs across the filling segment so a waiting phase still reads as moving. Transform only. */
+@keyframes sheen {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+@utility progress-sheen {
+  overflow: hidden;
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: 40%;
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--mz-l7) 45%, transparent), transparent);
+    animation: sheen 1.8s var(--ease-in-out) infinite;
+  }
+}
+/* Charts: the line draws itself once on first paint (paths carry pathLength=1), the area fades in under it, and the
+   newest point pings. Later data updates change `d` without replaying the draw. */
+@keyframes chart-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+@utility chart-draw {
+  stroke-dasharray: 1;
+  animation: chart-draw 900ms var(--ease-drawer) both;
+}
+@utility chart-fade {
+  animation: fade-in 600ms var(--ease-out) 300ms both;
+}
+@keyframes chart-ping {
+  0% { transform: scale(1); opacity: 0.9; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+@utility chart-ping {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: chart-ping 1.8s var(--ease-out) infinite;
+}
+/* The live station on the rail: a ring that breathes outward. */
+@keyframes station-ring {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--mz-vermilion) 55%, transparent); }
+  100% { box-shadow: 0 0 0 7px transparent; }
+}
+@utility station-ring {
+  animation: station-ring 1.6s var(--ease-out) infinite;
+}
+/* Same pop, anchored to the bottom edge, for menus that open above their trigger. */
+@keyframes pop-up {
+  from { opacity: 0; transform: translateY(2px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@utility animate-pop-up {
+  animation: pop-up 150ms var(--ease-out);
+  transform-origin: bottom left;
+}
 
 /* Grain: the banner texture. Noise is an inline SVG turbulence; a vignette sinks the left edge so copy reads. */
 @utility grain {
@@ -330,6 +393,8 @@
 @utility grid-label { grid-template-columns: 8rem 1fr; }
 @utility grid-label-lg { grid-template-columns: 10rem 1fr; }
 @utility grid-split { grid-template-columns: 3fr 2fr; }
+/* Network strip: the lead figure gets the widest column, the money line next, the two counts share the rest. */
+@utility grid-stats { grid-template-columns: 1.5fr 1.2fr 1fr 1fr; }
 @utility w-sidebar { width: 15.625rem; }
 @utility w-rail { width: 3.875rem; }
 @utility w-popover { width: 14rem; }
@@ -573,4 +638,11 @@ details.more > summary::-webkit-details-marker { display: none; }
   width: 100%;
   height: 100%;
   font-family: var(--font-mono);
+}
+/* Orbitable iso scenes: a grab cursor says the space moves. Vertical touch swipes still scroll the page. */
+.mz-orbit {
+  cursor: grab;
+  touch-action: pan-y;
+  &[data-dragging] { cursor: grabbing; }
+  &:focus-visible { outline-offset: -2px; }
 }

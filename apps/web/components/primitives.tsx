@@ -543,10 +543,12 @@ export function Updated({ at, live }: { at: string; live?: boolean }) {
 }
 
 /** Popover anchored under its trigger. Closes on outside click and Escape; focus returns to the trigger. */
-export function Popover({ trigger, children, align = "start", width = "w-popover", className }: {
+export function Popover({ trigger, children, align = "start", side = "bottom", width = "w-popover", className }: {
   trigger: (p: { open: boolean; toggle: () => void; ref: React.Ref<HTMLButtonElement> }) => ReactNode;
   children: (close: () => void) => ReactNode;
   align?: "start" | "end";
+  /** "top" opens above the trigger, for triggers pinned to the bottom of a column where a menu below would push the page. */
+  side?: "bottom" | "top";
   width?: string;
   className?: string;
 }) {
@@ -566,7 +568,7 @@ export function Popover({ trigger, children, align = "start", width = "w-popover
     <div ref={box} className={cx("relative", className)}>
       {trigger({ open, toggle: () => setOpen((o) => !o), ref: btn })}
       {open && (
-        <div className={cx("absolute z-50 mt-1 animate-pop-in rounded-xl border border-rule bg-raised p-1 shadow-popover", width, align === "end" ? "right-0" : "left-0")}>
+        <div className={cx("absolute z-50 rounded-xl border border-rule bg-raised p-1 shadow-popover", side === "top" ? "bottom-full mb-1 animate-pop-up" : "mt-1 animate-pop-in", width, align === "end" ? "right-0" : "left-0")}>
           {children(close)}
         </div>
       )}
