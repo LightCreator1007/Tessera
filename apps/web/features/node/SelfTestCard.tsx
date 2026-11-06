@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { CircleAlert, CircleCheck, Loader2 } from "lucide-react";
 import { Button, PropRow, cx, TileBusy } from "@/components/primitives";
 import { More } from "@/components/flow";
+import { nodeUrl } from "@/lib/api/client";
 
 // Each poll runs the self-test on this machine, so retries are spaced out; the bridge shares a run already going.
-const LOCAL = "/api/node";
 const POLL_MS = 10_000;
 const GIVE_UP_MS = 120_000;
 
@@ -45,7 +45,7 @@ export function SelfTestCard({ onPassed, manual, simulated, poll = true }: { onP
     let stop = false;
     const tick = async () => {
       try {
-        const r = await fetch(`${LOCAL}/selftest`, { cache: "no-store" });
+        const r = await fetch(nodeUrl("selftest"), { cache: "no-store" });
         if (r.ok && !stop) setRes(fromCli((await r.json()) as CliSelftest));
         else if (!stop && Date.now() - since > GIVE_UP_MS) setLate(true);
       } catch {

@@ -138,13 +138,18 @@ def pair(
 @app.command()
 def selftest(as_json: JsonOpt = False) -> None:
     """Check that this machine reproduces the mlp-exact self-test vector byte for byte."""
+    fields = selftest_fields()
+    emit(as_json, fields, f"{fields['workload']} on {fields['arch']}: {'ok' if fields['ok'] else 'MISMATCH'}")
+    if not fields["ok"]:
+        raise typer.Exit(NOT_ELIGIBLE)
+
+
+def selftest_fields() -> dict:
+    """The `selftest --json` object; GET /v1/selftest returns the same one."""
     vec = json.loads(SELFTEST_VECTOR.read_text())
     got = mlp_selftest()
-    ok = got == vec["hash"]
-    fields = {"arch": platform.machine(), "expected": vec["hash"], "got": got, "ok": ok, "workload": vec["workload"]}
-    emit(as_json, fields, f"{vec['workload']} on {fields['arch']}: {'ok' if ok else 'MISMATCH'}")
-    if not ok:
-        raise typer.Exit(NOT_ELIGIBLE)
+    return {"arch": platform.machine(), "expected": vec["hash"], "got": got, "ok": got == vec["hash"],
+            "workload": vec["workload"]}
 
 
 def pid_path() -> Path:
@@ -284,7 +289,14 @@ def _start_api(events, stop: threading.Event, loop=None):
     def status():
         return {**status_fields(), "owed": loop.owed if loop else None}
 
-    api = Api(status, events, api_stop, load_token(data_dir()))
+    result, lock = {}, threading.Lock()
+
+    def selftest():
+        with lock:  # run once; a page polling while the hash is computed waits for that run
+            result or result.update(selftest_fields())
+            return result
+
+    api = Api(status, events, api_stop, load_token(data_dir()), selftest)
     bind = os.environ.get("TOD_API_BIND", "127.0.0.1:7777")
     if bind == "off":
         return api, None

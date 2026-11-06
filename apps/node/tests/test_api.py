@@ -1,4 +1,4 @@
-"""The local API: host and origin checks, status, event long-poll, health staleness and the token on stop."""
+"""The local API: host and origin checks, the website's CORS, status, event long-poll, health staleness and the token on stop."""
 import http.client
 import json
 import socket
@@ -23,11 +23,25 @@ def node(tmp_path):
     server.shutdown()
 
 
-def call(port, method, path, host=None, headers=None):
+SITE = "https://tod.example"
+
+
+def call(port, method, path, host=None, headers=None, full=False):
     c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
     c.request(method, path, headers={"Host": host or f"127.0.0.1:{port}", **(headers or {})})
     r = c.getresponse()
-    return r.status, r.read().decode()
+    return (r.status, r.read().decode(), r.headers) if full else (r.status, r.read().decode())
+
+
+@pytest.fixture
+def site(tmp_path):
+    events = EventLog(tmp_path / "events.ndjson")
+    stopped = threading.Event()
+    api = Api(lambda: {"daemon": {"state": "running"}}, events, stopped.set, load_token(tmp_path),
+              selftest=lambda: {"ok": True, "workload": "mlp-exact/1"}, origins={SITE})
+    server = api.serve("127.0.0.1:0")
+    yield api, stopped, server.server_address[1]
+    server.shutdown()
 
 
 def test_token_file_is_private_and_stable(tmp_path):
@@ -105,3 +119,28 @@ def test_status_serves_the_reveals_the_running_loop_owes(tmp_path, monkeypatch):
     api, _ = _start_api(events, stop, SimpleNamespace(owed=owed))
     assert api.status()["owed"] == owed
     assert _start_api(events, stop)[0].status()["owed"] is None
+
+
+def test_the_named_website_can_read_from_the_browser(site):
+    api, stopped, port = site
+    o = {"Origin": SITE}
+    code, _, h = call(port, "OPTIONS", "/v1/status", headers={**o, "Access-Control-Request-Private-Network": "true"},
+                      full=True)
+    assert code == 204 and h["Access-Control-Allow-Origin"] == SITE and h["Access-Control-Allow-Private-Network"] == "true"
+    code, body, h = call(port, "GET", "/v1/status", headers=o, full=True)
+    assert code == 200 and h["Access-Control-Allow-Origin"] == SITE
+    assert call(port, "GET", "/v1/health", headers=o, full=True)[2]["Access-Control-Allow-Origin"] == SITE
+    assert json.loads(call(port, "GET", "/v1/selftest", headers=o)[1]) == {"ok": True, "workload": "mlp-exact/1"}
+    # Any other site is still refused, and the website still needs the token to stop the node.
+    assert call(port, "GET", "/v1/status", headers={"Origin": "https://evil.example"})[0] == 403
+    assert call(port, "OPTIONS", "/v1/status", headers={"Origin": "https://evil.example"})[0] == 403
+    assert call(port, "GET", "/v1/status", host="evil.example", headers=o)[0] == 421
+    assert call(port, "POST", "/v1/stop", headers=o)[0] == 401 and not stopped.is_set()
+    assert call(port, "POST", "/v1/stop", headers={**o, "Authorization": f"Bearer {api.token}"})[0] == 200
+
+
+def test_origins_come_from_the_environment(monkeypatch):
+    monkeypatch.setenv("TOD_WEB_ORIGINS", "https://a.example/, https://b.example")
+    assert api_mod.web_origins() == {"https://a.example", "https://b.example"}
+    monkeypatch.delenv("TOD_WEB_ORIGINS")
+    assert api_mod.web_origins() == set()

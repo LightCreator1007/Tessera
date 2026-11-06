@@ -2,7 +2,7 @@
 $image = if ($env:TOD_NODE_IMAGE) { $env:TOD_NODE_IMAGE } else { "ghcr.io/lightcreator1007/tod-node:latest" }
 $name = "tod-node"
 # A bare -e NAME passes the host value only if it is set, so RPC URLs never land in the image or docker inspect.
-$envs = @("-e", "TOD_NETWORK", "-e", "TOD_COORDINATOR", "-e", "BASE_SEPOLIA_RPC_URL", "-e", "ANVIL_RPC_URL", "-e", "NO_COLOR")
+$envs = @("-e", "TOD_NETWORK", "-e", "TOD_COORDINATOR", "-e", "TOD_WEB_ORIGINS", "-e", "BASE_SEPOLIA_RPC_URL", "-e", "ANVIL_RPC_URL", "-e", "NO_COLOR")
 # Same ceiling as docker/tod-node: a full MNIST round peaks near 300 MB on one core; no swap beyond the memory cap.
 $mem = if ($env:TOD_MEMORY) { $env:TOD_MEMORY } else { "2g" }
 $cpus = if ($env:TOD_CPUS) { $env:TOD_CPUS } else { "2" }
