@@ -1,6 +1,8 @@
 """Job drafts: the frozen spec, the stored blobs and the createJob calldata agree with each other and the contract."""
 import json
 import re
+import shutil
+import subprocess
 
 import jsonschema
 import pytest
@@ -11,6 +13,7 @@ from fastapi.testclient import TestClient
 from api import app as A, blobs, draft
 from tod_core.blob import from_blob
 from tod_core.encodings import shard_table_hash
+from tod_core.ledger import ABI_DIR
 
 c = TestClient(A.app)
 MNIST = next(h for h, card in draft.CARDS.items() if card["x_shape"] == [28, 28])
@@ -56,12 +59,21 @@ def test_draft_is_reproducible(monkeypatch):
     assert first == second
 
 
-def test_min_stake_and_create_job_match_the_contract():
+def test_min_stake_matches_the_contract():
     sol = (draft.ROOT / "contracts/src/JobMarket.sol").read_text()
     assert int(re.search(r"MIN_STAKE = (\d+)e6", sol).group(1)) * 10**6 == draft.MIN_STAKE
     assert draft.min_stake(1, 1, 1) == 15_000_000 and draft.min_stake(10**9, 10, 2) == 100_000_000
-    abi = json.loads((draft.ROOT / "packages/abi/json/IJobMarket.json").read_text())
-    fn = next(x for x in abi if x.get("name") == "createJob")
+
+
+def test_create_job_matches_the_generated_abi():
+    path = ABI_DIR / "IJobMarket.json"
+    if not path.exists():
+        # The ABI is generated, not committed; build it the way scripts/deploy.py does.
+        if not (shutil.which("forge") and shutil.which("node")):
+            pytest.skip("needs foundry and node to generate the ABI")
+        subprocess.run(["forge", "build"], cwd=draft.ROOT / "contracts", check=True, capture_output=True)
+        subprocess.run(["node", str(draft.ROOT / "packages/abi/scripts/generate.mjs")], check=True, capture_output=True)
+    fn = next(x for x in json.loads(path.read_text()) if x.get("name") == "createJob")
 
     def sig(i):
         return "(" + ",".join(sig(c) for c in i["components"]) + ")" if i["type"] == "tuple" else i["type"]
