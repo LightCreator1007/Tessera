@@ -27,6 +27,12 @@ export type Competition = {
   items?: number;
   /** Seconds the host has to reveal labels after the deadline, and entrants then have to reveal entries. */
   revealWindow?: number;
+  /** The contract's own stage, finer than status: who acts next (live only). */
+  stage?: string;
+  /** Who the prize went to, once settled (live only). */
+  settled?: { to: string; amount: number; refunded: boolean } | null;
+  /** Where this competition is listed on Arkiv, and its result once settled. */
+  arkiv?: { listing?: string; result?: string } | null;
 };
 
 export function labelBytes(seed: number) {

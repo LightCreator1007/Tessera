@@ -17,6 +17,7 @@ import history
 import publish
 from identity import router as identity
 from publish import chain as publish_chain
+from publish import listings as publish_listings
 from publish import shards as publish_shards
 from tod_core import encodings
 from tod_core.finalize import message
@@ -46,6 +47,9 @@ async def lifespan(_):
     if publish_shards.enabled():
         threading.Thread(target=publish_shards.worker, args=(publish.client(), publish.swarm_client(), SPECS, stop),
                          name="arkiv-shards", daemon=True).start()
+    if publish_listings.enabled() and competitions.enabled():
+        threading.Thread(target=publish_listings.worker, args=(publish.client(), competitions.listing, stop),
+                         name="arkiv-competitions", daemon=True).start()
     yield
     stop.set()
 
@@ -139,9 +143,22 @@ def competition_list():
     if not competitions.enabled():
         raise HTTPException(503, "this network has no Competitions contract")
     try:
-        return competitions.listing()
+        rows = competitions.listing()
     except Exception as e:
         raise HTTPException(502, f"chain read failed: {type(e).__name__}")
+    keys = publish_listings.keys() if publish_listings.enabled() else {}
+    return [{**c, "arkiv": keys.get(c["id"])} for c in rows]  # each competition's Arkiv listing and result, once made
+
+
+@v1.get("/competitions/listed")
+def competitions_on_arkiv():
+    """The competitions as Arkiv lists them, read from Arkiv rather than the chain or this coordinator's tables."""
+    if not publish_listings.enabled():
+        raise HTTPException(503, "Arkiv listings are off on this coordinator")
+    try:
+        return publish_listings.list_from_arkiv(publish.client())
+    except Exception as e:
+        raise HTTPException(502, f"Arkiv read failed: {type(e).__name__}")
 
 
 @v1.get("/competitions/{cid}")
