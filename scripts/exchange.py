@@ -65,6 +65,9 @@ def main() -> None:
         if desk.functions.tod().call().lower() != net.token.lower():
             raise SystemExit("Exchange TOD does not match the configured token. Nothing was sent.")
         usdc_address = desk.functions.usdc().call()
+        minimum_redemption = desk.functions.MIN_REDEEM().call()
+        if args.action == "swap" and args.asset == "tod" and amount < minimum_redemption:
+            raise SystemExit(f"Redemption requires at least {minimum_redemption} TOD base units (10 TOD). Nothing was sent.")
     if net.chain_id == 84532 and usdc_address.lower() != BASE_SEPOLIA_USDC.lower():
         raise SystemExit("Use Circle's verified Base Sepolia test-USDC address. Nothing was sent.")
     tod = w3.eth.contract(address=net.token, abi=TOKEN_ABI)
@@ -75,7 +78,8 @@ def main() -> None:
     if args.action == "status":
         result = {"chainId": net.chain_id, "exchange": args.exchange, "tod": net.token, "usdc": usdc_address,
                   "todInventory": tod.functions.balanceOf(args.exchange).call(),
-                  "usdcInventory": usdc.functions.balanceOf(args.exchange).call(), "demoQuote": "1 TOD : 1 test USDC"}
+                  "usdcInventory": usdc.functions.balanceOf(args.exchange).call(),
+                  "minimumRedemption": minimum_redemption, "demoQuote": "1 TOD : 1 test USDC"}
         if args.account:
             result.update(account=args.account, todBalance=tod.functions.balanceOf(args.account).call(),
                           usdcBalance=usdc.functions.balanceOf(args.account).call())
@@ -87,7 +91,8 @@ def main() -> None:
         if signer.address.lower() != net.roles["deployer"].lower():
             raise SystemExit("DEPLOYER_PRIVATE_KEY does not match the configured deployer. Nothing was sent.")
         to, data = None, creation(w3, "ToDTestExchange", net.token, usdc_address)[0]
-        detail = f"Deploy TEST-ONLY exchange for TOD {net.token} and USDC {usdc_address}; artificial 1:1 quote"
+        detail = (f"Deploy TEST-ONLY exchange for TOD {net.token} and USDC {usdc_address}; "
+                  "artificial 1:1 quote; minimum redemption 10 TOD")
     else:
         signer = signer_from_env("WALLET_PRIVATE_KEY", "faucet/user", net.chain_id)
         if args.account and args.account.lower() != signer.address.lower():
@@ -128,6 +133,8 @@ def main() -> None:
               "tod": net.token, "usdc": usdc_address, "txHash": Web3.to_hex(receipt["transactionHash"])}
     if args.action == "deploy":
         result["deployBlock"] = receipt["blockNumber"]
+        deployed = w3.eth.contract(address=result["exchange"], abi=artifact("ToDTestExchange")["abi"])
+        result["minimumRedemption"] = deployed.functions.MIN_REDEEM().call()
         if args.out:
             args.out.parent.mkdir(parents=True, exist_ok=True)
             args.out.write_text(json.dumps(result, indent=2) + "\n")

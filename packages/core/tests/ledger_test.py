@@ -374,7 +374,7 @@ def test_faucet_to_stake_settlement_claim_and_withdrawal(chain):
                          "--out", str(tmp / "exchange.json"), net=str(network), rpc=rpc)
     desk = json.loads(desk_result.stdout.splitlines()[-1])["exchange"]
     deployer.tm = TxManager(l.w3, deployer.signer, tmp / "quote-seed", poll_seconds=0.02)
-    deployer.tm.transact(usdc_address, usdc.encode_abi("mint", args=[deployer.address, 100_000_000]))
+    deployer.tm.transact(usdc_address, usdc.encode_abi("mint", args=[deployer.address, 20_000_000]))
 
     def exchange(actor, action, *flags, check=True):
         env = {k: v for k, v in os.environ.items() if not k.endswith("_PRIVATE_KEY")}
@@ -384,12 +384,14 @@ def test_faucet_to_stake_settlement_claim_and_withdrawal(chain):
              "--exchange", desk, "--journal-dir", str(tmp / "wallet-exchange"), *flags],
             check=check, capture_output=True, text=True, env=env)
 
-    exchange(deployer, "seed", "--asset", "usdc", "--amount", "100")
+    exchange(deployer, "seed", "--asset", "usdc", "--amount", "20")
     owner, op = pairs[1]
     pay = dict(payouts)[op.address]
     formatted_pay = str(Decimal(pay) / Decimal(1_000_000))
     owner_balance = l.token.balanceOf(owner.address)
     before_nonce = l.w3.eth.get_transaction_count(owner.address)
+    below_minimum = exchange(owner, "swap", "--amount", "9.999999", check=False)
+    assert below_minimum.returncode != 0 and "at least 10000000 TOD base units (10 TOD)" in below_minimum.stderr
     no_approval = exchange(owner, "swap", "--amount", formatted_pay, check=False)
     assert no_approval.returncode != 0 and "Approve the exact input" in no_approval.stderr
     assert l.w3.eth.get_transaction_count(owner.address) == before_nonce
@@ -397,12 +399,13 @@ def test_faucet_to_stake_settlement_claim_and_withdrawal(chain):
     before_nonce = l.w3.eth.get_transaction_count(owner.address)
     repeated_approval = exchange(owner, "approve", "--amount", formatted_pay, check=False)
     assert repeated_approval.returncode != 0 and "Clear the existing allowance" in repeated_approval.stderr
-    too_large = exchange(owner, "swap", "--amount", "100.000001", check=False)
+    too_large = exchange(owner, "swap", "--amount", "20.000001", check=False)
     assert too_large.returncode != 0 and "output inventory" in too_large.stderr
     expired = exchange(owner, "swap", "--amount", formatted_pay, "--deadline", "1", check=False)
     assert expired.returncode != 0 and "deadline has expired" in expired.stderr
     assert l.w3.eth.get_transaction_count(owner.address) == before_nonce
     assert l.token.balanceOf(owner.address) == owner_balance
+    assert l.token.allowance(owner.address, desk) == pay
     swapped = exchange(owner, "swap", "--amount", formatted_pay)
     receipt = l.w3.eth.get_transaction_receipt(json.loads(swapped.stdout.splitlines()[-1])["txHash"])
     assert receipt["status"] == 1
@@ -413,10 +416,12 @@ def test_faucet_to_stake_settlement_claim_and_withdrawal(chain):
     exchange(owner, "swap", "--asset", "usdc", "--amount", formatted_pay)
     assert l.token.balanceOf(owner.address) == owner_balance
     assert usdc.functions.balanceOf(owner.address).call() == 0
-    assert usdc.functions.balanceOf(desk).call() == 100_000_000
+    assert usdc.functions.balanceOf(desk).call() == 20_000_000
+    assert usdc.functions.totalSupply().call() == 20_000_000
     assert l.token.totalSupply() == supply
     status = exchange(owner, "status", "--account", owner.address)
     assert json.loads(status.stdout)["todBalance"] == owner_balance
+    assert json.loads(status.stdout)["minimumRedemption"] == 10_000_000
     print(f"Exchange {desk}: {formatted_pay} earned TOD converted to test USDC and back with exact balances.")
 
 

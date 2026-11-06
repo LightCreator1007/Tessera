@@ -6,6 +6,10 @@ This follow-up adds a test-only inventory exchange, separate from the TOD faucet
 
 To swap, a user approves only the exact input amount, then calls `swap(todToUsdc, amount, minOut, deadline)` from their own wallet. Both directions return the same number of base units. `amount` and `minOut` must be positive and `minOut <= amount`; an expired deadline reverts. The caller receives the output. A transaction either transfers both assets or reverts everything, including any input transfer. SafeERC20, a reentrancy guard and exact received-balance checks reject failed, fee-charging or unexpected transfers. Rebasing and taxed assets are unsupported.
 
+Each TOD → test-USDC redemption must be at least **10 TOD** (`MIN_REDEEM = 10000000` base units). The contract rejects 9.999999 TOD before moving tokens; exactly 10 TOD is accepted if approvals, balances and inventory permit it. This is a minimum per transaction, not a retained balance: a wallet with 10 TOD may redeem all 10. Test-USDC → TOD swaps accept any positive amount. The CLI status and deployment bundle expose `minimumRedemption` in base units, and the CLI refuses a smaller redemption before signing.
+
+The approved demo uses zero probation, with staking and slashing still implemented by the registry/market. The redemption floor changes neither earnings claims nor stake withdrawals, and does not introduce held earnings or a repeat-offender ban.
+
 Anyone can seed each reserve with the selected test assets. A swap fails before taking input when output inventory is insufficient. The TOD faucet holds its own bounded allocation and has no access to the exchange's reserves. Address farming can exhaust the test-USDC reserve by claiming faucet TOD and exchanging it; this is a disclosed test-budget limit, not an economically sustainable funding model. Do not seed real assets or present the reserves as backing all TOD in circulation.
 
 | Action | Caller and incentive | If nobody acts |
@@ -26,16 +30,16 @@ uv sync --locked --all-packages
 uv run pytest packages/core/tests/ledger_test.py::test_faucet_to_stake_settlement_claim_and_withdrawal -q -s
 ```
 
-The test starts and stops its own Anvil, deploys the real protocol contracts and faucet, and uses a local-only MockUSDC fixture as the exchange quote asset. It trains the shared MLP on a canonical synthetic two-class dataset, derives both verifier reports through independent replay, and commits the agreed model hash to settlement. After settlement and stake withdrawal, an honest owner converts only their earned TOD to test USDC and back. It checks exact balances, a real settlement receipt, consumed approvals, reserve exhaustion, expired swaps, unchanged token supply and refusal to broadcast invalid requests. A fixed-rate exchange needs no simulated AMM price or implicit slippage allowance.
+The test starts and stops its own Anvil, deploys the real protocol contracts and faucet, and uses a local-only MockUSDC fixture as the exchange quote asset, limited to **20 test USDC** total. It trains the shared MLP on a canonical synthetic two-class dataset, derives both verifier reports through independent replay, and commits the agreed model hash to settlement. After settlement and stake withdrawal, an honest owner converts only their earned TOD to test USDC and back, restoring the same reserve for another rehearsal. It checks exact balances, a real settlement receipt, consumed approvals, reserve exhaustion, expired swaps, unchanged token supply and refusal to broadcast invalid requests. A fixed-rate exchange needs no simulated AMM price or implicit slippage allowance.
 
 For an already deployed test desk, run these commands from the repository root with its public address and your private network TOML. `WALLET_PRIVATE_KEY` is supplied at runtime; `status` needs only a public `--account`:
 
 ```sh
 uv run python scripts/exchange.py status --network PRIVATE_NETWORK.toml --exchange DESK_ADDRESS --account WALLET_ADDRESS
-uv run python scripts/exchange.py approve --network PRIVATE_NETWORK.toml --exchange DESK_ADDRESS --asset tod --amount 1.000001
-uv run python scripts/exchange.py swap --network PRIVATE_NETWORK.toml --exchange DESK_ADDRESS --asset tod --amount 1.000001 --min-out 1.000001
-uv run python scripts/exchange.py approve --network PRIVATE_NETWORK.toml --exchange DESK_ADDRESS --asset usdc --amount 1.000001
-uv run python scripts/exchange.py swap --network PRIVATE_NETWORK.toml --exchange DESK_ADDRESS --asset usdc --amount 1.000001 --min-out 1.000001
+uv run python scripts/exchange.py approve --network PRIVATE_NETWORK.toml --exchange DESK_ADDRESS --asset tod --amount 10
+uv run python scripts/exchange.py swap --network PRIVATE_NETWORK.toml --exchange DESK_ADDRESS --asset tod --amount 10 --min-out 10
+uv run python scripts/exchange.py approve --network PRIVATE_NETWORK.toml --exchange DESK_ADDRESS --asset usdc --amount 10
+uv run python scripts/exchange.py swap --network PRIVATE_NETWORK.toml --exchange DESK_ADDRESS --asset usdc --amount 10 --min-out 10
 ```
 
 The default deadline is five minutes after the latest chain timestamp. Pass an explicit Unix `--deadline` to shorten it. Clear a remaining allowance using `approve --amount 0` before replacing it. Each public-chain write shows the actual asset address, amount, counterparty, gas bound and sender, then requires `send`. Approvals and swaps are separate transactions: if a swap fails or expires, the approval can remain and should be revoked if no retry is intended.
@@ -56,7 +60,7 @@ If either setting is missing, the general contract suite deliberately reports th
 
 ## Security review
 
-The exchange has no mutable price, privileged withdrawal or issuance path. Asset movement is atomic, both received amounts are checked, and the fixed positive minimum/deadline remain part of the signed transaction. Its stateful invariant conserves each token separately and compares both desk inventories with cumulative successful flows. Full-domain fuzzing includes the smallest unit and uint256-scale transfers. Transfer-fee tests verify complete rollback in both directions.
+The exchange has no mutable price, privileged withdrawal or issuance path. Asset movement is atomic, both received amounts are checked, and the positive output minimum/deadline remain part of the signed transaction. Its stateful invariant conserves each token separately and compares both desk inventories with cumulative successful flows. Fuzzing searches the full accepted redemption domain from 10 TOD through uint256-scale transfers, and the full positive domain below the threshold must revert. Boundary cases include one base unit below, exactly at and one above the minimum, reverse dust and full-balance redemption. Transfer-fee tests verify complete rollback in both directions.
 
 Slither's new-contract finding is the expected low-severity timestamp comparison for expiry. The deadline limits transaction lifetime; timestamps are not used for pricing or randomness. Existing whole-project findings and transient-guard modelling limitations remain separate from this test-only change. Public deployment is not approved by these local checks.
 

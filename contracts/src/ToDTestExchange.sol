@@ -12,10 +12,12 @@ contract ToDTestExchange is ReentrancyGuardTransient {
 
     IERC20 public immutable tod;
     IERC20 public immutable usdc;
+    uint256 public constant MIN_REDEEM = 10e6;
 
     error UnsupportedChain();
     error InvalidToken();
     error InvalidQuote();
+    error BelowMinimumRedemption();
     error Expired();
     error InsufficientInventory();
     error UnsupportedTransfer();
@@ -36,6 +38,7 @@ contract ToDTestExchange is ReentrancyGuardTransient {
     function swap(bool todToUsdc, uint256 amount, uint256 minOut, uint256 deadline) external nonReentrant {
         if (block.timestamp > deadline) revert Expired();
         if (amount == 0 || minOut == 0 || minOut > amount) revert InvalidQuote();
+        if (todToUsdc && amount < MIN_REDEEM) revert BelowMinimumRedemption();
         IERC20 input = todToUsdc ? tod : usdc;
         IERC20 output = todToUsdc ? usdc : tod;
         if (output.balanceOf(address(this)) < amount) revert InsufficientInventory();
