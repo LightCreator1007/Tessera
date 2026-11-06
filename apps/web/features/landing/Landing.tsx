@@ -1,16 +1,18 @@
-// Public landing page: the crow hero, the scroll-driven round story, the cheat demo, the two sides and the close.
+// Public landing page: the crow hero, why, the isometric round, the cheat demo, feature sections, the two sides and the close.
 "use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Mosaic } from "@/components/mosaic/Mosaic";
-import { VOCAB, VOCAB_SHORT, VOCAB_TRAIN, type FieldFn } from "@/components/mosaic/engine";
+import { VOCAB, VOCAB_SHORT, type FieldFn } from "@/components/mosaic/engine";
 import { coverById, figureField, sampler, subjectFit, useGray } from "@/components/mosaic/figures";
 import { clamp, dissolve, tone } from "@/components/mosaic/fields";
 import { useTextGray } from "@/components/mosaic/type";
 import { BrandMark } from "@/components/brand";
 import { reducedMotion } from "@/lib/prefs";
-import { roundField, useWake, withWake } from "./fields";
+import { useWake, withWake } from "./fields";
+import { RoundIso } from "./RoundIso";
+import { Receipt, Sealed, Terminal, Why } from "./Sections";
 import "./landing.css";
 
 export function Landing() {
@@ -19,8 +21,12 @@ export function Landing() {
       <Nav />
       <main id="main">
         <Hero />
+        <Why />
         <RoundStory />
         <CheatDemo />
+        <Receipt />
+        <Sealed />
+        <Terminal />
         <Sides />
         <Close />
       </main>
@@ -113,11 +119,9 @@ const STEPS = [
 function RoundStory() {
   const ref = useRef<HTMLElement>(null);
   const stepRef = useRef(0);
-  const sinceRef = useRef(0);
   const [step, setStep] = useState(0);
 
   useEffect(() => {
-    const reduce = reducedMotion();
     let raf = 0;
     const on = () => {
       cancelAnimationFrame(raf);
@@ -129,12 +133,10 @@ function RoundStory() {
         const s = Math.min(STEPS.length - 1, Math.floor(p * STEPS.length));
         if (s !== stepRef.current) {
           stepRef.current = s;
-          sinceRef.current = reduce ? -1e9 : performance.now();
           setStep(s);
         }
       });
     };
-    sinceRef.current = reduce ? -1e9 : performance.now();
     on();
     window.addEventListener("scroll", on, { passive: true });
     return () => {
@@ -143,7 +145,6 @@ function RoundStory() {
     };
   }, []);
 
-  const field = useMemo(() => roundField(() => stepRef.current, () => sinceRef.current), []);
   const go = (i: number) => {
     const el = ref.current;
     if (!el) return;
@@ -169,7 +170,7 @@ function RoundStory() {
           </ol>
         </div>
         <div className="ld-round-art">
-          <Mosaic field={field} label={`Six laptops in a round, at the ${STEPS[step].name.toLowerCase()} step`} cell={10} vocab={VOCAB_TRAIN} twinkle={0.06} empty={0.3} />
+          <RoundIso step={step} />
         </div>
       </div>
     </section>

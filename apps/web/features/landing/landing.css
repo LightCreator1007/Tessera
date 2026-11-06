@@ -136,8 +136,8 @@
 }
 .ld-round-art { position: relative; min-height: 0; order: -1; }
 @media (min-width: 900px) {
-  .ld-round-stick { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); grid-template-rows: none; align-items: center; gap: 56px; padding: 64px 48px 24px; }
-  .ld-round-art { order: 0; height: 72svh; }
+  .ld-round-stick { grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); grid-template-rows: none; align-items: center; gap: 32px; padding: 64px 32px 24px 48px; max-width: 1480px; }
+  .ld-round-art { order: 0; height: 84svh; }
 }
 .ld-steps { list-style: none; margin: 32px 0 0; padding: 0; }
 .ld-steps li { border-top: 1px solid var(--rule-row); }
@@ -305,3 +305,90 @@
   .ld-rise { animation: none; }
   .ld *, .ld *::before { transition-duration: 0s !important; transition-delay: 0s !important; }
 }
+
+/* Why: a plain comparison, Tessera's column carries the ink. */
+.ld-why { padding: 128px 0 120px; border-top: 1px solid var(--rule-row); }
+.ld-why-title { max-width: 16ch; }
+.ld-why-table { margin-top: 48px; }
+.ld-why-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 24px;
+  padding: 18px 0;
+  border-top: 1px solid var(--rule-row);
+}
+.ld-why-row:last-child { border-bottom: 1px solid var(--rule-row); }
+.ld-why-head { padding: 0 0 14px; border-top: 0; font-size: 0.9rem; color: var(--ink-subtle); }
+.ld-why-head span:first-child { display: none; }
+.ld-why-head span:last-child { color: var(--mz-l5); }
+.ld-why-k { grid-column: 1 / -1; font-size: 0.85rem; color: var(--ink-subtle); }
+.ld-why-a { color: var(--ink-subtle); font-size: 1.05rem; line-height: 1.4; }
+.ld-why-b { color: var(--ink); font-size: 1.05rem; line-height: 1.4; }
+@media (min-width: 900px) {
+  .ld-why-row { grid-template-columns: 1.1fr 1fr 1.2fr; align-items: baseline; padding: 22px 0; }
+  .ld-why-head span:first-child { display: block; }
+  .ld-why-k { grid-column: auto; font-size: 0.95rem; }
+  .ld-why-a, .ld-why-b { font-size: 1.2rem; letter-spacing: -0.01em; }
+  .ld-why-row:not(.ld-why-head):hover .ld-why-b { color: var(--mz-l7); }
+  .ld-why-row:not(.ld-why-head):hover { box-shadow: inset 3px 0 0 var(--mz-l5); padding-left: 16px; transition: padding 120ms steps(3); }
+}
+
+/* Feature rows: copy and a working piece of the product side by side. */
+.ld-feature { padding: 112px 0; border-top: 1px solid var(--rule-row); }
+.ld-feature-grid { display: grid; gap: 40px; align-items: center; }
+@media (min-width: 900px) {
+  .ld-feature-grid { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 72px; }
+  .ld-feature-flip .ld-feature-grid { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+}
+.ld-feature-copy .ld-body { margin-bottom: 28px; }
+.ld-mono { font-family: var(--font-mono); }
+.ld-hint { color: var(--mz-l5); font-size: 0.95rem; }
+
+/* Receipt */
+.ld-receipt { background: var(--surface-card); box-shadow: inset 0 0 0 1px var(--rule); border-radius: 2px; padding: 24px; }
+.ld-receipt-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.ld-receipt-big { display: block; font-size: 1.6rem; font-weight: 600; letter-spacing: -0.03em; }
+.ld-receipt-sub { display: block; margin-top: 2px; color: var(--ink-subtle); font-size: 0.9rem; }
+.ld-receipt-state { padding: 4px 10px; border-radius: 2px; background: var(--mz-l6); color: var(--mz-ground); font-size: 0.85rem; font-weight: 500; }
+.ld-receipt-meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 22px 0 18px; }
+.ld-receipt-meta dt { font-size: 0.8rem; color: var(--ink-subtle); }
+.ld-receipt-meta dd { margin: 2px 0 0; font-family: var(--font-mono); font-size: 0.95rem; }
+.ld-receipt-rows { list-style: none; margin: 0; padding: 0; }
+.ld-receipt-rows li { border-top: 1px solid var(--rule-row); }
+.ld-receipt-rows button {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 4px;
+  text-align: left;
+  font-size: 0.92rem;
+}
+.ld-receipt-rows button:hover { background: var(--surface-hover); }
+.ld-receipt-delta { color: var(--ink-subtle); }
+.ld-receipt-verdict { color: var(--mz-l6); font-family: var(--font-mono); }
+.ld-receipt-rows .is-fail .ld-receipt-verdict, .ld-receipt-rows .is-fail .ld-receipt-delta { color: var(--mz-l5); }
+.ld-receipt-why { padding: 0 4px 14px; color: var(--ink-muted); font-size: 0.92rem; line-height: 1.5; max-width: 52ch; }
+.ld-receipt-rows .is-fail .ld-receipt-why { box-shadow: inset 2px 0 0 var(--mz-l5); padding-left: 14px; }
+
+/* Seal */
+.ld-seal { position: relative; aspect-ratio: 1 / 1; max-height: 560px; width: 100%; background: var(--mz-ground); box-shadow: inset 0 0 0 1px var(--rule-row); }
+
+/* Terminal */
+.ld-term { background: var(--surface-sunken); box-shadow: inset 0 0 0 1px var(--rule); border-radius: 2px; overflow: hidden; }
+.ld-term-bar { display: flex; align-items: center; justify-content: space-between; height: 40px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--rule-row); }
+.ld-term-dots { display: flex; gap: 6px; }
+.ld-term-dots i { width: 9px; height: 9px; border-radius: 1px; background: var(--rule-strong); }
+.ld-term-copy { height: 28px; padding: 0 10px; border-radius: 2px; font-size: 0.82rem; color: var(--ink-muted); }
+.ld-term-copy:hover { background: var(--surface-hover); color: var(--ink); }
+.ld-term-body { margin: 0; min-height: 300px; padding: 20px 18px 24px; font-family: var(--font-mono); font-size: 0.86rem; line-height: 1.85; white-space: pre-wrap; overflow-x: auto; }
+.ld-term-cmd { color: var(--ink); }
+.ld-term-cmd span { color: var(--mz-l5); }
+.ld-term-out { color: var(--ink-subtle); padding-left: 2ch; }
+.ld-term-ok { color: var(--mz-l6); padding-left: 2ch; }
+.ld-term-caret { display: inline-block; width: 0.6em; height: 1.1em; vertical-align: -0.2em; background: var(--mz-l5); animation: ld-blink 1s steps(2) infinite; }
+@keyframes ld-blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .ld-term-caret { animation: none; } }
+
+/* The iso host's orbit hint is chrome; the landing keeps only its zoom buttons. */
+.ld .ld-round-art canvas + div > span:first-child { display: none; }
