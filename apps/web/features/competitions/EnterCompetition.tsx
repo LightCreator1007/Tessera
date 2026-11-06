@@ -12,8 +12,10 @@ import { More, Sequence, StepPanel, TxButton, TxStatus } from "@/components/flow
 import { openConnect } from "@/components/connect";
 import { Banner, Button, EmptyState, Money, Skeleton, short } from "@/components/primitives";
 import { CommitFile } from "./CommitFile";
+import { HumanGate } from "@/components/human/HumanGate";
+import { useHuman } from "@/lib/identity";
 import { PayLine } from "./HostCompetition";
-import { entryGate, isPerson, samplePredictions, split, useCompetition, type Committed } from "./model";
+import { entryGate, samplePredictions, split, useCompetition, type Committed } from "./model";
 
 const date = (iso: string) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC" }).format(new Date(iso));
 
@@ -22,7 +24,7 @@ export function EnterCompetition({ id }: { id: string }) {
   const { c, w } = useCompetition(id);
   const [mounted, setMounted] = useState(false);
   const [preds, setPreds] = useState<Committed | null>(null);
-  const human = useTx({ revertAs: "AlreadyEntered" });
+  const human = useHuman();
   const mint = useTx();
   const approve = useTx();
   const enter = useTx({ revertAs: "DeadlinePassed" });
@@ -49,7 +51,7 @@ export function EnterCompetition({ id }: { id: string }) {
   }
 
   const ready = w.connected && !w.wrongNetwork;
-  const person = isPerson(w);
+  const person = human.verified;
   const pay = split(c.fee, w);
 
   const submit = () =>
@@ -84,13 +86,14 @@ export function EnterCompetition({ id }: { id: string }) {
               key: "wallet", title: "Connect a wallet", done: ready, note: w.address ? short(w.address) : undefined,
               body: <><p className="text-sm text-muted">The wallet pays the fee and receives the prize if you win.</p><Button variant="primary" onClick={openConnect}>{w.wrongNetwork ? "Switch network" : "Connect wallet"}</Button></>,
             },
+            // Before the file, because verifying leaves this page and a file chosen below would be lost on the way.
+            {
+              key: "person", title: person ? "Verified as one person" : "Prove you're one person", done: person || entered, note: "World ID",
+              body: <HumanGate intro="One entry per person. World ID proves that without telling Tessera who you are, and you only do it once." />,
+            },
             {
               key: "preds", title: "Commit your predictions", done: !!preds || entered, note: preds ? `${preds.name}, hashed` : undefined,
               body: <div className="flex w-full flex-col gap-3"><CommitFile what="predictions" value={preds} onChange={setPreds} sample={() => samplePredictions(Date.now() % 100_000)} /><More label="What format?"><p>One predicted class per item, in item order: this task has 2,000 items. The file stays here; you upload it for scoring after the deadline, and it must hash to this commitment.</p></More></div>,
-            },
-            {
-              key: "person", title: person ? "Verified as one person" : "Prove you're one person", done: person || entered, note: "World ID",
-              body: <><p className="text-sm text-muted">One entry per person. World ID proves that without telling Tessera who you are.</p><TxButton tx={human} label="Verify with World ID" onRun={() => human.run(() => setWallet({ personVerified: true }))} /><TxStatus tx={human} /></>,
             },
             {
               key: "fund", title: pay.shortBy > 0 && !entered ? `Get ${formatToken(pay.shortBy)} more TOD` : "Fee covered", done: pay.shortBy <= 0 || entered, note: pay.need === 0 ? "from earnings" : <Money units={w.usdc} />,

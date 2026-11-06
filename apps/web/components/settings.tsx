@@ -13,6 +13,7 @@ import { openConnect } from "./connect";
 import { Checkbox, SettingRow, TextField } from "./fields";
 import { StatePoster } from "./mosaic/StatePoster";
 import { Banner, Button, Identicon, Pill, Segmented, cx, short } from "./primitives";
+import { networkName } from "@/lib/chain/discover";
 
 type Section = "wallet" | "node" | "notifications" | "display" | "demo";
 const SECTIONS: { key: Section; label: string; icon: LucideIcon; hint: string }[] = [
@@ -176,8 +177,8 @@ function WalletSection() {
         </SettingRow>
         <SettingRow label="Network" hint="Tessera runs on Base Sepolia while it's a testnet.">
           {w.wrongNetwork ? (
-            <span className="flex flex-wrap items-center gap-2"><Pill tone="warn">Wrong network</Pill><Button onClick={w.switchNetwork}>Switch to Base Sepolia</Button></span>
-          ) : <Pill tone="neutral">Base Sepolia</Pill>}
+            <span className="flex flex-wrap items-center gap-2"><Pill tone="warn">Wrong network</Pill><Button onClick={w.switchNetwork}>Switch to {networkName(w.targetChainId)}</Button></span>
+          ) : <Pill tone="neutral">{networkName(w.targetChainId)}</Pill>}
         </SettingRow>
         <SettingRow
           label="Pay earnings to"

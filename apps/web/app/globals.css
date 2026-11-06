@@ -646,3 +646,45 @@ details.more > summary::-webkit-details-marker { display: none; }
   &[data-dragging] { cursor: grabbing; }
   &:focus-visible { outline-offset: -2px; }
 }
+
+/* World ID scan (components/human): corners close on the code, modules light ring by ring, a scan line steps down.
+   Stepped, never tweened, like the rest of the mosaic. Reduced motion lands on the end frame through the rule above. */
+.hq-finder { --hq-in: 14%; }
+.hq-corner { position: absolute; width: 22%; height: 22%; border-color: var(--mz-vermilion); border-style: solid; border-width: 0; transition: transform 320ms steps(4, end); }
+.hq-tl { left: 0; top: 0; border-left-width: 2px; border-top-width: 2px; transform: translate(calc(var(--hq-in) * -1), calc(var(--hq-in) * -1)); }
+.hq-tr { right: 0; top: 0; border-right-width: 2px; border-top-width: 2px; transform: translate(var(--hq-in), calc(var(--hq-in) * -1)); }
+.hq-bl { left: 0; bottom: 0; border-left-width: 2px; border-bottom-width: 2px; transform: translate(calc(var(--hq-in) * -1), var(--hq-in)); }
+.hq-br { right: 0; bottom: 0; border-right-width: 2px; border-bottom-width: 2px; transform: translate(var(--hq-in), var(--hq-in)); }
+.hq-ready .hq-corner { transform: none; }
+.hq-finder:not(.hq-ready) .hq-corner { animation: hq-hunt 1.2s steps(3, end) infinite alternate; }
+@keyframes hq-hunt { to { opacity: 0.35; } }
+.hq-paper { animation: hq-light 1ms steps(1, end) 60ms both; }
+.hq-mod { animation: hq-light 1ms steps(1, end) both; }
+@keyframes hq-light { from { opacity: 0; } to { opacity: 1; } }
+.hq-scan { position: absolute; left: 4%; right: 4%; height: 2px; background: var(--mz-vermilion); top: 6%; animation: hq-scan 2.6s steps(26, end) 700ms infinite; }
+@keyframes hq-scan { 0% { top: 6%; opacity: 1; } 92% { top: 94%; opacity: 1; } 100% { top: 94%; opacity: 0; } }
+.hq-stamp { animation: hq-stamp 360ms steps(3, end) 1.6s both; }
+@keyframes hq-stamp { 0% { opacity: 0; transform: scale(1.6); background: var(--mz-l7); } 100% { opacity: 1; transform: none; } }
+.hq-caret { display: inline-block; width: 0.55em; height: 1em; vertical-align: -0.15em; background: var(--mz-vermilion); animation: hq-blink 1.05s steps(2, start) infinite; }
+@keyframes hq-blink { to { visibility: hidden; } }
+
+/* Word-tile strips (components/mosaic/widgets): one row of protocol words, each a tile lit to a level of the mosaic
+   ramp. Level 0 is an unlit word on the ground; 1-7 climb oxblood to bone, with text from the matching t-token. */
+.mz-strip { display: flex; flex-wrap: nowrap; gap: 2px; overflow: hidden; font-family: var(--font-mono); font-size: 0.625rem; line-height: 1; letter-spacing: 0.02em; text-transform: uppercase; }
+.mz-strip > span { flex: none; padding: 4px 5px; border-radius: 2px; background: var(--mz-ground); color: var(--mz-tex); box-shadow: inset 0 0 0 1px var(--mz-rule); transition: background-color 60ms steps(1, end), color 60ms steps(1, end); }
+.mz-strip > span[data-l="1"] { background: var(--mz-l1); color: var(--mz-t1); box-shadow: none; }
+.mz-strip > span[data-l="2"] { background: var(--mz-l2); color: var(--mz-t2); box-shadow: none; }
+.mz-strip > span[data-l="3"] { background: var(--mz-l3); color: var(--mz-t3); box-shadow: none; }
+.mz-strip > span[data-l="4"] { background: var(--mz-l4); color: var(--mz-t4); box-shadow: none; }
+.mz-strip > span[data-l="5"] { background: var(--mz-l5); color: var(--mz-t5); box-shadow: none; }
+.mz-strip > span[data-l="6"] { background: var(--mz-l6); color: var(--mz-t6); box-shadow: none; }
+.mz-strip > span[data-l="7"] { background: var(--mz-l7); color: var(--mz-t7); box-shadow: none; }
+.mz-toast { flex-wrap: wrap; font-size: 0.75rem; }
+.mz-toast > span { animation: hq-light 1ms steps(1, end) both; }
+
+/* Sign in: an almost full-screen sheet, stepping in like the rest of the mosaic. */
+@utility size-sheet { width: min(72rem, calc(100vw - 2rem - 4vw)); height: min(44rem, calc(100dvh - 2rem - 6vh)); max-width: none; max-height: none; }
+dialog.sheet-dialog[open] { animation: sheet-in 240ms steps(4, end) both; }
+dialog.sheet-dialog::backdrop { background: rgba(0, 0, 0, 0.7); }
+@keyframes sheet-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { dialog.sheet-dialog[open] { animation: none; } }

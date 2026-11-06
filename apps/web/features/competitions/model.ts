@@ -72,7 +72,6 @@ export function entryGate(c: Competition, w: DemoWallet, now = Date.now()): Gate
   return { ok: true };
 }
 
-export const isPerson = (w: DemoWallet) => w.personVerified || !!w.node?.humanVerified;
 
 /** A committed file: its hash plus what the person picked, so the screen can say what was committed. */
 export type Committed = { hash: string; name: string; bytes: number; sample: boolean };
