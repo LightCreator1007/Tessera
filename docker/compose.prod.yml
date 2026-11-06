@@ -1,0 +1,69 @@
+# One host running the coordinator, both verifiers and Caddy for TLS on Base Sepolia. docker/prod-up.sh writes the env
+# files and starts it. Each service only sees its own keys, and state in the named volumes survives a rebuild.
+name: tessra
+
+x-app: &app
+  restart: unless-stopped
+  logging: {driver: json-file, options: {max-size: 20m, max-file: "5"}}
+
+services:
+  coordinator:
+    <<: *app
+    image: tessra-coordinator
+    build: {context: .., dockerfile: docker/app.Dockerfile, args: {APP: coordinator}}
+    working_dir: /data
+    entrypoint: [uvicorn, "api.app:app", --app-dir, /app/services/coordinator, --host, 0.0.0.0, --port, "8000"]
+    env_file: ["${TESSRA_ENV:-/etc/tessra}/coordinator.env"]
+    environment:
+      TOD_NETWORK: base-sepolia-demo
+      CHAIN_ID: "84532"
+      JOB_MARKET: "0xa4acE0e126B0B3b021f501DDE6a506cafDdA1581"
+      NODE_REGISTRY: "0x09570EEa33b199aC6C5Ce5d6f2934eA6EfFadC34"
+      TOKEN: "0xfFa825C3C07B2B334D80aa730100c3D9320AE44b"
+      VERIFIERS: "0x2bf8af09b6c43D1b58A9c5f764DF402239b34E21,0x5500a0eb5C940d2227232f2B4Bcde7F4B4D3DD77"
+      IDENTITY_MODE: worldid
+      PUBLIC_URL: "https://${SITE:?run docker/prod-up.sh, which sets this}"
+      STORE_DIR: /data/store
+      DB_PATH: /data/coordinator.db
+      DATASET_CACHE: /data/datasets
+      DRIVER_JOURNAL_DIR: /data/journal-driver
+      TOPUP_JOURNAL_DIR: /data/journal-topup
+      # About 8M gas at 0.006 gwei. The faucet wallet can't cover the 0.001 ETH default.
+      TOPUP_TARGET_WEI: "50000000000000"
+      # Every browser arrives through one Vercel proxy, so this per-peer limit is really a global one.
+      RP_SIGNATURES_PER_MINUTE: "120"
+    volumes: [coordinator-data:/data]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/v1/health', timeout=2)"]
+      interval: 5s
+      retries: 60
+
+  verifier-a: &verifier
+    <<: *app
+    image: tessra-verifier
+    build: {context: .., dockerfile: docker/app.Dockerfile, args: {APP: verifier}}
+    command: [run, --key-env, VERIFIER_A_PRIVATE_KEY]
+    env_file: ["${TESSRA_ENV:-/etc/tessra}/verifier-a.env"]
+    environment: {TOD_NETWORK: base-sepolia-demo, TOD_COORDINATOR: "http://coordinator:8000", TOD_VERIFIER_DATA: /data}
+    volumes: [verifier-a-data:/data]
+    depends_on: {coordinator: {condition: service_healthy}}
+
+  verifier-b:
+    <<: *verifier
+    command: [run, --key-env, VERIFIER_B_PRIVATE_KEY]
+    env_file: ["${TESSRA_ENV:-/etc/tessra}/verifier-b.env"]
+    volumes: [verifier-b-data:/data]
+
+  caddy:
+    <<: *app
+    image: docker.io/library/caddy:2.11.9-alpine
+    ports: ["80:80", "443:443"]
+    environment: {SITE: "${SITE:?run docker/prod-up.sh, which sets this}"}
+    volumes: ["./Caddyfile:/etc/caddy/Caddyfile:ro", "caddy-data:/data"]
+    depends_on: {coordinator: {condition: service_healthy}}
+
+volumes:
+  coordinator-data:
+  verifier-a-data:
+  verifier-b-data:
+  caddy-data:

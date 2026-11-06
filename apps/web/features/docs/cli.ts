@@ -7,7 +7,8 @@ export const INSTALL = {
   windows: `New-Item -ItemType Directory -Force $HOME\\bin | Out-Null\nInvoke-WebRequest ${WRAPPER}/tod-node.ps1 -OutFile $HOME\\bin\\tod-node.ps1`,
 };
 
-export const SETUP = "tod-node init\ntod-node selftest";
+const COORDINATOR = process.env.NEXT_PUBLIC_COORDINATOR_URL?.replace(/\/$/, "") || "<coordinator url>";
+export const SETUP = `tod-node init --network base-sepolia-demo --coordinator ${COORDINATOR}\ntod-node selftest`;
 
 export function pairCommand(owner: string, chainId: number, registry: string) {
   return `tod-node pair --owner ${owner} --chain-id ${chainId} --registry ${registry}`;
@@ -19,7 +20,7 @@ export const PAIR_TTL_MIN = 30;
 
 export type CliCommand = { name: string; args?: string; does: string; ships: boolean };
 export const COMMANDS: CliCommand[] = [
-  { name: "init", args: "--network <anvil|base-sepolia> [--coordinator <url>]", does: "Creates this node's operator key in the data volume (mode 0600), saves the network and coordinator, and prints its address. Later runs keep the existing key.", ships: true },
+  { name: "init", args: "--network <anvil|base-sepolia-demo> [--coordinator <url>]", does: "Creates this node's operator key in the data volume (mode 0600), saves the network and coordinator, and prints its address. Later runs keep the existing key.", ships: true },
   { name: "config show", does: "Prints the network and coordinator this node uses, and where each value came from: a flag, the environment, or config.toml.", ships: true },
   { name: "selftest", does: "Trains the mlp-exact self-test vector and checks the result hash byte for byte. Exits 3 on a mismatch, so a drifted machine never joins.", ships: true },
   { name: "pair", args: "--owner <0x..> --chain-id <id> --registry <0x..>", does: `Signs the owner's consent and prints a pairing code to paste into the web. The code expires after ${PAIR_TTL_MIN} minutes.`, ships: true },
