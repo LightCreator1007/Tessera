@@ -2,6 +2,7 @@
 
 After changing a route, regenerate the schema with `uv run python -m api.export`.
 """
+import re
 import threading
 import time
 from contextlib import asynccontextmanager
@@ -11,6 +12,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.responses import RedirectResponse, Response
 
 import driver
+import history
 import publish
 from identity import router as identity
 from publish import chain as publish_chain
@@ -20,7 +22,7 @@ from tod_core.finalize import message
 
 from . import admin, auth, blobs, config, nodes
 from .draft import build as build_draft
-from .models import (Collected, Config, Dispute, DisputeIn, Draft, DraftRequest, Evidence, Health, Job, JobState,
+from .models import (OwnerHistory, Collected, Config, Dispute, DisputeIn, Draft, DraftRequest, Evidence, Health, Job, JobState,
                      ModelRecord, Payout, Published, Round, RoundSummary, Selftest, SettlementOut, SignatureIn, Workload)
 from .tables import DISPUTES, EVIDENCE, JOBS, MODELS, ROUNDS, SELFTESTS, SETTLEMENTS, SPECS, STATES, WORKLOADS
 
@@ -37,6 +39,7 @@ async def lifespan(_):
         threading.Thread(target=publish.worker, args=(blobs.store, publish.client(), SPECS, stop),
                          name="arkiv-publish", daemon=True).start()
         threading.Thread(target=publish_chain.watch, args=(stop,), name="arkiv-chain-watch", daemon=True).start()
+    threading.Thread(target=history.watch, args=(stop,), name="owner-history", daemon=True).start()
     if publish_shards.enabled():
         threading.Thread(target=publish_shards.worker, args=(publish.client(), publish.swarm_client(), SPECS, stop),
                          name="arkiv-shards", daemon=True).start()
@@ -175,6 +178,26 @@ def rounds(job: int):
 @v1.get("/jobs/{job}/rounds/{r}", response_model=Round)
 def round_(job: int, r: int):
     return _round(job, r)
+
+
+@v1.get("/owners/{owner}/history", response_model=OwnerHistory)
+def owner_history(owner: str, limit: int = 50, before: str | None = None):
+    """An owner's pay, claims, slashes with their reasons, stake moves and job budgets, newest first."""
+    if not re.fullmatch(r"0x[0-9a-fA-F]{40}", owner):
+        raise HTTPException(400, "owner must be 0x + 40 hex")
+    if not 1 <= limit <= 200:
+        raise HTTPException(400, "limit must be 1 to 200")
+    cut = None
+    if before is not None:
+        try:
+            b, li = (int(x) for x in before.split(":"))
+            cut = (b, li)
+        except ValueError:
+            raise HTTPException(400, "before must be block:logIndex, as given in next")
+    rows = history.events(owner, limit, cut)
+    return OwnerHistory(owner=owner.lower(), operators=history.operators(owner), events=rows,
+                        next=f"{rows[-1]['block']}:{rows[-1]['logIndex']}" if len(rows) == limit else None,
+                        indexedTo=history.indexed_to())
 
 
 @v1.get("/jobs/{job}/rounds/{r}/evidence", response_model=Evidence)

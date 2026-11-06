@@ -86,6 +86,29 @@ class Waiting(BaseModel):
     abandonAfter: int  # unix time after which anyone may call abandonJob and get the unopened rounds refunded
 
 
+class OwnerEvent(BaseModel):
+    """One chain event that moved an owner's money or standing, as the history indexer stored it."""
+    kind: Literal["joined", "paid", "claimed", "leftover", "forfeited", "slashed", "failure", "noReveal", "staked",
+                  "unstaked", "budget", "refund"]
+    job: int | None
+    round: int | None
+    op: Address | None  # the operator involved, for node events
+    amount: int | None  # token units: paid, claimed, slashed (taken), penalty, staked, budget, refund
+    detail: dict | None  # slashed {toPot, burned}, failure {kind}, noReveal {missed}, staked/unstaked {stake}
+    block: int
+    logIndex: int
+    tx: Hex32
+    at: int  # block time
+
+
+class OwnerHistory(BaseModel):
+    owner: Address
+    operators: list[Address]  # nodes this owner has joined
+    events: list[OwnerEvent]  # newest first
+    next: str | None  # pass as ?before= for the next page; null on the last page
+    indexedTo: int | None  # last block indexed; null before the first pass or with TOD_NETWORK unset
+
+
 class Published(BaseModel):
     """Where the job's final model is indexed on Arkiv. The keccak is the on-chain aggregateHash, the protocol hash."""
     round: int
