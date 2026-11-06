@@ -1,6 +1,6 @@
 "use client";
 // Add a node, one step at a time (the CLI quickstart with the web steps inside it): install, connect, pair, prove personhood, stake, start. The position derives from wallet and chain state, so a reload resumes at the first unfinished step; finished steps stay reviewable from the progress bar. Demo chips walk the failure paths (expired code, wrong owner, used World ID, short balance).
-import { calls } from "@/lib/chain";
+import { calls, watchOperator } from "@/lib/chain";
 import { JoinBuild } from "@/components/mosaic/isoScenes";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -18,7 +18,7 @@ import { INSTALL, PAIR_PREFIX, PAIR_TTL_MIN, SETUP, pairCommand } from "@/featur
 import { SIMULATED, SelfTestCard } from "./SelfTestCard";
 import { ExcludedNotice } from "./Excluded";
 import { HumanGate } from "@/components/human/HumanGate";
-import { useHuman } from "@/lib/identity";
+import { requestInvite, useHuman } from "@/lib/identity";
 
 const TOD = 1_000_000;
 
@@ -36,6 +36,7 @@ const STEPS = [
 type Parsed = { ok: true; operator: string; owner: string; deadline: number } | { ok: false; error: string };
 type PairFields = { consentDeadline: number; operator: string; owner: string; signature: string };
 const ADDR = /^0x[0-9a-fA-F]{40}$/;
+const CODE_KEY = "join-pairing-code";
 const NOT_A_CODE = "This isn't a pairing code. Copy the whole line that tod-node pair printed.";
 
 /** Pairing code as `tod-node pair` prints it: the prefix, then unpadded base64url JSON of the consent fields. Only the shape is checked here; the contract checks the signature. */
@@ -93,7 +94,22 @@ export function JoinFlow() {
     if (/Win/.test(navigator.userAgent)) setOs("windows");
   }, [w.node]);
 
+  // Verifying leaves this page, so the code has to outlive it. A code from another wallet means the account was switched, and that wallet's laptop isn't this one's.
+  useEffect(() => {
+    if (isDemo || !w.address) return;
+    const saved = sessionStorage.getItem(CODE_KEY);
+    if (!saved) return;
+    const r = parsePairing(saved, w.address);
+    if (r.ok) setCode(saved);
+    else {
+      sessionStorage.removeItem(CODE_KEY);
+      setCode("");
+      setWallet({ node: null });
+    }
+  }, [w.address]);
+
   const node = w.node;
+  useEffect(() => { watchOperator(node ? node.operator : null); }, [node?.operator]);
   const units = Math.round(Number(amount) * TOD);
   const amountOk = Number.isFinite(units) && units >= MIN_STAKE;
   const staked = !!node && node.stake >= MIN_STAKE;
@@ -111,6 +127,7 @@ export function JoinFlow() {
     const r = parsePairing(c, w.address);
     if (!r.ok) return setErr(r.error);
     setErr(null);
+    sessionStorage.setItem(CODE_KEY, c);
     setWallet({ node: { operator: r.operator, humanVerified: false, joined: false, stake: 0, running: false } });
   };
   const deadline = Math.floor(Date.now() / 1000) + 1800;
@@ -348,7 +365,10 @@ export function JoinFlow() {
                     key: "join", title: "Join the registry", done: !!node?.joined,
                     body: (
                       <>
-                        <TxButton tx={join} label="Join" onRun={() => join.run(() => setWallet((x) => ({ node: x.node && { ...x.node, joined: true } })))} />
+                        <TxButton tx={join} label="Join" onRun={() => join.send(async () => {
+                          if (!code) { setWallet({ node: null }); throw new Error("Your pairing code was lost. Run tod-node pair and paste it again."); }
+                          return calls.join(await requestInvite(w.address as string, code));
+                        }, () => setWallet((x) => ({ node: x.node && { ...x.node, joined: true } })))} />
                         <TxStatus tx={join} />
                       </>
                     ),
