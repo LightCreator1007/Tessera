@@ -48,6 +48,16 @@ docker/tod-node run
 
 It downloads the job's dataset in the background (`dataset.fetching`, then `dataset.ready` in `docker/tod-node logs`) and reports busy until it has it, so it isn't seated in a round it would miss.
 
+## Posting a job
+
+The web app's "Post a job" uses the simulated wallet, so post from the host for now. This drafts through the coordinator, funds a dev requester and creates the job onchain:
+
+```sh
+docker compose -f docker/compose.dev.yml exec coordinator python docker/dev/post_job.py --budget 30 --quorum 2
+```
+
+`--quorum` is how many nodes a round needs. Keep it below the number of nodes you have, since a slashed cheater can't be seated again.
+
 ## The web app
 
 On any PC, from `apps/web`:
