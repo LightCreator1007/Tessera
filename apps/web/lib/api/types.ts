@@ -186,4 +186,6 @@ export type LiveCompetition = {
   entries: number; entrants: string[]; scored: number; labelsRevealedAt: number | null;
   leaderboard: { entrant: string; score: number }[]; winner: string | null; bestScore: number | null;
   settled: { to: string; amount: number; refunded: boolean } | null; sharesPaid: number; createdBlock: number;
+  /** Arkiv entity keys for this competition's listing and, once settled, its result; null when publishing is off. */
+  arkiv?: { listing?: string; result?: string } | null;
 };
