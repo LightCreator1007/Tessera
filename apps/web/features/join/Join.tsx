@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { ArrowRight, Check } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { HumanCheck } from "@/components/human/HumanCheck";
+import { Stepper } from "@/components/stepper";
 import { TileScanner, TileToast } from "@/components/mosaic/widgets";
-import { Identicon, Pill, cx, short } from "@/components/primitives";
+import { Identicon, Pill, short } from "@/components/primitives";
 import { WalletPicker } from "@/components/wallet/WalletPicker";
 import { ROLE_KEY, ROLES, RoleArt } from "@/features/start/RolePicker";
 import { CREDENTIAL_LABEL, useHuman } from "@/lib/identity";
@@ -152,44 +153,9 @@ function JoinFrame({ step, eyebrow = "Sign up · about 2 minutes", title, lede, 
           {lede ?? "Your wallet is your login. World ID proves once that you're a single real person, so pay and prizes go to people, not to bots. That's the whole sign-up."}
         </p>
       </header>
-      <StepTiles step={step} />
+      <div className="max-w-xl"><Stepper steps={STEPS} current={step} label="Sign-up progress" /></div>
       <div key={step} className="animate-step-in flex flex-col gap-6">{children}</div>
     </div>
-  );
-}
-
-/** Three tiles: done ones turn to ink and link back, the current one carries the caret. */
-function StepTiles({ step }: { step: number }) {
-  return (
-    <nav aria-label="Sign-up progress">
-      <ol className="grid grid-cols-3 gap-1.5">
-        {STEPS.map((s, i) => {
-          const state = i < step ? "done" : i === step ? "current" : "todo";
-          const tile = (
-            <div
-              key={state}
-              className={cx(
-                "flex h-16 flex-col justify-between border px-3 py-2 font-mono text-xs uppercase tracking-wide",
-                state === "done" && "animate-tx-glint border-ink bg-ink text-brand-ink transition-opacity duration-150 ease-out hover:opacity-90",
-                state === "current" && "border-mosaic bg-surface text-ink",
-                state === "todo" && "border-rule text-subtle",
-              )}
-            >
-              <span className="flex items-center justify-between tabular">
-                {String(i + 1).padStart(2, "0")}
-                {state === "done" && <Check className="size-3.5" strokeWidth={2.5} aria-hidden />}
-              </span>
-              <span className="truncate">{s.word}{state === "current" && <> <span className="hq-caret" aria-hidden /></>}</span>
-            </div>
-          );
-          return (
-            <li key={s.key} aria-current={state === "current" ? "step" : undefined} aria-label={`${s.label}, ${state === "done" ? "done" : state === "current" ? "current step" : "not yet"}`}>
-              {state === "done" ? <Link href={s.href}>{tile}</Link> : tile}
-            </li>
-          );
-        })}
-      </ol>
-    </nav>
   );
 }
 

@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useWallet } from "@/lib/wallet";
 import { CREDENTIAL_LABEL, useHuman } from "@/lib/identity";
-import { ConnectRoute, openConnect } from "./connect";
+import { SignInSheet, openConnect } from "./connect";
 import { SettingsDialog, openSettings } from "./settings";
 import { useHealth } from "@/lib/api/hooks";
 import { useActivity, useSeen } from "@/features/activity/useActivity";
@@ -119,7 +119,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
       <main id="main" className="min-w-0 flex-1 bg-surface md:overflow-y-auto md:rounded-xl md:border md:border-rule">
         {children}
       </main>
-      <ConnectRoute />
+      <SignInSheet />
       <SettingsDialog />
     </div>
   );

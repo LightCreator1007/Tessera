@@ -681,3 +681,10 @@ details.more > summary::-webkit-details-marker { display: none; }
 .mz-strip > span[data-l="7"] { background: var(--mz-l7); color: var(--mz-t7); box-shadow: none; }
 .mz-toast { flex-wrap: wrap; font-size: 0.75rem; }
 .mz-toast > span { animation: hq-light 1ms steps(1, end) both; }
+
+/* Sign in: an almost full-screen sheet, stepping in like the rest of the mosaic. */
+@utility size-sheet { width: calc(100vw - 2rem); height: calc(100dvh - 2rem); max-width: none; max-height: none; }
+dialog.sheet-dialog[open] { animation: sheet-in 240ms steps(4, end) both; }
+dialog.sheet-dialog::backdrop { background: rgba(0, 0, 0, 0.7); }
+@keyframes sheet-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { dialog.sheet-dialog[open] { animation: none; } }
