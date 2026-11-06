@@ -39,7 +39,7 @@ def api(monkeypatch):
     monkeypatch.setattr(config, "ADMIN_TOKEN", TOKEN)
     identity.db.execute("DELETE FROM exclusions")  # the router made the table on import
     for owner, n in ((CHEAT, "0xc0"), (HONEST, "0xh0")):
-        identity.db.execute("INSERT OR REPLACE INTO humans VALUES (?, ?, 'orb', 0)", (n, owner))
+        identity.db.execute("INSERT OR REPLACE INTO humans (nullifier, owner, credential, seen) VALUES (?, ?, 'orb', 0)", (n, owner))
     monkeypatch.setattr(identity, "exclusions", Exclusions(identity.db, FakeChain()))
     app = FastAPI()
     app.include_router(identity.router)

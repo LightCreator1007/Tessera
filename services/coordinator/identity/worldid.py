@@ -88,8 +88,17 @@ def verify(result: dict, owner: str, post=post_verify) -> tuple[str, str]:
     # Bind the proof to this wallet, so a proof can't be replayed to join another owner.
     if field(resp.get("signal_hash", "0x0")) != int.from_bytes(hash_to_field(signal_for(owner).encode()), "big"):
         raise Rejected("World ID proof was made for a different wallet")
-    status, body = post({**result, "environment": ENVIRONMENT})
+    # Forwarded exactly as IDKit returned it (World's guide: never re-encode the proof); the environment is checked above.
+    status, body = post(result)
     if status != 200 or body.get("success") is not True or body.get("environment", ENVIRONMENT) != ENVIRONMENT:
         raise Rejected(f"World ID verification failed: {body.get('code') or status}")
     nullifier = field(resp["nullifier"])
     return "0x" + nullifier.to_bytes(32, "big").hex(), CREDENTIALS[resp["identifier"]]
+
+
+def sybil_score(result: dict) -> int | None:
+    """Selfie Check's risk signal (an integer z-score signed by the issuer); None for an Orb proof. Read only after verify()."""
+    for r in result.get("responses", []):
+        if r.get("identifier") == "selfie" and isinstance(r.get("sybil_score"), int):
+            return r["sybil_score"]
+    return None

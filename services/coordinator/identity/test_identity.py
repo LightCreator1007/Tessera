@@ -192,3 +192,92 @@ def test_entry_pass_keeps_one_wallet_per_person(owner, monkeypatch):
     monkeypatch.setattr(identity, "verify_human", lambda o, p: ("0x" + "ab" * 32, "orb"))
     assert client.post("/v1/identity/entry-pass", json={"owner": owner}).status_code == 200
     assert client.post("/v1/identity/entry-pass", json={"owner": other}).status_code == 409
+
+
+def verify(owner, proof=None):
+    return client.post("/v1/identity/verify", json={"owner": owner, "proof": proof or {}})
+
+
+def test_verify_without_a_node_then_join_reuses_it(owner, monkeypatch):
+    from identity import worldid
+
+    monkeypatch.setattr(identity, "MODE", "worldid")
+    calls = []
+    monkeypatch.setattr(worldid, "verify", lambda proof, o: calls.append(o) or ("0x" + "a1" * 32, "orb"))
+    r = verify(owner, {"x": 1})
+    assert r.status_code == 200 and r.json()["credential"] == "orb"
+    s = client.get(f"/v1/identity/owners/{owner}").json()
+    assert s["verified"] and not s["joined"] and s["credential"] == "orb" and s["verifiedAt"]
+    # Joining later sends no proof, so World ID is not asked again.
+    code = pairing_code(Account.create(), owner, int(time.time()) + 1800)
+    r = client.post("/v1/identity/join", json={"owner": owner, "pairingCode": code})
+    assert r.status_code == 200 and r.json()["nullifier"] == "0x" + "a1" * 32 and len(calls) == 1
+    assert client.get(f"/v1/identity/owners/{owner}").json()["joined"]
+
+
+def test_join_without_a_proof_or_a_verification_still_checks_one(owner, monkeypatch):
+    from identity import worldid
+
+    monkeypatch.setattr(identity, "MODE", "worldid")
+
+    def rejected(proof, o):
+        raise worldid.Rejected("expected exactly one Proof of Human or Selfie Check credential")
+    monkeypatch.setattr(worldid, "verify", rejected)
+    code = pairing_code(Account.create(), owner, int(time.time()) + 1800)
+    assert client.post("/v1/identity/join", json={"owner": owner, "pairingCode": code}).status_code == 400
+
+
+def test_verify_keeps_one_wallet_per_human_and_one_human_per_wallet(owner, monkeypatch):
+    from identity import worldid
+
+    monkeypatch.setattr(identity, "MODE", "worldid")
+    monkeypatch.setattr(worldid, "verify", lambda proof, o: ("0x" + "b2" * 32, "orb"))
+    assert verify(owner).status_code == 200
+    assert verify(owner).status_code == 200  # the same person again is fine
+    other = Account.create().address
+    r = verify(other)
+    assert r.status_code == 409 and owner[:6] in r.json()["detail"]
+    monkeypatch.setattr(worldid, "verify", lambda proof, o: ("0x" + "c3" * 32, "orb"))
+    r = verify(owner)
+    assert r.status_code == 409 and "different World ID" in r.json()["detail"]
+
+
+def test_unknown_owner_is_neither_verified_nor_joined(owner):
+    s = client.get(f"/v1/identity/owners/{owner}").json()
+    assert not s["verified"] and not s["joined"] and s["credential"] is None
+
+
+def test_verify_is_rate_limited(owner, monkeypatch):
+    monkeypatch.setattr(identity, "verify_limit", identity.RateLimit(1))
+    assert verify(owner).status_code == 200
+    assert verify(owner).status_code == 429
+
+
+def test_entry_pass_reuses_the_sign_up_verification(owner, monkeypatch):
+    from identity import worldid
+
+    monkeypatch.setattr(config, "COMPETITIONS", "0x" + "cc" * 20)
+    monkeypatch.setattr(identity, "MODE", "worldid")
+    calls = []
+    monkeypatch.setattr(worldid, "verify", lambda proof, o: calls.append(o) or ("0x" + "f6" * 32, "selfie"))
+    assert verify(owner, {"x": 1}).status_code == 200
+    # World ID 4.0 gives one proof per person per action, so the pass must not ask for a second one.
+    r = client.post("/v1/identity/entry-pass", json={"owner": owner})
+    assert r.status_code == 200 and r.json()["nullifier"] == "0x" + "f6" * 32 and len(calls) == 1
+    assert not client.get(f"/v1/identity/owners/{owner}").json()["joined"]
+
+
+def test_selfie_verify_keeps_its_sybil_score_and_orb_has_none(owner, monkeypatch):
+    from identity import worldid
+
+    monkeypatch.setattr(identity, "MODE", "worldid")
+    monkeypatch.setattr(worldid, "verify", lambda proof, o: ("0x" + "d4" * 32, "selfie"))
+    selfie = {"responses": [{"identifier": "selfie", "sybil_score": 3}]}
+    r = verify(owner, selfie)
+    assert r.status_code == 200 and r.json()["credential"] == "selfie" and r.json()["sybilScore"] == 3
+    s = client.get(f"/v1/identity/owners/{owner}").json()
+    assert s["credential"] == "selfie" and s["sybilScore"] == 3
+    other = Account.create().address
+    monkeypatch.setattr(worldid, "verify", lambda proof, o: ("0x" + "e5" * 32, "orb"))
+    assert verify(other, {"responses": [{"identifier": "proof_of_human"}]}).json()["sybilScore"] is None
+    assert client.get(f"/v1/identity/owners/{other}").json()["sybilScore"] is None

@@ -78,3 +78,19 @@ def test_signature_recovers_to_signing_key():
 
 def test_non_json_error_body_is_not_a_crash():
     assert w._json(b"error code: 1010\n") == {} and w._json(b'{"a": 1}') == {"a": 1}
+
+
+def test_verify_forwards_the_idkit_result_unchanged():
+    sent = []
+    res = result(identifier="selfie")
+    res["responses"][0]["sybil_score"] = 2
+    res["integrity_bundle"] = {"v": 2, "sig": "0xab"}
+    w.verify(res, OWNER, post=lambda body: sent.append(body) or ok(body))
+    assert sent == [res]
+
+
+def test_sybil_score_only_from_a_selfie_response():
+    res = result(identifier="selfie")
+    res["responses"][0]["sybil_score"] = -1
+    assert w.sybil_score(res) == -1
+    assert w.sybil_score(result()) is None
