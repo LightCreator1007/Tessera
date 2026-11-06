@@ -1,5 +1,6 @@
 "use client";
 // Balance: one balance with two sources (wallet TOD, node earnings) and one sink (job budgets). A ledger of what the laptop earned and what the jobs spent, with the claimable balance and its two exits, spend on a job or claim. REVAMP-3 section 3.
+import { calls } from "@/lib/chain";
 import { ConnectGate } from "@/components/mosaic/ConnectGate";
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -191,7 +192,7 @@ export function Overview() {
             bond={w.node?.stake ?? null}
             tx={claim}
             onExport={() => exportCsv(rows)}
-            onConfirm={() => claim.run(() => setWallet((x) => ({ usdc: x.usdc + x.claimable, claimable: 0, claims: [...x.claims, { amount: x.claimable, at: Date.now() }] })))}
+            onConfirm={() => claim.send(calls.claim, () => setWallet((x) => ({ usdc: x.usdc + x.claimable, claimable: 0, claims: [...x.claims, { amount: x.claimable, at: Date.now() }] })))}
           />
         )}
       </div>

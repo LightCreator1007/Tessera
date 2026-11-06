@@ -118,7 +118,8 @@ export function ConnectDialog() {
             <span className="inline-flex size-16 items-center justify-center rounded-xl bg-brand-ink text-mosaic">
               <TileBusy />
             </span>
-            <p className="text-sm text-subtle" role="status">Waiting for {choice?.name ?? "your wallet"}</p>
+            <p className="text-sm text-subtle" role="status">{w.chainError ?? `Waiting for ${choice?.name ?? "your wallet"}`}</p>
+            {w.chainError && <Button variant="primary" onClick={() => choice && pick(choice)}>Try again</Button>}
           </div>
         )}
 
