@@ -73,3 +73,21 @@ def test_token_constructor_parameters_use_explicit_roles():
     cfg = config()
     cfg["token"] = {"cap": 10**12}
     assert deploy.token_parameters(cfg) == (cfg["roles"]["tokenAdmin"], cfg["roles"]["faucet"], 10**12)
+
+
+def test_optional_funding_address_must_be_nonzero():
+    cfg = config()
+    cfg["roles"]["funding"] = "0x" + "00" * 20
+    with pytest.raises(SystemExit, match="funding"):
+        deploy.validate_roles(cfg, 84532)
+
+
+def test_verification_without_explorer_url_uses_sourcify(monkeypatch):
+    from types import SimpleNamespace
+    commands = []
+    def run(command, **_):
+        commands.append(command)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+    monkeypatch.setattr(deploy.subprocess, "run", run)
+    assert deploy.verify({}, 84532, "ToDToken", "0x" + "11" * 20, "")
+    assert commands[0][-2:] == ["--verifier", "sourcify"]
