@@ -1,5 +1,5 @@
 "use client";
-// Post a job one step at a time: data, model, budget, review and post. Advanced settings (stake, nodes per round, epochs) sit behind disclosures with valid defaults. Drafting goes through POST /v1/jobs/draft (501 on the coordinator today, simulated in demo), then approve and createJob.
+// Post a job one step at a time: data, model, budget, review and post. Advanced settings (stake, nodes per round, epochs) sit behind disclosures with valid defaults. Drafting goes through POST /v1/jobs/draft (live, or fixtures in demo), then approve and createJob.
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -13,6 +13,8 @@ import { More, Sequence, StepPanel, TxButton, TxStatus, WizardProgress, type Ste
 import { openConnect } from "@/components/connect";
 import { WorkloadArt } from "@/components/pixel";
 import { Banner, Button, Money, SourceBadge, cx, short } from "@/components/primitives";
+import type { Draft } from "@/lib/api/types";
+import { DATASET_HASH, DraftStep, WORKLOAD_ID } from "./DraftStep";
 
 const TOD = 1_000_000;
 const MIN_STAKE = 15 * TOD;
@@ -40,7 +42,7 @@ export function PostJob() {
   const [reach, setReach] = useState(0);
   /** null means the default: as much of the budget as your earnings cover. */
   const [earnStr, setEarnStr] = useState<string | null>(null);
-  const draft = useTx({ revertAs: "BadInput" });
+  const [drafted, setDrafted] = useState<Draft | null>(null);
   const approve = useTx();
   const create = useTx({ revertAs: "StakeTooLow" });
   const mint = useTx();
@@ -188,7 +190,7 @@ export function PostJob() {
 
       {step === 3 && (
         <StepPanel key="review" title="Review and post" lede="Nothing locks until the last step. After that there is no cancel: if the job stalls, rounds that never opened come back to you." footer={<Button variant="ghost" onClick={() => go(2)} disabled={create.busy || posted}>Back</Button>}>
-          {!isDemo && <Banner tone="warn" title="Job drafting isn't live on the coordinator yet.">The draft route returns 501 until the spec schema lands. Your form is kept; nothing can be sent.</Banner>}
+          {!isDemo && <Banner tone="pending" title="Posting needs a wallet">Freezing the spec is live. Locking the budget and posting is signed in your wallet, which this app doesn&apos;t send yet.</Banner>}
           <dl className="flex flex-col">
             <Recap label="Data" onEdit={() => go(0)}>{ds?.name}</Recap>
             <Recap label="Model" onEdit={() => go(1)}><span className="font-mono">{wl?.id}</span>, {f.epochs} epochs</Recap>
@@ -199,16 +201,16 @@ export function PostJob() {
           <Sequence
             items={[
               {
+                key: "draft", title: "Freeze the spec", done: drafted !== null, note: drafted ? short(drafted.modelSpecHash) : "spec hash ready",
+                body: <DraftStep stake={stake} onDraft={setDrafted} req={ds && wl && budget > 0 && n(f.epochs) >= 1 ? { workload: WORKLOAD_ID[wl.id], datasetHash: DATASET_HASH[ds.id], budget, epochs: Math.floor(n(f.epochs)), minQuorum: quorum, maxPerRound: maxPer } : null} />,
+              },
+              {
                 key: "wallet", title: "Connect the wallet that pays", done: ready, note: w.address ? short(w.address) : undefined,
                 body: <><p className="text-sm text-muted">The budget is locked in the contract, not sent to anyone.</p><Button variant="primary" onClick={openConnect}>{w.wrongNetwork ? "Switch network" : "Connect wallet"}</Button></>,
               },
               {
                 key: "fund", title: shortBy > 0 && !posted ? `Get ${formatToken(shortBy)} more TOD` : "Enough TOD", done: shortBy <= 0 || posted, note: <Money units={w.usdc} />,
                 body: <><p className="text-sm text-muted">You have {formatToken(w.usdc)} TOD. Test TOD is free on this network.</p><TxButton tx={mint} label="Get test TOD" onRun={() => mint.run(() => setWallet((x) => ({ usdc: x.usdc + 200 * TOD })))} /><TxStatus tx={mint} /></>,
-              },
-              {
-                key: "draft", title: "Freeze the spec", done: draft.phase === "confirmed", note: "spec hash ready",
-                body: <><p className="text-sm text-muted">The coordinator turns this form into a frozen spec and its hash, so every node trains exactly the same thing.</p><TxButton tx={draft} label="Freeze spec" disabled={!isDemo} why="Coordinator drafting is not live yet" onRun={() => draft.run()} /><TxStatus tx={draft} /></>,
               },
               {
                 key: "approve", title: need === 0 ? "No approve needed" : `Allow ${formatToken(need)} TOD`, done: need === 0 || w.allowance >= need || posted, note: need === 0 ? "earnings cover the whole budget" : "exact amount only",
