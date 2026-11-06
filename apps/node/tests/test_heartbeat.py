@@ -71,3 +71,16 @@ def test_an_outage_is_logged_once_and_the_profile_is_resent(coordinator):
     state["code"] = 200
     hb(chain())
     assert events == ["error", "heartbeat.restored"] and "selftest" in got[-1][2]  # never got through before
+
+
+def test_busy_while_a_dataset_downloads_and_ready_datasets_are_reported(coordinator):
+    url, got, _ = coordinator
+    clock = [0.0]
+    warm = SimpleNamespace(busy=lambda: True, names=lambda: [])
+    hb = Heartbeat(url, OP.key, OP.address, "0.0.1", SELFTEST, now=lambda: clock[0], prewarm=warm)
+    hb(chain())
+    warm.busy, warm.names = (lambda: False), (lambda: ["0x01"])
+    clock[0] += INTERVAL
+    hb(chain())
+    assert got[0][2]["busy"] is True and got[0][2]["prewarm"] == {"datasets": []}
+    assert got[1][2]["busy"] is False and got[1][2]["prewarm"] == {"datasets": ["0x01"]}

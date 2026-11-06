@@ -45,8 +45,9 @@ def node_cli(i, *args):
 
 if not any(e.name == "JobCreated" for e in l.events()):
     mnist = json.loads((ROOT / "vectors/kernel/presets.json").read_text())["mnist"]["card"]["hash"]
+    # One under the node count: node-0 cheats and loses its stake, and the honest nodes must still fill later rounds.
     draft = http("/v1/jobs/draft", {"workload": "mlp-exact/1", "datasetHash": mnist, "budget": BUDGET, "epochs": 1,
-                                    "minQuorum": NODES, "maxPerRound": NODES})
+                                    "minQuorum": max(1, NODES - 1), "maxPerRound": NODES})
     requester = Actor(l, NET_FILE, DATA, "requester/dev", units=BUDGET)
     requester.l.token.approve(l.net.market, BUDGET)
     requester.l.sender.transact(l.net.market, draft["createJobCalldata"])

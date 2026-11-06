@@ -68,9 +68,12 @@ class VerifierLoop:
                 elif self.accepting:
                     self._attest(state, job, rnd)
             except Reverted as e:
-                if str(e) == "AlreadyReported":
+                # QuorumNotMet: too few nodes revealed to verify, so the round can only void; stop retrying it.
+                if str(e) in ("AlreadyReported", "QuorumNotMet"):
                     self.done.add((job, rnd))
                 log.warning("job %s round %s: %s", job, rnd, e)
+            except OSError as e:  # the dataset still downloading, or the coordinator briefly away: next tick
+                log.warning("job %s round %s: cannot replay yet: %s", job, rnd, e)
         if self.cosigner and self.accepting:
             self.cosigner.tick(state)
 
