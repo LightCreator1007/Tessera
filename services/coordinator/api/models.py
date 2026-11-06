@@ -24,6 +24,7 @@ class Config(BaseModel):
     coordinator: Address
     verifiers: list[Address]
     threshold: int
+    competitions: Address | None = None  # None on a network with no Competitions contract
 
 
 class Workload(BaseModel):
