@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { Boxes, ExternalLink, Search } from "lucide-react";
 import { useModels } from "@/lib/api/hooks";
-import { isDemo } from "@/lib/api/client";
 import type { ModelRecord } from "@/lib/api/types";
 import { Problem } from "@/components/problem";
 import { Card, EmptyState, HashChip, PageHeader, Skeleton, TD, TH, THead, ROW } from "@/components/primitives";
@@ -22,9 +21,9 @@ export function ModelsPage() {
   const rows = (models.data?.data ?? []).filter((m) => !q || `${m.job} ${m.workload ?? ""} ${m.keccak}`.toLowerCase().includes(q.toLowerCase()));
   return (
     <div className="flex flex-col">
-      <PageHeader title="Models" meta={isDemo ? undefined : "read from Arkiv, not from this coordinator"} />
+      <PageHeader title="Models" />
       <div className="flex flex-col gap-4 px-4 py-6 md:px-6">
-        <p className="max-w-2xl text-sm text-muted">Every completed job&apos;s final model gets a public record on Arkiv with its keccak hash, so anyone can find it and check the bytes without trusting this coordinator. Records expire unless they are extended.</p>
+        <p className="max-w-2xl text-sm text-muted">Every completed job&apos;s final model gets a public record on Arkiv with its keccak hash, so anyone can find it and check the bytes without trusting this coordinator. This list is read from Arkiv, not from the coordinator&apos;s own tables. Records expire unless they are extended.</p>
         {models.isPending ? <Skeleton className="h-48 w-full" /> : models.isError ? (
           <Problem error={models.error} retry={() => models.refetch()} overrides={{
             off: { title: "Model publishing is off on this coordinator", body: "It runs without an Arkiv key, so finished models stay on the coordinator only. Job pages still offer the weights." },

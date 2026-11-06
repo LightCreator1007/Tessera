@@ -344,18 +344,23 @@ function SettingsRow() {
   );
 }
 
+const CHAINS: Record<number, string> = { 84532: "Base Sepolia", 8453: "Base", 31337: "Local Anvil" };
+export const chainName = (id: number | undefined) => (id === undefined ? "Base Sepolia" : CHAINS[id] ?? `Chain ${id}`);
+
 function StatusLine() {
   const h = useHealth();
   const state = h.isPending ? "checking" : h.isError || !h.data.data.ok ? "down" : isDemo ? "demo" : "up";
   const block = h.data?.data.block ?? null;
+  // The chain comes from the coordinator; a local stack runs on Anvil, not Base Sepolia.
+  const net = chainName(h.data?.data.chainId);
   const dot = { checking: "bg-subtle", down: "bg-danger", demo: "bg-demo", up: "bg-ok" }[state];
   const title = { checking: "Checking the coordinator", down: "Coordinator unreachable. Chain history is still readable.", demo: "No coordinator URL is set, so the app shows demo data", up: "Coordinator live" }[state];
   return (
-    <Tip label={state === "demo" ? "Base Sepolia, demo data" : state === "down" ? "Coordinator offline" : "Base Sepolia"}>
+    <Tip label={state === "demo" ? `${net}, demo data` : state === "down" ? "Coordinator offline" : net}>
       <p title={title} className={cx(ROW, "h-6 font-mono text-xs text-subtle")}>
         <Slot><span className={cx("size-1.5 rounded-full", dot)} aria-hidden /></Slot>
         <Label>
-          <span className="truncate">Base Sepolia{block !== null && <> · #<Flap text={block.toLocaleString("en-US")} /></>}</span>
+          <span className="truncate">{net}{block !== null && <> · #<Flap text={block.toLocaleString("en-US")} /></>}</span>
           {state === "demo" && <span className="ml-auto shrink-0 text-demo">demo</span>}
           {state === "down" && <span className="ml-auto shrink-0 text-danger">offline</span>}
         </Label>
