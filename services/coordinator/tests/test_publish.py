@@ -1,5 +1,6 @@
 """Arkiv publishing: the execute() calldata, the resumable queue against a fake Arkiv, and the job and model routes."""
 import json
+import time
 import urllib.error
 
 import pytest
@@ -381,6 +382,23 @@ def test_swarm_back_before_the_cap_still_lands_in_the_record(swarm_on):
     sw.fail = None
     P.step(7, store, ark, {})
     assert ark.sent[0][0]["swarmRef"] == P.status(7)["swarmRef"] is not None
+
+
+def test_rate_limits_wait_without_using_up_tries(swarm_on):
+    import requests
+
+    store, ark, sw = swarm_on
+    P.enqueue(7, 12, store.put(b"weights"))
+    sw.fail = urllib.error.HTTPError("https://gateway/bytes", 429, "Too Many Requests", {}, None)
+    assert P.step(7, store, ark, {}) == "pending"
+    sw.fail = None
+    too_many = requests.Response()
+    too_many.status_code = 429
+    ark.fail = requests.HTTPError("429 Client Error: Too Many Requests", response=too_many)
+    for _ in range(P.MAX_ATTEMPTS + 1):
+        assert P.step(7, store, ark, {}) == "pending"
+    row = P.db.execute("SELECT attempts, next_try FROM published WHERE job = 7").fetchone()
+    assert row[0] == 0 and row[1] > time.time() + P.RATE_LIMIT_WAIT - 5
 
 
 def test_swarm_off_leaves_records_without_a_ref(on):

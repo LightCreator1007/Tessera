@@ -105,6 +105,20 @@ def test_a_flaky_gateway_only_fails_a_set_that_stops_moving(on, monkeypatch):
     assert PS.step(7, arkiv, swarm, datasets) == "failed" and not arkiv.sent
 
 
+def test_a_rate_limited_upload_waits_without_using_up_a_try(on, monkeypatch):
+    import urllib.error
+
+    swarm, arkiv, datasets = on
+    monkeypatch.setattr(PS, "MAX_ATTEMPTS", 1)
+    def busy(*a):
+        raise urllib.error.HTTPError("https://gateway/bytes", 429, "Too Many Requests", {}, None)
+
+    monkeypatch.setattr(swarm, "put", busy)
+    PS.enqueue(7, spec())
+    assert PS.step(7, arkiv, swarm, datasets) == "pending"
+    assert PS.db.execute("SELECT attempts FROM shard_sets WHERE job = 7").fetchone()[0] == 0
+
+
 def test_existing_record_is_reused(on):
     swarm, arkiv, datasets = on
     arkiv.existing = "0x" + "aa" * 32

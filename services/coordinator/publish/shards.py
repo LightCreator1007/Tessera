@@ -11,7 +11,7 @@ from eth_utils import keccak
 from api import config
 from tod_datasets import shards as S
 
-from . import MAX_ATTEMPTS, STUCK_TX, _broadcast, _lock, _scrub, db
+from . import MAX_ATTEMPTS, RATE_LIMIT_WAIT, STUCK_TX, _broadcast, _lock, _scrub, db, rate_limited
 
 log = logging.getLogger("tod.publish.shards")
 CACHE = Path(os.environ.get("TOD_DATASETS", Path.home() / ".cache" / "tod" / "datasets"))
@@ -101,8 +101,12 @@ def step(job: int, client, swarm, datasets) -> str:
         _broadcast(job, raw, client)
         return "pending"
     except Exception as e:  # nothing was signed yet, so retrying is safe
-        attempts += 1
         error = _scrub(f"{type(e).__name__}: {str(e)[:200]}")
+        if rate_limited(e):  # slow down, without using up a try
+            _set(job, error=error, next_try=time.time() + RATE_LIMIT_WAIT)
+            log.warning("shards for job %s: rate limited, waiting %s s", job, RATE_LIMIT_WAIT)
+            return "pending"
+        attempts += 1
         failed = attempts >= MAX_ATTEMPTS
         _set(job, error=error, attempts=attempts, next_try=time.time() + min(600, 5 * 2 ** attempts),
              **({"state": "failed"} if failed else {}))

@@ -17,6 +17,7 @@ RECORD_VERSION = 1
 CONTENT_TYPE = "application/x-tod-weights"
 MAX_ATTEMPTS = 8
 SWARM_TRIES = 3  # after this many failed uploads the model is indexed without a Swarm copy, rather than not at all
+RATE_LIMIT_WAIT = 60  # s; the keyless Arkiv RPC and the public Swarm gateway both answer 429 when polled hard
 STUCK_TX = 30  # checks 5 s apart; after that a human looks at the tx before anything is signed again
 
 db = sqlite3.connect(config.DB_PATH, check_same_thread=False)
@@ -131,6 +132,8 @@ def step(job: int, store, client, specs: dict) -> str:
                 _set(job, swarm_ref=ref)
             except Exception as e:
                 why = f"Swarm upload: {type(e).__name__}: {str(e)[:200]}"
+                if rate_limited(e):
+                    return _wait(job, why)
                 if attempts + 1 < SWARM_TRIES:
                     return _retry(job, attempts, why)
                 log.warning("publish job %s: indexing without a Swarm copy after %s", job, _scrub(why))
@@ -144,6 +147,8 @@ def step(job: int, store, client, specs: dict) -> str:
         _broadcast(job, raw, client)
         return "pending"
     except Exception as e:  # nothing was signed yet, so retrying is safe; settlement never waits on any of this
+        if rate_limited(e):
+            return _wait(job, f"{type(e).__name__}: {str(e)[:200]}")
         return _retry(job, attempts, f"{type(e).__name__}: {str(e)[:200]}")
 
 
@@ -191,6 +196,18 @@ def _retry(job, attempts, error):
         return "failed"
     _set(job, error=error, attempts=attempts, next_try=time.time() + min(600, 5 * 2 ** attempts))
     log.warning("publish job %s: %s (try %s)", job, error, attempts)
+    return "pending"
+
+
+def rate_limited(e: Exception) -> bool:
+    """A 429 means slow down, not broken, so it waits without using up one of the tries. urllib puts the status on
+    .code, requests (under web3) on .response.status_code."""
+    return 429 in (getattr(e, "code", None), getattr(getattr(e, "response", None), "status_code", None))
+
+
+def _wait(job, error):
+    _set(job, error=_scrub(error), next_try=time.time() + RATE_LIMIT_WAIT)
+    log.warning("publish job %s: rate limited, waiting %s s", job, RATE_LIMIT_WAIT)
     return "pending"
 
 
