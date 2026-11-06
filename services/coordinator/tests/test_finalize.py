@@ -7,8 +7,7 @@ import numpy as np
 import pytest
 from eth_account import Account
 
-import finalize as F
-from tod_core import encodings
+from tod_core import encodings, finalize as F
 from tod_core.hashing import k256
 
 SCHEMA = json.loads((Path(__file__).resolve().parents[3] / "vectors/evidence.schema.json").read_text())

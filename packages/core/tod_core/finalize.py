@@ -1,4 +1,7 @@
-"""Closes a round: gates and merges the updates, splits the pay, and builds both evidence documents and the Settlement."""
+"""Closes a round: gates and merges the updates, splits the pay, and builds both evidence documents and the Settlement.
+
+The coordinator builds the Settlement with it and each verifier recomputes it, so both must import this one copy.
+"""
 from dataclasses import dataclass
 
 import numpy as np
