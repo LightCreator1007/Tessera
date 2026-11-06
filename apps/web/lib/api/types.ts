@@ -181,7 +181,7 @@ export type Sourced<T> = { data: T; source: Source };
 
 /** GET /v1/competitions: one competition as the Competitions contract has it. Scores are counted onchain. */
 export type LiveCompetition = {
-  id: number; host: string; title: string; task: string; prize: number; deadline: number; revealWindow: number; items: number;
+  id: number; host: string; title: string; task: string; dataset: string; prize: number; deadline: number; revealWindow: number; items: number;
   labelsHash: string; status: "open" | "awaiting-labels" | "labels-hidden" | "refundable" | "scoring" | "ready-to-settle" | "settled";
   entries: number; entrants: string[]; scored: number; labelsRevealedAt: number | null;
   leaderboard: { entrant: string; score: number }[]; winner: string | null; bestScore: number | null;
