@@ -82,9 +82,13 @@ class RateLimit:
 # ponytail: keyed by the TCP peer, so behind a tunnel every caller shares one budget; key on the tunnel's
 # client-IP header once one is deployed.
 rp_limit = RateLimit(RP_SIGNATURES_PER_MINUTE)
+verify_limit = RateLimit(RP_SIGNATURES_PER_MINUTE)  # each /verify costs a call to World, so the same cap
 router = APIRouter(prefix="/v1/identity", dependencies=[Depends(small_body)])
 db = connect(config.DB_PATH)
 db.execute("CREATE TABLE IF NOT EXISTS humans (nullifier TEXT PRIMARY KEY, owner TEXT, credential TEXT, seen INTEGER)")
+# A human can verify before pairing a node (to enter a competition, say), so joining the pool is its own flag.
+if "joined" not in {c[1] for c in db.execute("PRAGMA table_info(humans)")}:
+    db.execute("ALTER TABLE humans ADD COLUMN joined INTEGER NOT NULL DEFAULT 1")  # rows before this came from /join
 # Agent Pass: the owner's World account (iss, sub), and approvals waiting on the owner.
 db.execute("CREATE TABLE IF NOT EXISTS agent_links (owner TEXT PRIMARY KEY, iss TEXT, sub TEXT, linked INTEGER)")
 db.execute("CREATE TABLE IF NOT EXISTS agent_pending (id TEXT PRIMARY KEY, kind TEXT, owner TEXT, operator TEXT,"
@@ -97,7 +101,18 @@ exclusions = Exclusions(db, topups.chain)
 class JoinRequest(BaseModel):
     owner: str
     pairingCode: str
+    proof: dict | None = None  # the IDKit result, forwarded unchanged; left out, reuses an earlier /verify
+
+
+class VerifyRequest(BaseModel):
+    owner: str
     proof: dict = {}  # the IDKit result, forwarded unchanged; ignored in dev mode
+
+
+class VerifyResponse(BaseModel):
+    owner: str
+    nullifier: str
+    credential: str
 
 
 class RpSignatureRequest(BaseModel):
@@ -242,6 +257,38 @@ def checked_owner(owner: str) -> str:
     return to_checksum_address(owner)
 
 
+def stored_human(owner: str) -> tuple[str, str] | None:
+    return db.execute("SELECT nullifier, credential FROM humans WHERE owner = ?", (owner,)).fetchone()
+
+
+def record_human(owner: str, nullifier: str, credential: str, joined: bool) -> None:
+    """One wallet per human and one human per wallet. A repeat by the same pair keeps its first-seen time."""
+    exclusions.refuse(owner, nullifier)  # the same human behind a fresh wallet
+    row = db.execute("SELECT owner FROM humans WHERE nullifier = ?", (nullifier,)).fetchone()
+    if row and row[0] != owner:
+        raise HTTPException(409, f"this World ID is already linked to {row[0][:6]}...{row[0][-4:]}")
+    mine = stored_human(owner)
+    if mine and mine[0] != nullifier:
+        raise HTTPException(409, "this wallet is already linked to a different World ID")
+    db.execute("INSERT INTO humans (nullifier, owner, credential, seen, joined) VALUES (?, ?, ?, ?, ?) "
+               "ON CONFLICT(nullifier) DO UPDATE SET credential = excluded.credential, "
+               "joined = MAX(humans.joined, excluded.joined)",
+               (nullifier, owner, credential, int(time.time()), int(joined)))
+    db.commit()
+
+
+@router.post("/verify", response_model=VerifyResponse)
+def verify(req: VerifyRequest, request: Request):
+    """Prove one human behind this wallet, without a node. Joining later reuses it, so World ID runs once."""
+    owner = checked_owner(req.owner)
+    exclusions.refuse(owner)
+    if not verify_limit.allow(request.client.host if request.client else "?"):
+        raise HTTPException(429, f"over {RP_SIGNATURES_PER_MINUTE} verifications a minute; wait and retry")
+    nullifier, credential = verify_human(owner, req.proof)
+    record_human(owner, nullifier, credential, joined=False)
+    return VerifyResponse(owner=owner, nullifier=nullifier, credential=credential)
+
+
 @router.post("/entry-pass", response_model=EntryPassResponse)
 def entry_pass(req: EntryPassRequest):
     """One person, one wallet, one entry per competition: the admitter vouches for this wallet's human after World ID.
@@ -250,14 +297,13 @@ def entry_pass(req: EntryPassRequest):
         raise HTTPException(503, "this network has no Competitions contract")
     owner = checked_owner(req.owner)
     exclusions.refuse(owner)
-    nullifier, credential = verify_human(owner, req.proof)
-    exclusions.refuse(owner, nullifier)
-    row = db.execute("SELECT owner FROM humans WHERE nullifier = ?", (nullifier,)).fetchone()
-    if row and row[0] != owner:
-        raise HTTPException(409, "this World ID already uses another wallet")
-    if not row:
-        db.execute("INSERT INTO humans VALUES (?, ?, ?, ?)", (nullifier, owner, credential, int(time.time())))
-        db.commit()
+    # World ID 4.0 proofs are one per person per action, so a wallet verified at sign-up reuses that record.
+    stored = stored_human(owner)
+    if req.proof or not stored:
+        nullifier, credential = verify_human(owner, req.proof)
+    else:
+        nullifier, credential = stored
+    record_human(owner, nullifier, credential, joined=False)  # one wallet per person, as for joining the pool
     deadline = int(time.time()) + PASS_TTL
     sig = enc.sign(ADMITTER.key, "EntryPass", config.CHAIN_ID, config.COMPETITIONS,
                    {"wallet": owner, "nullifier": bytes.fromhex(nullifier[2:]), "deadline": deadline})
@@ -270,13 +316,12 @@ def join(req: JoinRequest):
     owner = checked_owner(req.owner)
     exclusions.refuse(owner)
     operator, consent, consent_sig = checked_consent(owner, req.pairingCode)
-    nullifier, credential = verify_human(owner, req.proof)
-    exclusions.refuse(owner, nullifier)  # the same human behind a fresh wallet
-    row = db.execute("SELECT owner FROM humans WHERE nullifier = ?", (nullifier,)).fetchone()
-    if row and row[0] != owner:
-        raise HTTPException(409, "this World ID already joined with another wallet")
-    db.execute("INSERT OR REPLACE INTO humans VALUES (?, ?, ?, ?)", (nullifier, owner, credential, int(time.time())))
-    db.commit()
+    stored = stored_human(owner)
+    if req.proof is not None or not stored:
+        nullifier, credential = verify_human(owner, req.proof or {})
+    else:
+        nullifier, credential = stored  # verified earlier through /verify
+    record_human(owner, nullifier, credential, joined=True)
     return signed_invite(operator, owner, nullifier, consent, consent_sig, credential)
 
 
@@ -447,9 +492,10 @@ def lift_exclusion(owner: str):
 
 @router.get("/owners/{owner}")
 def owner_status(owner: str):
-    """What the pool knows about an owner: whether it joined with World ID, and any exclusion with its evidence."""
+    """What the pool knows about an owner: verified with World ID, joined the pool, and any exclusion with its evidence."""
     owner = checked_owner(owner)
-    row = db.execute("SELECT credential FROM humans WHERE owner = ?", (owner,)).fetchone()
+    row = db.execute("SELECT credential, joined, seen FROM humans WHERE owner = ?", (owner,)).fetchone()
     ex = exclusions.get(owner)
-    return {"owner": owner, "joined": row is not None, "credential": row[0] if row else None,
+    return {"owner": owner, "verified": row is not None, "joined": bool(row and row[1]),
+            "credential": row[0] if row else None, "verifiedAt": row[2] if row else None,
             "excluded": {k: ex[k] for k in ("reason", "evidence", "at")} if ex else None}
