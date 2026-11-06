@@ -22,6 +22,7 @@ from tod_core.txmgr import dev_key
 from api import auth, config
 
 from . import agentpass, topup, worldid
+from .exclusions import Exclusions
 
 PAIR_PREFIX = "tod-pair:"
 INVITE_TTL = 30 * 60  # s; same lifetime as the operator's consent
@@ -58,6 +59,7 @@ db.execute("CREATE TABLE IF NOT EXISTS agent_pending (id TEXT PRIMARY KEY, kind 
            " consent TEXT, device_code TEXT, created INTEGER, expires INTEGER, state TEXT)")
 LINK_SIG_TTL = 300  # s; the owner's link signature is short-lived
 topups = topup.Topups(db, topup.Chain())
+exclusions = Exclusions(db, topups.chain)
 
 
 class JoinRequest(BaseModel):
@@ -145,7 +147,10 @@ def rp_signature(req: RpSignatureRequest):
 
 def credentials() -> dict[str, str]:
     """Lowercase owner -> recorded World ID credential, for the matcher (scheduler.pick)."""
-    return {owner.lower(): cred for owner, cred in db.execute("SELECT owner, credential FROM humans")}
+    # An excluded owner has no usable credential, so the matcher seats none of its operators, old or new.
+    out = exclusions.owners()
+    return {owner.lower(): cred for owner, cred in db.execute("SELECT owner, credential FROM humans")
+            if owner.lower() not in out}
 
 
 def checked_consent(owner: str, pairing_code: str) -> tuple[str, dict, bytes]:
@@ -187,8 +192,10 @@ def checked_owner(owner: str) -> str:
 @router.post("/join", response_model=JoinResponse)
 def join(req: JoinRequest):
     owner = checked_owner(req.owner)
+    exclusions.refuse(owner)
     operator, consent, consent_sig = checked_consent(owner, req.pairingCode)
     nullifier, credential = verify_human(owner, req.proof)
+    exclusions.refuse(owner, nullifier)  # the same human behind a fresh wallet
     row = db.execute("SELECT owner FROM humans WHERE nullifier = ?", (nullifier,)).fetchone()
     if row and row[0] != owner:
         raise HTTPException(409, "this World ID already joined with another wallet")
@@ -266,6 +273,7 @@ def agent_link(req: AgentLinkRequest):
 def agent_pair(req: AgentPairRequest):
     """An agent asks to pair a node for this owner; nothing is signed until the owner approves in World App."""
     owner = checked_owner(req.owner)
+    exclusions.refuse(owner)
     operator, consent, consent_sig = checked_consent(owner, req.pairingCode)
     _joined(owner)
     if not db.execute("SELECT 1 FROM agent_links WHERE owner = ?", (owner,)).fetchone():
@@ -315,6 +323,8 @@ def agent_poll(pid: str):
     db.execute("UPDATE agent_pending SET state = 'done' WHERE id = ?", (pid,))
     db.commit()
     nullifier, credential = _joined(owner)
+    if exclusions.get(owner, nullifier):
+        block("this owner was excluded from the pool while the approval was pending")
     consent_fields = {k: c[k] for k in ("owner", "operator", "consentDeadline")}
     return signed_invite(operator, owner, nullifier, consent_fields, bytes.fromhex(c["sig"][2:]), credential)
 
@@ -332,3 +342,38 @@ def gas_topup(operator: str = Depends(auth.node)):
         return topups.grant(operator)
     except topup.Refused as e:
         raise HTTPException(e.status, str(e))
+
+
+class Evidence(BaseModel):
+    job: int
+    round: int
+    operator: str
+
+
+class ExclusionRequest(BaseModel):
+    owner: str
+    reason: str  # shown to the owner and in status; link the confirmed rounds here
+    evidence: list[Evidence]
+
+
+@router.post("/exclusions", status_code=201, dependencies=[Depends(auth.admin)])
+def exclude(req: ExclusionRequest):
+    """Team action: keep an owner with verifier-confirmed failures out of future rosters and admission."""
+    return exclusions.add(checked_owner(req.owner), req.reason, [e.model_dump() for e in req.evidence])
+
+
+@router.delete("/exclusions/{owner}", dependencies=[Depends(auth.admin)])
+def lift_exclusion(owner: str):
+    if not exclusions.remove(checked_owner(owner)):
+        raise HTTPException(404, "owner is not excluded")
+    return {"owner": checked_owner(owner), "excluded": False}
+
+
+@router.get("/owners/{owner}")
+def owner_status(owner: str):
+    """What the pool knows about an owner: whether it joined with World ID, and any exclusion with its evidence."""
+    owner = checked_owner(owner)
+    row = db.execute("SELECT credential FROM humans WHERE owner = ?", (owner,)).fetchone()
+    ex = exclusions.get(owner)
+    return {"owner": owner, "joined": row is not None, "credential": row[0] if row else None,
+            "excluded": {k: ex[k] for k in ("reason", "evidence", "at")} if ex else None}
