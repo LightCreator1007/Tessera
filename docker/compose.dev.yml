@@ -47,6 +47,9 @@ services:
   coordinator:
     <<: *app
     command: python docker/dev/coordinator.py
+    # Public like the dev keys, and admin also needs localhost, so re-arm a benched node from inside the stack:
+    # docker compose -f docker/compose.dev.yml exec coordinator python -c "import urllib.request as u; u.urlopen(u.Request('http://127.0.0.1:8000/v1/admin/nodes/<operator>/rearm', method='POST', headers={'Authorization': 'Bearer dev-admin'}))"
+    environment: {<<: *env, ADMIN_TOKEN: dev-admin}
     depends_on: {deploy: {condition: service_completed_successfully}}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/v1/health', timeout=2)"]
