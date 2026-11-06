@@ -1,0 +1,79 @@
+# NAT test overlay for docker/compose.dev.yml: each node on its own private LAN behind a masquerading router.
+# docker compose -f docker/compose.dev.yml -f docker/compose.nat.yml up --build
+# anvil, the coordinator and the verifiers sit on "wan" at 10.10.0.10. A node reaches them only through its router,
+# the way a laptop behind a home router does, and nothing on wan can open a connection into a LAN.
+
+x-router: &router
+  image: alpine:3.20
+  cap_add: [NET_ADMIN]
+  sysctls: {net.ipv4.ip_forward: 1}
+  # healthy once the masquerade rule is in, so hosts don't come up before their way out exists
+  healthcheck: {test: ["CMD", "sh", "-c", "iptables -t nat -S POSTROUTING | grep -q MASQUERADE"], interval: 2s, retries: 60}
+
+x-host: &host
+  image: alpine:3.20
+  cap_add: [NET_ADMIN]
+  # Docker's embedded DNS answers nothing external on an internal network. Like a home router's DHCP, hand out a
+  # public resolver, reached through the NAT like everything else (the node shares this namespace and resolv.conf).
+  dns: [1.1.1.1, 8.8.8.8]
+  # Holds the node's network namespace and points its default route at the LAN's router instead of Docker's gateway.
+  healthcheck: {test: ["CMD", "sh", "-c", "ip route | grep -q '^default via 192.168'"], interval: 2s, retries: 60}
+
+x-node-env: &nodeenv
+  TOD_NETWORK: /dev-data/anvil.toml
+  ANVIL_RPC_URL: http://10.10.0.10:8545   # the network file says 127.0.0.1; behind NAT the chain is on wan
+  TOD_COORDINATOR: http://10.10.0.10:8000
+  TOD_API_BIND: "127.0.0.1:7777"          # each node has its own namespace now, so the API isn't published
+
+services:
+  anvil:
+    networks: {default: {}, wan: {ipv4_address: 10.10.0.10}}
+
+  nat-a:
+    <<: *router
+    networks: {wan: {ipv4_address: 10.10.0.21}, lan-a: {ipv4_address: 192.168.21.254}}
+    command: sh -c "apk add -q iptables && iptables -t nat -A POSTROUTING -s 192.168.21.0/24 ! -d 192.168.21.0/24 -j MASQUERADE && exec sleep infinity"
+  nat-b:
+    <<: *router
+    networks: {wan: {ipv4_address: 10.10.0.22}, lan-b: {ipv4_address: 192.168.22.254}}
+    command: sh -c "apk add -q iptables && iptables -t nat -A POSTROUTING -s 192.168.22.0/24 ! -d 192.168.22.0/24 -j MASQUERADE && exec sleep infinity"
+  nat-c:
+    <<: *router
+    networks: {wan: {ipv4_address: 10.10.0.23}, lan-c: {ipv4_address: 192.168.23.254}}
+    command: sh -c "apk add -q iptables && iptables -t nat -A POSTROUTING -s 192.168.23.0/24 ! -d 192.168.23.0/24 -j MASQUERADE && exec sleep infinity"
+
+  host-a:
+    <<: *host
+    networks: {lan-a: {ipv4_address: 192.168.21.10}}
+    command: sh -c "ip route replace default via 192.168.21.254 && exec sleep infinity"
+    depends_on: {nat-a: {condition: service_healthy}}
+  host-b:
+    <<: *host
+    networks: {lan-b: {ipv4_address: 192.168.22.10}}
+    command: sh -c "ip route replace default via 192.168.22.254 && exec sleep infinity"
+    depends_on: {nat-b: {condition: service_healthy}}
+  host-c:
+    <<: *host
+    networks: {lan-c: {ipv4_address: 192.168.23.10}}
+    command: sh -c "ip route replace default via 192.168.23.254 && exec sleep infinity"
+    depends_on: {nat-c: {condition: service_healthy}}
+
+  node-0:
+    network_mode: service:host-a
+    environment: {<<: *nodeenv, TOD_DATA: /dev-data/node0, TOD_MODE: "fake:lazy"}
+    depends_on: {seed: {condition: service_completed_successfully}, host-a: {condition: service_healthy}}
+  node-1:
+    network_mode: service:host-b
+    environment: {<<: *nodeenv, TOD_DATA: /dev-data/node1}
+    depends_on: {seed: {condition: service_completed_successfully}, host-b: {condition: service_healthy}}
+  node-2:
+    network_mode: service:host-c
+    environment: {<<: *nodeenv, TOD_DATA: /dev-data/node2}
+    depends_on: {seed: {condition: service_completed_successfully}, host-c: {condition: service_healthy}}
+
+networks:
+  wan: {ipam: {config: [{subnet: 10.10.0.0/24}]}}
+  # internal: Docker gives these no way out, so the only path off a LAN is its router
+  lan-a: {internal: true, ipam: {config: [{subnet: 192.168.21.0/24}]}}
+  lan-b: {internal: true, ipam: {config: [{subnet: 192.168.22.0/24}]}}
+  lan-c: {internal: true, ipam: {config: [{subnet: 192.168.23.0/24}]}}
