@@ -160,7 +160,8 @@ export async function refresh() {
       chainId, targetChainId: c.chainId, wrongNetwork: false, connectError: null, tod: units(tod), eth: Number(eth) / 1e18, claimable: units(claimable),
       allowance: { market: units(aMarket), registry: units(aRegistry) },
       stake: node && node.owner.toLowerCase() === me.toLowerCase() ? units(node.stake) : null,
-      joined: node && node.owner.toLowerCase() === me.toLowerCase() ? node.joined : null, error: null,
+      // An operator not joined under this wallet reads as false, so a stale "joined" saved in the browser can't skip the Join step.
+      joined: node ? node.joined && node.owner.toLowerCase() === me.toLowerCase() : null, error: null,
     });
   } catch (e) {
     set({ error: e instanceof Error ? e.message.split("\n")[0] : "Couldn't read the chain." });
