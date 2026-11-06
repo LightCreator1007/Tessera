@@ -4,8 +4,7 @@ import { keccak256 } from "viem";
 import * as fx from "@/mocks/fixtures";
 import type {
   Draft, DraftRequest, ModelRecord, NodeEvent, NodeHealth, NodeStatus, Spec, Workload,
-  Config, Evidence, Health, Job, JobState, Node, NodeChain, Pool, Round, RoundSummary, RoundVerdicts, Settlement, Sourced,
-} from "./types";
+  Config, Evidence, Health, Job, JobState, Node, NodeChain, Pool, Round, RoundSummary, RoundVerdicts, Settlement, Sourced, OwnerHistory } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_COORDINATOR_URL ? "/api/coord" : undefined;
 export const isDemo = !BASE;
@@ -111,6 +110,8 @@ export const api = {
   models: () => (BASE ? get<ModelRecord[]>("/v1/models") : demo(() => fx.models, "models")),
   draft: (req: DraftRequest) => (BASE ? post<Draft>("/v1/jobs/draft", req) : demo(() => fx.draftFor(req), "draft")),
   nodes: () => (BASE ? get<Node[]>("/v1/nodes") : demo(() => fx.nodes, "nodes")),
+  /** Live only: demo keeps its own fixture ledger. Coordinators without the history route answer 404. */
+  history: (owner: string) => get<OwnerHistory>(`/v1/owners/${owner}/history?limit=200`),
   // Per-verifier verdicts have no coordinator route. Live, they are derived from the round itself: its status, the
   // threshold, and confirmed cheats. Demo uses fixtures. Either way the receipt labels them as derived, not signed.
   verdicts: async (id: number, r: number): Promise<Sourced<RoundVerdicts>> => {
