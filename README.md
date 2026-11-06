@@ -46,6 +46,27 @@ It starts its own local Anvil chain, deploys the real contracts, and walks the m
 
 To run every test, use `uv run pytest`. The contract tests are `cd contracts && forge test`.
 
+## Run the whole network
+
+`docker compose -f docker/compose.dev.yml up --build` starts a local chain, the coordinator, two verifiers and four nodes, one of which cheats, and drafts a job. Other PCs on your network can join as nodes, and you can post jobs from the command line. [docs/lan-demo.md](docs/lan-demo.md) walks through it.
+
+## Arkiv and Swarm
+
+Every finished model gets a public `tod.model` entity on Arkiv (Rabdi testnet), and every job's data is cut into shard files listed in a `tod.shards` entity. The bytes live on Swarm, and each entity holds the Swarm reference and the keccak, so anyone can find a model and check it against the contract without trusting the coordinator. The web app's Models page reads its list from Arkiv. Add `-f docker/compose.arkiv.yml` to the compose command to turn publishing on.
+
+- Writer wallet: `0x8Bb9FE30662594A7b7c193100bf92696Abb9c200`
+- Every finished model on our JobMarket, newest first:
+
+  ```
+  arkiv.schema = str('tod.model') AND $owner = addr(0x8Bb9FE30662594A7b7c193100bf92696Abb9c200) AND jobMarket = addr(0xfdAfECB684069F7dfFDd83997a0cf30B2f06438d) ORDER BY job:u64 DESC
+  ```
+
+[arkiv/](arkiv/) has the schema, how and why we use Arkiv, who it's for, what got in the way, and how Swarm fits in.
+
+## World ID
+
+One human, one node: a laptop joins the pool only after its owner proves they're human with World ID, verified on the coordinator's server and bound to the owner's wallet, and the contract refuses a second node for the same person. Small jobs accept Selfie Check, and jobs of 500 TOD or more need Proof of Human. [docs/world-id.md](docs/world-id.md) explains the choice, every path and our integration debrief.
+
 ## What's in the repo
 
 | Path | What it is |
@@ -69,7 +90,11 @@ These are true today, and we'd rather say so up front.
 - TOD is a capped test token with no dollar value. The test exchange uses a made-up 1:1 quote against test USDC and is not a way to cash out.
 - The chain is Base Sepolia, a testnet. Nothing is deployed to a public network yet. The settings in `networks/` are a template.
 - Exact replay only covers the CPU MLP for now. Bigger models and GPUs need a tolerance-based judge that isn't wired up.
-- The demo and the rehearsal each run in one process. Running the node, verifiers and coordinator as separate services from a fresh clone is still being finished.
+- The whole network runs on a local Anvil chain with public dev keys. Joining and posting jobs from the web app still use a simulated wallet, so for now they're done from the command line.
+
+## How we used AI
+
+We built ToD at ETHGlobal Mumbai as five people, each working with a coding agent (Claude Code among them). The agents wrote a large share of the code, tests, docs and PR descriptions, including the `arkiv/` folder and this section. Each of us directed our own agent, reviewed what it wrote and merged through pull requests, and [AGENTS.md](AGENTS.md) is the shared brief the agents worked from. Design decisions, the protocol and what got merged were ours.
 
 ## License
 
