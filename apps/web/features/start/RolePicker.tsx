@@ -7,13 +7,14 @@ import { Eyebrow, cx } from "@/components/primitives";
 import { PosterThumb, VOCAB_SHORT, useWordField } from "@/components/mosaic/PosterCard";
 import { coverById } from "@/components/mosaic/figures";
 
-const KEY = "tod-role";
-const ROLES = [
+export const ROLE_KEY = "tod-role";
+const KEY = ROLE_KEY;
+export const ROLES = [
   { key: "lend", word: "LEND", icon: Laptop, title: "Lend a laptop", promise: "Your laptop trains verified jobs. Earnings pay for your own jobs or competition entries.", first: { href: "/demo", label: "Watch a replay catch a lazy node, 40 s" }, then: { href: "/nodes/add", label: "Add your laptop" } },
   { key: "train", word: "TRAIN", icon: Cpu, title: "Train a model", promise: "Lock a budget. Laptops train it, verifiers check every round, and you pay only for verified work.", first: { href: "/demo", label: "See how a round is checked" }, then: { href: "/jobs/new", label: "Start from a preset job" } },
   { key: "host", word: "HOST", icon: Trophy, title: "Host a competition", promise: "Commit your labels up front. Nobody, including you, can change the scoring afterwards.", first: { href: "/competitions/leaf-10", label: "Open a finished example" }, then: { href: "/competitions/new", label: "Host a competition" } },
 ] as const;
-type Role = (typeof ROLES)[number]["key"];
+export type Role = (typeof ROLES)[number]["key"];
 
 function read(): Role | null {
   try {
@@ -24,7 +25,7 @@ function read(): Role | null {
   }
 }
 
-function RoleArt({ word, on }: { word: string; on: boolean }) {
+export function RoleArt({ word, on }: { word: string; on: boolean }) {
   const field = useWordField(word, on);
   return <PosterThumb field={field} label={word} vocab={VOCAB_SHORT} cell={6} className="h-48 border-b border-rule" />;
 }

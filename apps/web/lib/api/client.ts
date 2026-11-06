@@ -7,6 +7,8 @@ import type {
   Config, Evidence, Health, Job, JobState, Node, NodeChain, Pool, Round, RoundSummary, RoundVerdicts, Settlement, Sourced, OwnerHistory, OwnerIdentity } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_COORDINATOR_URL ? "/api/coord" : undefined;
+/** The same-origin proxy root, for modules with their own routes (lib/identity). */
+export const COORD_BASE = BASE;
 export const isDemo = !BASE;
 
 export type ErrorKind = "not_found" | "off" | "upstream" | "unreachable" | "bad_input" | "server";

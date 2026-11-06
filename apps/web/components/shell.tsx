@@ -6,9 +6,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Bell, BookOpen, ChevronDown, ChevronsUpDown, Coins, Cpu, House, Laptop, Layers, LogOut, Trophy, Menu,
-  PanelLeftClose, PanelLeftOpen, Plus, Rocket, Settings, Terminal, UserRound, Wallet, X, Boxes, type LucideIcon,
+  PanelLeftClose, PanelLeftOpen, Plus, Rocket, ScanFace, Settings, Terminal, UserRound, Wallet, X, Boxes, type LucideIcon,
 } from "lucide-react";
 import { useWallet } from "@/lib/wallet";
+import { CREDENTIAL_LABEL, useHuman } from "@/lib/identity";
 import { ConnectDialog, openConnect } from "./connect";
 import { SettingsDialog, openSettings } from "./settings";
 import { useHealth } from "@/lib/api/hooks";
@@ -135,7 +136,7 @@ function MobileBar({ onMenu }: { onMenu: () => void }) {
         <span className="text-sm font-medium text-ink">Tessera</span>
       </Link>
       <span className="ml-auto">
-        {w.connected && w.address ? <Link href="/me" aria-label="Your profile"><Identicon value={w.address} className="size-6" /></Link> : <Button onClick={openConnect}>Connect</Button>}
+        {w.connected && w.address ? <Link href="/me" aria-label="Your profile"><Identicon value={w.address} className="size-6" /></Link> : <Button onClick={openConnect}>Sign in</Button>}
       </span>
     </header>
   );
@@ -374,12 +375,13 @@ function WalletRow() {
   if (!w.connected || !w.address) {
     return (
       <div className="border-t border-rule pt-2">
-        <Tip label="Connect wallet">
+        <Tip label="Sign in" hint="connect your wallet">
           <button type="button" onClick={openConnect} className={cx(ROW, "h-9 rounded-md border border-rule bg-surface text-ink", HOVER)}>
             <Slot><Wallet className="size-4" strokeWidth={1.5} aria-hidden /></Slot>
-            <Label>Connect wallet</Label>
+            <Label>Sign in</Label>
           </button>
         </Tip>
+        <Link href="/welcome" className={cx("rail-label mt-1 block px-2 text-xs text-subtle underline decoration-subtle underline-offset-4 hover:text-ink")}>New here? Sign up</Link>
       </div>
     );
   }
@@ -389,6 +391,8 @@ function WalletRow() {
 /** The connected row. When round pay lands, its second line says so for three seconds instead of the balance. */
 function ConnectedWalletRow({ address }: { address: string }) {
   const w = useWallet();
+  const human = useHuman();
+  const unverified = !human.loading && !human.verified && !w.wrongNetwork;
   const gain = useGain(w.claimable);
   return (
     <div className="border-t border-rule pt-2">
@@ -398,7 +402,12 @@ function ConnectedWalletRow({ address }: { address: string }) {
         trigger={({ open, toggle, ref }) => (
           <Tip label={short(address)} hint={w.wrongNetwork ? "wrong network" : `${formatToken(w.usdc)} ${TOKEN_SYMBOL}`}>
             <button ref={ref} type="button" onClick={toggle} aria-expanded={open} aria-label={`Wallet ${short(address)}`} className={cx(ROW, "h-10 rounded-md text-left", HOVER)}>
-              <Slot><Identicon value={address} className="-m-0.5 size-6" /></Slot>
+              <Slot>
+                <span className="relative">
+                  <Identicon value={address} className="-m-0.5 size-6" />
+                  {unverified && <span className="absolute -right-1 -top-1 size-2 rounded-xs bg-mosaic ring-2 ring-sunken" aria-label="Not verified as one person yet" />}
+                </span>
+              </Slot>
               <Label>
                 <span className="flex min-w-0 flex-col leading-tight">
                   <span className="truncate font-mono text-xs text-ink">{short(address)}</span>
@@ -419,7 +428,9 @@ function ConnectedWalletRow({ address }: { address: string }) {
             <dl className="flex flex-col gap-1 px-2 py-1.5 text-sm">
               <div className="flex justify-between gap-3"><dt className="text-muted">Wallet</dt><dd><Money units={w.usdc} /></dd></div>
               <div className="flex justify-between gap-3"><dt className="text-muted">Earned, unclaimed</dt><dd><Money units={w.claimable} live /></dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-muted">One person</dt><dd className={cx("font-mono text-xs", human.verified ? "text-ok" : "text-subtle")}>{human.loading ? "checking" : human.verified ? (human.status?.credential ? CREDENTIAL_LABEL[human.status.credential] : "verified") : "not yet"}</dd></div>
             </dl>
+            {unverified && <MenuItem icon={ScanFace} title="Prove you're one person" hint="World ID, about a minute" href="/welcome" onClick={close} />}
             <div className="my-1 h-px bg-rule" />
             {w.wrongNetwork && <MenuItem title="Switch to Base Sepolia" onClick={() => { w.switchNetwork(); close(); }} />}
             <MenuItem icon={UserRound} title="Profile" hint="Roles, identity, posters" href="/me" onClick={close} />

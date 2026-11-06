@@ -3,22 +3,24 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { Wallet } from "lucide-react";
 import { Button } from "@/components/primitives";
 import { openConnect } from "@/components/connect";
 import { PosterThumb } from "./PosterCard";
 import { coverById } from "./figures";
 
-export function ConnectGate({ title, children, figure = "crow", onConnect = openConnect }: { title: string; children: ReactNode; figure?: string; onConnect?: () => void }) {
+export function ConnectGate({ title, children, figure = "crow", onConnect = openConnect, className = "mx-4 my-6 md:mx-6", signUp = true }: { title: string; children: ReactNode; figure?: string; onConnect?: () => void; className?: string; signUp?: boolean }) {
   return (
-    <section aria-label={title} className="mx-4 my-6 grid overflow-hidden border border-rule bg-card md:mx-6 md:grid-cols-2">
+    <section aria-label={title} className={`grid overflow-hidden border border-rule bg-card md:grid-cols-2 ${className}`}>
       <PosterThumb cover={coverById(figure)} live label={`${coverById(figure).title} poster`} cell={7} className="h-56 border-b border-rule md:h-auto md:min-h-96 md:border-b-0 md:border-r" />
       <div className="flex flex-col justify-center gap-4 p-6 md:p-10">
         <span className="font-mono text-xs uppercase tracking-wide text-mosaic">Sign in · one wallet, no account</span>
         <h2 className="text-2xl font-medium tracking-tight text-ink">{title}</h2>
         <p className="max-w-md text-sm leading-relaxed text-muted">{children}</p>
-        <div>
+        <div className="flex flex-wrap items-center gap-4">
           <Button variant="primary" icon={Wallet} onClick={onConnect}>Connect wallet</Button>
+          {signUp && <Link href="/welcome" className="text-sm text-muted underline decoration-subtle underline-offset-4 hover:text-ink">New here? Sign up in 2 minutes</Link>}
         </div>
         <p className="max-w-md font-mono text-xs leading-relaxed text-subtle">Tessera never asks for a seed phrase. Connecting shares your address only; every payment is a transaction you sign.</p>
       </div>

@@ -17,6 +17,8 @@ import { Button, DocsLink, Money, Segmented, SourceBadge, cx, short } from "@/co
 import { INSTALL, PAIR_PREFIX, PAIR_TTL_MIN, SETUP, pairCommand } from "@/features/docs/cli";
 import { SIMULATED, SelfTestCard } from "./SelfTestCard";
 import { ExcludedNotice } from "./Excluded";
+import { HumanCheck } from "@/components/human/HumanCheck";
+import { useHuman } from "@/lib/identity";
 
 const TOD = 1_000_000;
 
@@ -78,7 +80,7 @@ export function JoinFlow() {
   const [err, setErr] = useState<string | null>(null);
   const [amount, setAmount] = useState("15");
   const [amountSet, setAmountSet] = useState(false);
-  const human = useTx({ revertAs: "NullifierUsed" });
+  const person = useHuman();
   const approve = useTx();
   const join = useTx({ revertAs: "AlreadyJoined" });
   const stake = useTx({ revertAs: "StakeTooLow" });
@@ -98,7 +100,7 @@ export function JoinFlow() {
   const open = (jobs.data?.data ?? []).filter((j) => j.status === "open" || j.status === "running");
   const qualifies = open.filter((j) => j.stakePerNode <= units).length;
 
-  const current = !w.connected || w.wrongNetwork ? 0 : !installed ? 1 : !node ? 2 : !node.humanVerified ? 3 : !node.joined || !staked ? 4 : !node.running ? 5 : 6;
+  const current = !w.connected || w.wrongNetwork ? 0 : !installed ? 1 : !node ? 2 : !(node.humanVerified || person.verified) ? 3 : !node.joined || !staked ? 4 : !node.running ? 5 : 6;
   const wiz = useWizard(current);
   const markInstalled = () => { sessionStorage.setItem("join-installed", "1"); setInstalled(true); };
   const owner = w.address ?? "<your wallet>";
@@ -263,11 +265,15 @@ export function JoinFlow() {
       {wiz.shown === 3 && !excluded && (
         <StepPanel
           key="human"
-          title="Prove you're one person"
+          title={reviewing ? "Verified as one person" : "Prove you're one person"}
           lede="One person, one node. It keeps anyone from running a fleet of fake laptops to outvote honest ones."
-          footer={reviewing ? back : <TxButton tx={human} label="Verify with World ID" onRun={() => human.run(() => setWallet((x) => ({ node: x.node && { ...x.node, humanVerified: true }, eth: x.eth + 0.01 })))} />}
+          footer={reviewing ? back : undefined}
         >
-          {reviewing ? <p className="text-sm text-muted">Verified with World ID.</p> : <TxStatus tx={human} />}
+          <HumanCheck
+            compact
+            intro="Scan once with World App. If you verified when you signed up, this step is already done."
+            onVerified={() => setWallet((x) => ({ node: x.node && { ...x.node, humanVerified: true }, eth: isDemo ? x.eth + 0.01 : x.eth }))}
+          />
           <More label="What does World ID see?">
             <p>Nothing about you goes on chain except a one-time number that proves this person hasn&apos;t joined before. No name, no face, no address.</p>
             <p>Once you&apos;re verified, the coordinator sends your node a little test ETH for its own gas.</p>
