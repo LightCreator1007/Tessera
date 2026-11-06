@@ -28,7 +28,7 @@ export const COMMANDS: CliCommand[] = [
   { name: "run", args: "[--poll <s>] [--mode honest|fake:lazy]", does: "Runs the node: watches the chain, trains, commits and reveals, and serves the local API on 127.0.0.1:7777. It asks the coordinator for gas when it starts low. fake:lazy cheats on purpose and only test chains allow it.", ships: true },
   { name: "logs", args: "[-f] [--since <seq>]", does: "Prints the node's event log. With --json, one event per line.", ships: true },
   { name: "stop", args: "[--wait]", does: "Asks the node to stop. It finishes any reveal it owes first, so stopping never costs stake. Stake stays in the registry until you withdraw it on the web.", ships: true },
-  { name: "tui", args: "[--node <url>] [--demo]", does: "Opens the terminal UI on this node, pointed at the coordinator it uses. Needs tod-tui installed from apps/tui.", ships: false },
+  { name: "tui", args: "[--node <url>] [--demo]", does: "Opens the terminal UI on this node, pointed at the coordinator it uses. Needs tod-tui, which `uv sync --all-packages` installs with the rest of the workspace.", ships: false },
 ];
 
 export const EXIT_CODES: [number, string][] = [
@@ -44,7 +44,7 @@ export const ERROR_SHAPE = '{"error": "not initialized", "code": "not_initialize
 
 /** The terminal UI in apps/tui. Same node, same coordinator, three tabs: node, round and pool. */
 export const TUI = {
-  install: "cd apps/tui\nuv run tod-tui",
+  install: "uv sync --all-packages\nuv run tod-tui",
   run: "tod-node tui",
   local: "uv run tod-tui --node http://127.0.0.1:7778 --coordinator http://127.0.0.1:8000",
   demo: "uv run tod-tui --demo",
