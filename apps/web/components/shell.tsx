@@ -19,6 +19,7 @@ import { formatToken, TOKEN_SYMBOL } from "@/lib/money";
 import { Button, Count, Identicon, MenuItem, Money, Popover, cx, short } from "./primitives";
 import { Flap, useGain } from "./mosaic/Flap";
 import { BrandMark } from "./brand";
+import { networkName } from "@/lib/chain/discover";
 
 export function Providers({ children }: { children: ReactNode }) {
   const [qc] = useState(() => new QueryClient({ defaultOptions: { queries: { staleTime: 4_000, refetchOnWindowFocus: false } } }));
@@ -345,8 +346,7 @@ function SettingsRow() {
   );
 }
 
-const CHAINS: Record<number, string> = { 84532: "Base Sepolia", 8453: "Base", 31337: "Local Anvil" };
-export const chainName = (id: number | undefined) => (id === undefined ? "Base Sepolia" : CHAINS[id] ?? `Chain ${id}`);
+export const chainName = (id: number | undefined) => (id === undefined ? "Base Sepolia" : networkName(id));
 
 function StatusLine() {
   const h = useHealth();
@@ -432,7 +432,7 @@ function ConnectedWalletRow({ address }: { address: string }) {
             </dl>
             {unverified && <MenuItem icon={ScanFace} title="Prove you're one person" hint="World ID, about a minute" href="/welcome" onClick={close} />}
             <div className="my-1 h-px bg-rule" />
-            {w.wrongNetwork && <MenuItem title="Switch to Base Sepolia" onClick={() => { w.switchNetwork(); close(); }} />}
+            {w.wrongNetwork && <MenuItem title={`Switch to ${chainName(w.targetChainId ?? undefined)}`} onClick={() => { w.switchNetwork(); close(); }} />}
             <MenuItem icon={UserRound} title="Profile" hint="Roles, identity, posters" href="/me" onClick={close} />
             <MenuItem icon={Coins} title="Balance" hint="Wallet, earnings, what paid for what" href="/balance" onClick={close} />
             <MenuItem icon={Settings} title="Settings" onClick={() => { openSettings("wallet"); close(); }} />

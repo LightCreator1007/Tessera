@@ -74,10 +74,13 @@ export function useWallet() {
       ...d,
       allowanceTo: { market: d.allowance, registry: d.allowance },
       chainError: null as string | null,
+      connectError: null as chain.ConnectError | null,
+      walletInfo: d.address ? DEMO_WALLET : null,
+      targetChainId: CHAIN_ID,
       connecting: false,
       connected: d.address !== null,
       wrongNetwork: d.address !== null && d.chainId !== CHAIN_ID,
-      connect: () => setWallet({ address: "0x5e1f00d2c0ffee0000000000000000000000a11c" }),
+      connect: (_rdns?: string) => setWallet({ address: "0x5e1f00d2c0ffee0000000000000000000000a11c" }),
       disconnect: () => setWallet({ address: null }),
       switchNetwork: () => setWallet({ chainId: CHAIN_ID }),
     };
@@ -85,21 +88,26 @@ export function useWallet() {
   // Live: the chain owns address, network and money. The wallet counts as connected only once every read has landed, so no screen shows a zero that was never read.
   const read = c.address !== null && !c.wrongNetwork && c.tod !== null && c.eth !== null && c.allowance !== null && c.claimable !== null;
   const w: DemoWallet = read
-    ? { ...d, address: c.address, chainId: CHAIN_ID, usdc: c.tod as number, eth: c.eth as number, allowance: c.allowance!.market, claimable: c.claimable as number, node: d.node && { ...d.node, stake: c.stake === null ? d.node.stake : c.stake } }
-    : { ...d, address: null, usdc: 0, eth: 0, allowance: 0, claimable: 0 };
+    ? { ...d, address: c.address, chainId: c.chainId ?? CHAIN_ID, usdc: c.tod as number, eth: c.eth as number, allowance: c.allowance!.market, claimable: c.claimable as number, node: d.node && { ...d.node, stake: c.stake === null ? d.node.stake : c.stake } }
+    // On the wrong network the address is real (the account menu shows it with a switch), the money is not read.
+    : { ...d, address: c.wrongNetwork ? c.address : null, usdc: 0, eth: 0, allowance: 0, claimable: 0 };
   return {
     ...w,
     allowanceTo: read ? c.allowance! : { market: 0, registry: 0 },
     chainError: c.error,
+    connectError: c.connectError,
+    walletInfo: c.wallet,
+    targetChainId: c.targetChainId,
     connecting: c.address !== null && !read && !c.wrongNetwork && c.error === null,
     connected: read || c.wrongNetwork,
     wrongNetwork: c.wrongNetwork,
-    connect: () => { void chain.connect(); },
-    disconnect: () => chain.disconnect(),
+    connect: (rdns?: string) => { void chain.connect(rdns); },
+    disconnect: () => { void chain.disconnect(); },
     switchNetwork: () => { void chain.switchNetwork(); },
   };
 }
 
+const DEMO_WALLET: chain.WalletInfo = { id: "demo", name: "MetaMask", icon: null, rdns: "io.metamask" };
 const noSub = () => () => {};
 const noChain = chain.serverSnapshot;
 

@@ -1,8 +1,11 @@
 "use client";
-// The live chain behind the wallet and every write: an injected EIP-1193 wallet through viem, contract addresses from the coordinator's /v1/config, and balances read straight from the contracts. Demo mode never touches this module.
+// The live chain behind the wallet and every write: the browser wallet the person picked (found through EIP-6963) through viem, contract addresses from the coordinator's /v1/config, and balances read straight from the contracts. Demo mode never touches this module.
 import { BaseError, ContractFunctionRevertedError, UserRejectedRequestError, createPublicClient, createWalletClient, custom, decodeAbiParameters, encodeAbiParameters, encodeFunctionData, parseAbi, type Address, type EIP1193Provider, type Hex } from "viem";
 import { api } from "@/lib/api/client";
 import { CREATE_JOB_ARGS } from "@/lib/api/draft";
+import { NETWORKS, networkName, providerFor, startDiscovery, whenFound, type Found, type WalletInfo } from "./discover";
+
+export { networkName, type WalletInfo } from "./discover";
 
 /** Only the functions, events and errors the app calls, checked against contracts/src. */
 export const marketAbi = parseAbi([
@@ -32,6 +35,10 @@ export type Contracts = { chainId: number; market: Address; registry: Address; t
 export type ChainWallet = {
   address: Address | null;
   chainId: number | null;
+  /** The extension this session is using, from EIP-6963. */
+  wallet: WalletInfo | null;
+  /** The coordinator's network, once read. */
+  targetChainId: number | null;
   /** Connected, but to a network other than the coordinator's. */
   wrongNetwork: boolean;
   tod: number | null;
@@ -42,21 +49,32 @@ export type ChainWallet = {
   /** The stake on the operator this owner runs, once one is known. */
   stake: number | null;
   error: string | null;
+  /** Why the last connect or network switch didn't go through, sorted for the dialog. */
+  connectError: ConnectError | null;
 };
+export type ConnectError = { kind: "rejected" | "pending" | "missing" | "failed"; message: string };
 
 const FAUCET = (process.env.NEXT_PUBLIC_FAUCET_ADDRESS || null) as Address | null;
-const EMPTY: ChainWallet = { address: null, chainId: null, wrongNetwork: false, tod: null, eth: null, allowance: null, claimable: null, stake: null, error: null };
+const EMPTY: ChainWallet = { wallet: null, targetChainId: null, connectError: null, address: null, chainId: null, wrongNetwork: false, tod: null, eth: null, allowance: null, claimable: null, stake: null, error: null };
 
 let contracts: Promise<Contracts> | null = null;
 let state: ChainWallet = EMPTY;
 let operator: Address | null = null;
-let wired = false;
+let active: Found | null = null;
+let unwire: (() => void) | null = null;
+let booted = false;
 const subs = new Set<() => void>();
+/** The wallet picked last time, so a reload reconnects without asking. Cleared on disconnect. */
+const REMEMBER = "tod-wallet";
 
 function provider(): EIP1193Provider | null {
-  if (typeof window === "undefined") return null;
-  return ((window as unknown as { ethereum?: EIP1193Provider }).ethereum) ?? null;
+  return active?.provider ?? null;
 }
+
+const remembered = () => { try { return localStorage.getItem(REMEMBER); } catch { return null; } };
+const remember = (rdns: string | null) => {
+  try { if (rdns) localStorage.setItem(REMEMBER, rdns); else localStorage.removeItem(REMEMBER); } catch { /* Private mode: a reload asks again, nothing else breaks. */ }
+};
 
 export function getContracts(): Promise<Contracts> {
   contracts ??= api.config().then(({ data: c }) => ({ chainId: c.chainId, market: c.jobMarket as Address, registry: c.nodeRegistry as Address, token: c.token as Address, faucet: FAUCET }))
@@ -70,22 +88,44 @@ function set(patch: Partial<ChainWallet>) {
 }
 
 export function subscribe(f: () => void) {
-  wire();
+  boot();
   subs.add(f);
   return () => { subs.delete(f); };
 }
 export const snapshot = () => state;
 export const serverSnapshot = () => EMPTY;
 
-/** Listen to the wallet once: account and network changes re-read everything. */
-function wire() {
-  const p = provider();
-  if (wired || !p) return;
-  wired = true;
-  p.on("accountsChanged", (a: string[]) => { set({ address: (a[0] as Address) ?? null }); void refresh(); });
-  p.on("chainChanged", (id: string) => { set({ chainId: Number(id) }); void refresh(); });
-  // Pick up a wallet that is already connected without prompting.
-  void p.request({ method: "eth_accounts" }).then((a) => { if (a[0]) { set({ address: a[0] as Address }); void refresh(); } });
+/** First subscriber: find the wallets, and if one was used last time, reconnect to it silently (eth_accounts never prompts). */
+function boot() {
+  if (booted || typeof window === "undefined") return;
+  booted = true;
+  startDiscovery();
+  void getContracts().then((c) => set({ targetChainId: c.chainId })).catch(() => { /* refresh() reports a coordinator that's down */ });
+  const last = remembered();
+  if (last) whenFound(last, (w) => {
+    use(w);
+    void w.provider.request({ method: "eth_accounts" })
+      .then((a) => { if (a[0]) { set({ address: a[0] as Address }); void refresh(); } else remember(null); })
+      .catch(() => remember(null));
+  });
+}
+
+/** Make this wallet the one every read and write goes through, and follow its account and network changes. */
+function use(w: Found) {
+  if (active?.provider === w.provider) return;
+  unwire?.();
+  active = w;
+  set({ wallet: { id: w.id, name: w.name, icon: w.icon, rdns: w.rdns } });
+  const onAccounts = (a: string[]) => {
+    // An empty list means the person disconnected this site from inside the wallet.
+    if (!a[0]) { remember(null); set({ ...EMPTY, wallet: state.wallet, targetChainId: state.targetChainId }); return; }
+    set({ address: a[0] as Address });
+    void refresh();
+  };
+  const onChain = (id: string) => { set({ chainId: Number(id) }); void refresh(); };
+  w.provider.on("accountsChanged", onAccounts);
+  w.provider.on("chainChanged", onChain);
+  unwire = () => { w.provider.removeListener("accountsChanged", onAccounts); w.provider.removeListener("chainChanged", onChain); };
 }
 
 const units = (v: bigint) => Number(v);
@@ -97,7 +137,7 @@ export async function refresh() {
   try {
     const [c, chainHex] = await Promise.all([getContracts(), p.request({ method: "eth_chainId" })]);
     const chainId = Number(chainHex);
-    if (chainId !== c.chainId) { set({ chainId, wrongNetwork: true, tod: null, eth: null, allowance: null, claimable: null, stake: null, error: null }); return; }
+    if (chainId !== c.chainId) { set({ chainId, targetChainId: c.chainId, wrongNetwork: true, tod: null, eth: null, allowance: null, claimable: null, stake: null, error: null }); return; }
     const pub = createPublicClient({ transport: custom(p) });
     const me = state.address;
     const [tod, eth, aMarket, aRegistry, claimable, node] = await Promise.all([
@@ -109,7 +149,7 @@ export async function refresh() {
       operator ? pub.readContract({ address: c.registry, abi: registryAbi, functionName: "getNode", args: [operator] }) : Promise.resolve(null),
     ]);
     set({
-      chainId, wrongNetwork: false, tod: units(tod), eth: Number(eth) / 1e18, claimable: units(claimable),
+      chainId, targetChainId: c.chainId, wrongNetwork: false, connectError: null, tod: units(tod), eth: Number(eth) / 1e18, claimable: units(claimable),
       allowance: { market: units(aMarket), registry: units(aRegistry) },
       stake: node && node.owner.toLowerCase() === me.toLowerCase() ? units(node.stake) : null, error: null,
     });
@@ -126,32 +166,72 @@ export function watchOperator(op: string | null) {
   void refresh();
 }
 
-/** Ask the wallet for an account. A refusal or a missing extension lands in `error` for the connect dialog to show. */
-export async function connect() {
-  const p = provider();
-  if (!p) return set({ error: "No browser wallet found. Install MetaMask or Rabby, then try again." });
+const codeOf = (e: unknown): number | undefined => {
+  const x = e as { code?: unknown; data?: { originalError?: { code?: unknown } }; cause?: unknown };
+  if (typeof x?.code === "number") return x.code;
+  if (typeof x?.data?.originalError?.code === "number") return x.data.originalError.code;
+  return x?.cause ? codeOf(x.cause) : undefined;
+};
+
+/** Sorts a wallet's refusal by its EIP-1193 code: 4001 is the person saying no, -32002 a request already open in the extension. */
+function walletError(e: unknown, fallback: string): ConnectError {
+  const code = codeOf(e);
+  if (code === 4001) return { kind: "rejected", message: "You closed the request in your wallet." };
+  if (code === -32002) return { kind: "pending", message: "A request is already waiting in your wallet. Open the extension to finish it." };
+  return { kind: "failed", message: e instanceof BaseError ? e.shortMessage : e instanceof Error ? e.message.split("\n")[0] : fallback };
+}
+
+/** Ask one wallet (by its EIP-6963 rdns) for an account. Refusals land in connectError for the dialog to show. */
+export async function connect(rdns?: string) {
+  boot();
+  const w = rdns ? providerFor(rdns) : active;
+  if (!w) return set({ connectError: { kind: "missing", message: "That wallet isn't installed in this browser." } });
+  use(w);
+  set({ connectError: null, error: null });
   try {
-    const a = await p.request({ method: "eth_requestAccounts" });
-    set({ address: (a[0] as Address) ?? null, error: null });
+    const a = await w.provider.request({ method: "eth_requestAccounts" });
+    if (!a[0]) return set({ connectError: { kind: "failed", message: "The wallet didn't share an account." } });
+    remember(w.rdns);
+    set({ address: a[0] as Address });
     await refresh();
   } catch (e) {
-    set({ error: e instanceof BaseError ? e.shortMessage : "The wallet didn't connect." });
+    set({ connectError: walletError(e, "The wallet didn't connect.") });
   }
 }
 
-/** Injected wallets have no disconnect; forgetting the address here is the closest honest thing. */
-export function disconnect() {
-  set(EMPTY);
+/** Forget this site inside the wallet where it can (MetaMask has wallet_revokePermissions), and always here, so a reload doesn't reconnect. */
+export async function disconnect() {
+  const p = provider();
+  remember(null);
+  set({ ...EMPTY, wallet: state.wallet, targetChainId: state.targetChainId });
+  if (p) await p.request({ method: "wallet_revokePermissions", params: [{ eth_accounts: {} }] } as never).catch(() => { /* Not every wallet has it; forgetting here is enough. */ });
 }
 
+/** Move the wallet to the coordinator's network, adding the network first when the wallet has never seen it (error 4902). */
 export async function switchNetwork() {
   const p = provider();
   if (!p) return;
+  set({ connectError: null });
+  let chainId: number;
   try {
-    const { chainId } = await getContracts();
-    await p.request({ method: "wallet_switchEthereumChain", params: [{ chainId: `0x${chainId.toString(16)}` }] });
+    chainId = (await getContracts()).chainId;
+  } catch {
+    return set({ connectError: { kind: "failed", message: "Couldn't read which network the app runs on." } });
+  }
+  const hex = `0x${chainId.toString(16)}` as Hex;
+  try {
+    await p.request({ method: "wallet_switchEthereumChain", params: [{ chainId: hex }] });
   } catch (e) {
-    set({ error: e instanceof BaseError ? e.shortMessage : "The wallet didn't switch networks." });
+    const net = NETWORKS[chainId];
+    if (codeOf(e) !== 4902 || !net) return set({ connectError: walletError(e, "The wallet didn't switch networks.") });
+    try {
+      await p.request({
+        method: "wallet_addEthereumChain",
+        params: [{ chainId: hex, chainName: net.name, rpcUrls: [net.rpc], nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, blockExplorerUrls: net.explorer ? [net.explorer] : undefined }],
+      });
+    } catch (e2) {
+      set({ connectError: walletError(e2, `The wallet didn't add ${networkName(chainId)}.`) });
+    }
   }
 }
 

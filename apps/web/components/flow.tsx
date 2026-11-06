@@ -7,6 +7,7 @@ import { useWallet } from "@/lib/wallet";
 import type { useTx } from "@/lib/tx";
 import { openConnect } from "./connect";
 import { Button, cx, short, TileBusy } from "./primitives";
+import { networkName } from "@/lib/chain/discover";
 
 type Tx = ReturnType<typeof useTx>;
 
@@ -164,7 +165,7 @@ export function WalletGate({ why }: { why: string }) {
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-lg border border-rule bg-raised px-4 py-3">
       <Wallet className="size-4 text-muted" strokeWidth={1.5} aria-hidden />
-      <p className="min-w-0 flex-1 text-sm text-muted">{w.wrongNetwork ? "Your wallet is on another network. Everything here is on Base Sepolia." : why}</p>
+      <p className="min-w-0 flex-1 text-sm text-muted">{w.wrongNetwork ? `Your wallet is on another network. Everything here is on ${networkName(w.targetChainId)}.` : why}</p>
       <Button variant="primary" onClick={openConnect}>{w.wrongNetwork ? "Switch network" : "Connect wallet"}</Button>
     </div>
   );
