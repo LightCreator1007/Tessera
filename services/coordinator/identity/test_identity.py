@@ -265,3 +265,19 @@ def test_entry_pass_reuses_the_sign_up_verification(owner, monkeypatch):
     r = client.post("/v1/identity/entry-pass", json={"owner": owner})
     assert r.status_code == 200 and r.json()["nullifier"] == "0x" + "f6" * 32 and len(calls) == 1
     assert not client.get(f"/v1/identity/owners/{owner}").json()["joined"]
+
+
+def test_selfie_verify_keeps_its_sybil_score_and_orb_has_none(owner, monkeypatch):
+    from identity import worldid
+
+    monkeypatch.setattr(identity, "MODE", "worldid")
+    monkeypatch.setattr(worldid, "verify", lambda proof, o: ("0x" + "d4" * 32, "selfie"))
+    selfie = {"responses": [{"identifier": "selfie", "sybil_score": 3}]}
+    r = verify(owner, selfie)
+    assert r.status_code == 200 and r.json()["credential"] == "selfie" and r.json()["sybilScore"] == 3
+    s = client.get(f"/v1/identity/owners/{owner}").json()
+    assert s["credential"] == "selfie" and s["sybilScore"] == 3
+    other = Account.create().address
+    monkeypatch.setattr(worldid, "verify", lambda proof, o: ("0x" + "e5" * 32, "orb"))
+    assert verify(other, {"responses": [{"identifier": "proof_of_human"}]}).json()["sybilScore"] is None
+    assert client.get(f"/v1/identity/owners/{other}").json()["sybilScore"] is None
