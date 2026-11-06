@@ -29,6 +29,17 @@ if "swarm_ref" not in [c[1] for c in db.execute("PRAGMA table_info(published)")]
     db.execute("ALTER TABLE published ADD COLUMN swarm_ref TEXT")
 db.commit()
 _lock = threading.Lock()  # the worker thread and request threads share this connection
+
+
+def q(sql: str, args=()) -> list:
+    """Reads take the lock too: request threads reading while the worker writes break a shared sqlite connection."""
+    with _lock:
+        return db.execute(sql, args).fetchall()
+
+
+def q1(sql: str, args=()):
+    rows = q(sql, args)
+    return rows[0] if rows else None
 HASH = re.compile(r"0x[0-9a-f]{64}")
 
 
@@ -52,8 +63,7 @@ def enqueue(job: int, round_: int, aggregate_hash: str):
 def status(job: int) -> dict | None:
     if not config.ARKIV_ENABLED:
         return None
-    row = db.execute("SELECT round, keccak, state, arkiv_key, tx, swarm_ref FROM published WHERE job = ?",
-                     (job,)).fetchone()
+    row = q1("SELECT round, keccak, state, arkiv_key, tx, swarm_ref FROM published WHERE job = ?", (job,))
     if not row:
         return None
     return {"round": row[0], "keccak": row[1], "state": row[2], "arkivKey": row[3], "arkivTx": row[4],
@@ -95,21 +105,20 @@ def _set(job, **fields):
 
 def is_published(h: str) -> bool:
     """True if this hash is a final model we chose to make public. Only those are served without a BlobAccess."""
-    return config.ARKIV_ENABLED and db.execute("SELECT 1 FROM published WHERE keccak = ? AND state != 'failed'",
-                                                (h.lower(),)).fetchone() is not None
+    return config.ARKIV_ENABLED and q1("SELECT 1 FROM published WHERE keccak = ? AND state != 'failed'",
+                                       (h.lower(),)) is not None
 
 
 def swarm_ref_of(h: str) -> str | None:
     """The Swarm reference holding a published model's bytes, if Swarm has a copy."""
-    row = db.execute("SELECT swarm_ref FROM published WHERE keccak = ? AND state != 'failed' AND swarm_ref IS NOT NULL",
-                     (h.lower(),)).fetchone()
+    row = q1("SELECT swarm_ref FROM published WHERE keccak = ? AND state != 'failed' AND swarm_ref IS NOT NULL",
+             (h.lower(),))
     return row[0] if row else None
 
 
 def step(job: int, store, client, specs: dict) -> str:
     """Moves one job as far as it can go and returns its state. Safe to call again after a crash at any line."""
-    row = db.execute("SELECT round, keccak, state, attempts, tx, tx_checks, swarm_ref FROM published WHERE job = ?",
-                     (job,)).fetchone()
+    row = q1("SELECT round, keccak, state, attempts, tx, tx_checks, swarm_ref FROM published WHERE job = ?", (job,))
     if not row or row[2] != "pending":
         return row[2] if row else "absent"
     round_, h, _, attempts, tx, tx_checks, ref = row
@@ -224,7 +233,7 @@ def retry(job: int) -> str | None:
 
 def due(now=None) -> list[int]:
     now = time.time() if now is None else now
-    return [r[0] for r in db.execute("SELECT job FROM published WHERE state = 'pending' AND next_try <= ?", (now,))]
+    return [r[0] for r in q("SELECT job FROM published WHERE state = 'pending' AND next_try <= ?", (now,))]
 
 
 def run_due(store, client, specs) -> dict[int, str]:

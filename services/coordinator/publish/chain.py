@@ -7,7 +7,7 @@ from tod_core.ledger import JobStatus, RoundStatus
 
 from api import config
 
-from . import _lock, db, enqueue
+from . import _lock, db, enqueue, q1
 
 log = logging.getLogger("tod.publish.chain")
 # Full URLs, and the bare path requests prints in "Max retries exceeded with url: /v2/<key>"
@@ -53,7 +53,7 @@ def _key(net) -> str:
 
 
 def cursor(net) -> int:
-    row = db.execute("SELECT next_block FROM chain_cursor WHERE market = ?", (_key(net),)).fetchone()
+    row = q1("SELECT next_block FROM chain_cursor WHERE market = ?", (_key(net),))
     return row[0] if row else net.deploy_block
 
 

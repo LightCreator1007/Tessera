@@ -11,7 +11,7 @@ from eth_utils import keccak
 from api import config
 from tod_datasets import shards as S
 
-from . import MAX_ATTEMPTS, RATE_LIMIT_WAIT, STUCK_TX, _broadcast, _lock, _scrub, db, rate_limited
+from . import MAX_ATTEMPTS, RATE_LIMIT_WAIT, STUCK_TX, _broadcast, _lock, _scrub, db, q, q1, rate_limited
 
 log = logging.getLogger("tod.publish.shards")
 CACHE = Path(os.environ.get("TOD_DATASETS", Path.home() / ".cache" / "tod" / "datasets"))
@@ -39,7 +39,7 @@ def enqueue(job: int, spec: dict):
 
 
 def status(job: int) -> dict | None:
-    row = db.execute("SELECT state, arkiv_key, tx, refs, error FROM shard_sets WHERE job = ?", (job,)).fetchone()
+    row = q1("SELECT state, arkiv_key, tx, refs, error FROM shard_sets WHERE job = ?", (job,))
     if not row:
         return None
     return {"state": row[0], "arkivKey": row[1], "arkivTx": row[2], "uploaded": len(json.loads(row[3])),
@@ -66,8 +66,7 @@ def attributes(rec: dict) -> dict:
 
 def step(job: int, client, swarm, datasets) -> str:
     """Moves one job as far as it can go. Safe to call again after a crash at any line, like the model publisher."""
-    row = db.execute("SELECT data, refs, state, attempts, tx, tx_checks FROM shard_sets WHERE job = ?",
-                     (job,)).fetchone()
+    row = q1("SELECT data, refs, state, attempts, tx, tx_checks FROM shard_sets WHERE job = ?", (job,))
     if not row or row[2] != "pending":
         return row[2] if row else "absent"
     d, refs, _, attempts, tx, tx_checks = json.loads(row[0]), json.loads(row[1]), *row[2:]
@@ -144,7 +143,7 @@ def worker(client, swarm, specs: dict, stop: threading.Event, every=5.0, dataset
         for job, raw in list(specs.items()):
             enqueue(job, json.loads(raw))
         now = time.time()
-        for (job,) in db.execute("SELECT job FROM shard_sets WHERE state = 'pending' AND next_try <= ?", (now,)).fetchall():
+        for (job,) in q("SELECT job FROM shard_sets WHERE state = 'pending' AND next_try <= ?", (now,)):
             try:
                 step(job, client, swarm, datasets)
             except Exception:  # one broken job must not stop the others
