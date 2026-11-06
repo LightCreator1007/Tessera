@@ -1,6 +1,7 @@
 "use client";
 // Flow building blocks: the transaction button and its status line, the one-step-at-a-time wizard (progress, step panel, sub-step sequence, disclosure), the wallet gate, and copyable terminal commands.
 import { TermTexture } from "@/components/mosaic/TermTexture";
+import { Typer } from "@/components/mosaic/widgets";
 import { useEffect, useState, type ReactNode } from "react";
 import { Check, ChevronRight, Copy, ExternalLink, Loader2, Wallet } from "lucide-react";
 import { useWallet } from "@/lib/wallet";
@@ -173,22 +174,36 @@ export function WalletGate({ why }: { why: string }) {
 
 /** A terminal command with copy. One per OS where they differ. */
 export function Command({ cmd, label }: { cmd: string; label?: string }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"ok" | "failed" | null>(null);
+  const [plays, setPlays] = useState(0);
+  // The whole command lands in under a second however long it is.
+  const per = Math.max(4, Math.min(22, 900 / Math.max(1, cmd.length)));
+  const copy = () => {
+    const settle = (s: "ok" | "failed") => {
+      setCopied(s);
+      if (s === "ok") setPlays((p) => p + 1);
+      setTimeout(() => setCopied(null), 1500);
+    };
+    // Only claim "ok" once the write resolves: it is refused without a secure context or clipboard permission.
+    if (!navigator.clipboard) return settle("failed");
+    navigator.clipboard.writeText(cmd).then(() => settle("ok"), () => settle("failed"));
+  };
   return (
     <div className="flex w-full flex-col gap-1.5">
       {label && <span className="text-xs uppercase tracking-wider text-subtle">{label}</span>}
       <div className="relative overflow-hidden rounded-lg border border-rule p-3">
         <TermTexture className="absolute inset-0" />
       <div className="relative flex items-start gap-2 border border-rule bg-surface p-4">
-        <span className="select-none font-mono text-sm text-mosaic" aria-hidden>$</span>
-        <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre font-mono text-sm leading-relaxed text-brand-cream no-scrollbar">{cmd}</code>
+        <span className={cx("min-w-4 shrink-0 select-none font-mono text-sm", copied === "ok" ? "text-bone" : "text-mosaic")} aria-hidden>{copied === "ok" ? "ok" : "$"}</span>
+        <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre font-mono text-sm leading-relaxed text-brand-cream no-scrollbar"><Typer text={cmd} play={plays} per={per} rolls={2} /></code>
+        {copied === "failed" && <span role="status" className="shrink-0 self-center font-mono text-xs text-danger">select and copy by hand</span>}
         <button
           type="button"
-          onClick={() => { navigator.clipboard?.writeText(cmd); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
-          aria-label={copied ? "Copied" : "Copy command"}
+          onClick={copy}
+          aria-label={copied === "ok" ? "Copied" : copied === "failed" ? "Copy failed" : "Copy command"}
           className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-brand-cream/60 hover:text-brand-cream"
         >
-          {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+          {copied === "ok" ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
         </button>
       </div>
       </div>
