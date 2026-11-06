@@ -3,6 +3,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, COORD_BASE, isDemo, request } from "@/lib/api/client";
 import { setWallet, useWallet } from "@/lib/wallet";
+import type { Invite } from "@/lib/chain";
 
 export type IdentityMode = "dev" | "worldid" | "demo";
 export type IdentityConfig = { mode: IdentityMode; appId: string; rpId: string; action: string; environment: string };
@@ -115,6 +116,9 @@ export async function rpContext(cfg: IdentityConfig): Promise<RpContext> {
   const s = await call<{ sig: string; nonce: string; created_at: number; expires_at: number }>("/rp-signature", { action: cfg.action });
   return { rp_id: cfg.rpId, nonce: s.nonce, created_at: s.created_at, expires_at: s.expires_at, signature: s.sig };
 }
+
+/** The admitter's invite for this laptop, reusing the wallet's earlier World ID check. */
+export const joinInvite = (owner: string, pairingCode: string) => call<Invite>("/join", { owner, pairingCode });
 
 export type Verified = { owner: string; nullifier: string; credential: Credential; sybilScore?: number | null };
 

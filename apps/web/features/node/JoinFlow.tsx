@@ -1,6 +1,6 @@
 "use client";
 // Add a node, one step at a time (the CLI quickstart with the web steps inside it): install, connect, pair, prove personhood, stake, start. The position derives from wallet and chain state, so a reload resumes at the first unfinished step; finished steps stay reviewable from the progress bar. Demo chips walk the failure paths (expired code, wrong owner, used World ID, short balance).
-import { calls } from "@/lib/chain";
+import { calls, watchOperator } from "@/lib/chain";
 import { JoinBuild } from "@/components/mosaic/isoScenes";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -18,7 +18,7 @@ import { INSTALL, PAIR_PREFIX, PAIR_TTL_MIN, SETUP, pairCommand } from "@/featur
 import { SIMULATED, SelfTestCard } from "./SelfTestCard";
 import { ExcludedNotice } from "./Excluded";
 import { HumanGate } from "@/components/human/HumanGate";
-import { useHuman } from "@/lib/identity";
+import { joinInvite, useHuman } from "@/lib/identity";
 
 const TOD = 1_000_000;
 
@@ -94,6 +94,9 @@ export function JoinFlow() {
   }, [w.node]);
 
   const node = w.node;
+  // Live: read the paired operator onchain, so "joined" and the stake come from the registry, not this browser.
+  const op = node?.operator ?? null;
+  useEffect(() => { if (!isDemo) watchOperator(op); }, [op]);
   const units = Math.round(Number(amount) * TOD);
   const amountOk = Number.isFinite(units) && units >= MIN_STAKE;
   const staked = !!node && node.stake >= MIN_STAKE;
@@ -348,7 +351,15 @@ export function JoinFlow() {
                     key: "join", title: "Join the registry", done: !!node?.joined,
                     body: (
                       <>
-                        <TxButton tx={join} label="Join" onRun={() => join.run(() => setWallet((x) => ({ node: x.node && { ...x.node, joined: true } })))} />
+                        {!isDemo && !code && <p className="text-sm text-muted">Paste the pairing code again in the Pair step above; joining needs it.</p>}
+                        <TxButton tx={join} label="Join" onRun={() => {
+                          const joined = () => setWallet((x) => ({ node: x.node && { ...x.node, joined: true } }));
+                          // Live: the coordinator signs the invite, then this wallet sends NodeRegistry.join, which depositStake needs.
+                          if (isDemo) return join.run(joined);
+                          if (!code || !w.address) return;
+                          const owner = w.address;
+                          return join.send(async () => calls.join(await joinInvite(owner, code)), joined);
+                        }} />
                         <TxStatus tx={join} />
                       </>
                     ),

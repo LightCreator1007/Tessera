@@ -20,9 +20,11 @@ export const marketAbi = parseAbi([
 export const registryAbi = parseAbi([
   "struct Node { address owner; uint128 stake; uint256 busyJob; uint256 busyRound; bool joined; bool customCode; }",
   "function getNode(address operator) view returns (Node)",
+  "function join(address operator, bytes32 nullifier, uint64 inviteDeadline, uint64 consentDeadline, bytes inviteSig, bytes consentSig)",
   "function depositStake(address operator, uint128 amount)",
   "function withdrawStake(address operator, uint128 amount)",
   "error NotAuthorized()", "error NotJoined()", "error NodeIsBusy()", "error BadInput()",
+  "error BadSignature()", "error Expired()", "error AlreadyJoined()", "error NullifierUsed()",
 ]);
 export const tokenAbi = parseAbi([
   "function balanceOf(address) view returns (uint256)",
@@ -50,6 +52,8 @@ export type ChainWallet = {
   claimable: number | null;
   /** The stake on the operator this owner runs, once one is known. */
   stake: number | null;
+  /** Whether that operator joined the registry under this wallet; null until read. */
+  joined: boolean | null;
   error: string | null;
   /** Why the last connect or network switch didn't go through, sorted for the dialog. */
   connectError: ConnectError | null;
@@ -57,7 +61,7 @@ export type ChainWallet = {
 export type ConnectError = { kind: "rejected" | "pending" | "missing" | "failed"; message: string };
 
 const FAUCET = (process.env.NEXT_PUBLIC_FAUCET_ADDRESS || null) as Address | null;
-const EMPTY: ChainWallet = { restoring: false, wallet: null, targetChainId: null, connectError: null, address: null, chainId: null, wrongNetwork: false, tod: null, eth: null, allowance: null, claimable: null, stake: null, error: null };
+const EMPTY: ChainWallet = { restoring: false, wallet: null, targetChainId: null, connectError: null, address: null, chainId: null, wrongNetwork: false, tod: null, eth: null, allowance: null, claimable: null, stake: null, joined: null, error: null };
 
 let contracts: Promise<Contracts> | null = null;
 let state: ChainWallet = EMPTY;
@@ -141,7 +145,7 @@ export async function refresh() {
   try {
     const [c, chainHex] = await Promise.all([getContracts(), p.request({ method: "eth_chainId" })]);
     const chainId = Number(chainHex);
-    if (chainId !== c.chainId) { set({ chainId, targetChainId: c.chainId, wrongNetwork: true, tod: null, eth: null, allowance: null, claimable: null, stake: null, error: null }); return; }
+    if (chainId !== c.chainId) { set({ chainId, targetChainId: c.chainId, wrongNetwork: true, tod: null, eth: null, allowance: null, claimable: null, stake: null, joined: null, error: null }); return; }
     const pub = createPublicClient({ transport: custom(p) });
     const me = state.address;
     const [tod, eth, aMarket, aRegistry, claimable, node] = await Promise.all([
@@ -155,7 +159,8 @@ export async function refresh() {
     set({
       chainId, targetChainId: c.chainId, wrongNetwork: false, connectError: null, tod: units(tod), eth: Number(eth) / 1e18, claimable: units(claimable),
       allowance: { market: units(aMarket), registry: units(aRegistry) },
-      stake: node && node.owner.toLowerCase() === me.toLowerCase() ? units(node.stake) : null, error: null,
+      stake: node && node.owner.toLowerCase() === me.toLowerCase() ? units(node.stake) : null,
+      joined: node ? node.joined && node.owner.toLowerCase() === me.toLowerCase() : null, error: null,
     });
   } catch (e) {
     set({ error: e instanceof Error ? e.message.split("\n")[0] : "Couldn't read the chain." });
@@ -239,6 +244,9 @@ export async function switchNetwork() {
   }
 }
 
+/** The coordinator's /v1/identity/join answer: exactly NodeRegistry.join's arguments. */
+export type Invite = { operator: string; nullifier: string; inviteDeadline: number; inviteSig: string; consentDeadline: number; consentSig: string };
+
 /** A write ready to send: where, what, and the ABI its errors decode against. */
 export type Call = { to: Address; data: Hex; abi: readonly unknown[] };
 
@@ -248,6 +256,12 @@ export const calls = {
   withdrawRefund: async (job: number): Promise<Call> => { const c = await getContracts(); return { to: c.market, abi: marketAbi, data: encodeFunctionData({ abi: marketAbi, functionName: "withdrawRefund", args: [BigInt(job)] }) }; },
   abandonJob: async (job: number): Promise<Call> => { const c = await getContracts(); return { to: c.market, abi: marketAbi, data: encodeFunctionData({ abi: marketAbi, functionName: "abandonJob", args: [BigInt(job)] }) }; },
   approve: async (spender: "market" | "registry", amount: number): Promise<Call> => { const c = await getContracts(); return { to: c.token, abi: tokenAbi, data: encodeFunctionData({ abi: tokenAbi, functionName: "approve", args: [c[spender], BigInt(amount)] }) }; },
+  /** NodeRegistry.join from the owner wallet, with the coordinator's invite and the laptop's consent from the pairing code. */
+  join: async (i: Invite): Promise<Call> => {
+    const c = await getContracts();
+    const args = [i.operator as Address, i.nullifier as Hex, BigInt(i.inviteDeadline), BigInt(i.consentDeadline), i.inviteSig as Hex, i.consentSig as Hex] as const;
+    return { to: c.registry, abi: registryAbi, data: encodeFunctionData({ abi: registryAbi, functionName: "join", args }) };
+  },
   depositStake: async (op: string, amount: number): Promise<Call> => { const c = await getContracts(); return { to: c.registry, abi: registryAbi, data: encodeFunctionData({ abi: registryAbi, functionName: "depositStake", args: [op as Address, BigInt(amount)] }) }; },
   withdrawStake: async (op: string, amount: number): Promise<Call> => { const c = await getContracts(); return { to: c.registry, abi: registryAbi, data: encodeFunctionData({ abi: registryAbi, functionName: "withdrawStake", args: [op as Address, BigInt(amount)] }) }; },
   faucet: async (): Promise<Call> => {

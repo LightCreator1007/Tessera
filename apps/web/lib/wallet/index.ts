@@ -91,7 +91,7 @@ export function useWallet() {
   // Live: the chain owns address, network and money. The wallet counts as connected only once every read has landed, so no screen shows a zero that was never read.
   const read = c.address !== null && !c.wrongNetwork && c.tod !== null && c.eth !== null && c.allowance !== null && c.claimable !== null;
   const w: DemoWallet = read
-    ? { ...d, address: c.address, chainId: c.chainId ?? CHAIN_ID, usdc: c.tod as number, eth: c.eth as number, allowance: c.allowance!.market, claimable: c.claimable as number, node: d.node && { ...d.node, stake: c.stake === null ? d.node.stake : c.stake } }
+    ? { ...d, address: c.address, chainId: c.chainId ?? CHAIN_ID, usdc: c.tod as number, eth: c.eth as number, allowance: c.allowance!.market, claimable: c.claimable as number, node: d.node && { ...d.node, stake: c.stake === null ? d.node.stake : c.stake, joined: c.joined === null ? d.node.joined : c.joined } }
     // On the wrong network the address is real (the account menu shows it with a switch), the money is not read.
     : { ...d, address: c.wrongNetwork ? c.address : null, usdc: 0, eth: 0, allowance: 0, claimable: 0 };
   return {
