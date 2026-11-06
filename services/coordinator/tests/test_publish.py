@@ -1,5 +1,7 @@
 """Arkiv publishing: the execute() calldata, the resumable queue against a fake Arkiv, and the job and model routes."""
 import json
+import time
+import urllib.error
 
 import pytest
 from eth_abi import decode
@@ -359,6 +361,44 @@ def test_a_bad_swarm_read_back_blocks_indexing_and_retries(swarm_on):
     sw.corrupt = True
     P.enqueue(7, 12, store.put(b"weights"))
     assert P.step(7, store, ark, {}) == "pending" and ark.sent == [] and P.status(7)["swarmRef"] is None
+
+
+def test_a_swarm_outage_does_not_keep_the_model_off_arkiv(swarm_on):
+    store, ark, sw = swarm_on
+    sw.fail = urllib.error.HTTPError("https://gateway/bytes", 500, "Internal Server Error", {}, None)
+    P.enqueue(7, 12, store.put(b"weights"))
+    for _ in range(P.SWARM_TRIES - 1):
+        assert P.step(7, store, ark, {}) == "pending" and ark.sent == []
+    assert P.step(7, store, ark, {}) == "pending"  # Swarm gave up on: the Arkiv create went out
+    assert "swarmRef" not in ark.sent[0][0] and P.status(7)["swarmRef"] is None
+    assert P.step(7, store, ark, {}) == "indexed"
+
+
+def test_swarm_back_before_the_cap_still_lands_in_the_record(swarm_on):
+    store, ark, sw = swarm_on
+    sw.fail = ConnectionError("gateway down")
+    P.enqueue(7, 12, store.put(b"weights"))
+    assert P.step(7, store, ark, {}) == "pending" and ark.sent == []
+    sw.fail = None
+    P.step(7, store, ark, {})
+    assert ark.sent[0][0]["swarmRef"] == P.status(7)["swarmRef"] is not None
+
+
+def test_rate_limits_wait_without_using_up_tries(swarm_on):
+    import requests
+
+    store, ark, sw = swarm_on
+    P.enqueue(7, 12, store.put(b"weights"))
+    sw.fail = urllib.error.HTTPError("https://gateway/bytes", 429, "Too Many Requests", {}, None)
+    assert P.step(7, store, ark, {}) == "pending"
+    sw.fail = None
+    too_many = requests.Response()
+    too_many.status_code = 429
+    ark.fail = requests.HTTPError("429 Client Error: Too Many Requests", response=too_many)
+    for _ in range(P.MAX_ATTEMPTS + 1):
+        assert P.step(7, store, ark, {}) == "pending"
+    row = P.db.execute("SELECT attempts, next_try FROM published WHERE job = 7").fetchone()
+    assert row[0] == 0 and row[1] > time.time() + P.RATE_LIMIT_WAIT - 5
 
 
 def test_swarm_off_leaves_records_without_a_ref(on):
