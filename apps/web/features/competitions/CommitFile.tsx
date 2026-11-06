@@ -29,7 +29,7 @@ export function CommitFile({ what, value, onChange, sample }: { what: string; va
           <span className="min-w-0 truncate text-sm text-ink">{value.name}</span>
           <span className="text-xs text-muted">{kb(value.bytes)}{value.sample ? ", sample" : ""}</span>
         </div>
-        <HashChip value={value.hash} label={`${what} hash`} />
+        <HashChip value={value.hash} label={`${what} hash`} land />
         <button type="button" onClick={() => onChange(null)} className="inline-flex min-h-6 items-center self-start text-sm text-muted underline decoration-rule-strong underline-offset-4 hover:text-ink">
           Use a different file
         </button>

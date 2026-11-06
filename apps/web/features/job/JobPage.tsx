@@ -146,7 +146,7 @@ function Properties({ job }: { job: Job }) {
         <PropRow label="Status"><JobStatusPill status={job.status} /></PropRow>
         <PropRow label="Source"><TrustLabel trust={job.trust} /></PropRow>
         <PropRow label="Workload"><span className="font-mono text-xs">{job.workload}</span></PropRow>
-        <PropRow label="Requester"><AddressChip value={job.requester} you={mine} /></PropRow>
+        <PropRow label="Requester"><AddressChip value={job.requester} href={`/u/${job.requester}`} you={mine} /></PropRow>
         <PropRow label="Budget"><Money units={job.budget} /></PropRow>
         <PropRow label="Spent"><Money units={job.budget - job.remaining} /></PropRow>
         <PropRow label="Remaining"><Money units={job.remaining} /></PropRow>

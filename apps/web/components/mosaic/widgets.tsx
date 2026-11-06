@@ -3,6 +3,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { reducedMotion } from "@/lib/prefs";
 import { VOCAB, mulberry32 } from "./engine";
 
 function useReduced() {
@@ -106,6 +107,53 @@ export function Scramble({ value, ms = 260 }: { value: string; ms?: number }) {
     return () => cancelAnimationFrame(raf);
   }, [value, ms, reduced]);
   return <span aria-live="polite">{shown}</span>;
+}
+
+const TYPER_STATES = ["pill", "inverse", "accent", "outline"] as const;
+
+/**
+ * Text that lands letter by letter: a wave crosses the line and each letter rolls through a few tile states (red pill,
+ * bone inverse, vermilion, outlined) before it settles on the plain letter. Plays when `play` changes and is truthy,
+ * so callers fire it on the moment a value arrives, never on mount. Reduced motion shows the text at once.
+ */
+export function Typer({ text, play, per = 28, rolls = 3, stepMs = 45 }: { text: string; play: unknown; per?: number; rolls?: number; stepMs?: number }) {
+  const [el, setEl] = useState(Infinity);
+  useEffect(() => {
+    if (!play || reducedMotion()) {
+      setEl(Infinity);
+      return;
+    }
+    const start = performance.now();
+    const end = text.length * per + rolls * stepMs;
+    let raf = 0;
+    const tick = (now: number) => {
+      const e = now - start;
+      setEl(e >= end ? Infinity : e);
+      if (e < end) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [play, text, per, rolls, stepMs]);
+  const picks = useMemo(() => {
+    const r = mulberry32(text.length * 31 + 7);
+    return text.split("").map(() => Array.from({ length: rolls }, () => TYPER_STATES[Math.floor(r() * TYPER_STATES.length)]));
+  }, [text, rolls]);
+  if (el === Infinity) return <>{text}</>;
+  return (
+    <span className="mz-typer" aria-label={text}>
+      {text.split("").map((ch, i) => {
+        if (ch === "\n") return "\n";
+        const local = el - i * per;
+        const k = Math.floor(local / stepMs);
+        const s = local < 0 ? "wait" : k < rolls ? picks[i][k] : "done";
+        return (
+          <span key={i} aria-hidden data-s={s}>
+            {ch}
+          </span>
+        );
+      })}
+    </span>
+  );
 }
 
 /** Table skeleton with real column words instead of grey bars. */

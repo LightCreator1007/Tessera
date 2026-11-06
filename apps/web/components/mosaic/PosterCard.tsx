@@ -29,9 +29,10 @@ export function PosterThumb({ cover, live, hold, field, label, className, cell =
   );
 }
 
-export function PosterCard({ href, n, title, note, cover, live, tag, art, thumb = "h-48", dim }: { href: string; n: string; title: ReactNode; note: ReactNode; cover?: Cover; live?: boolean; tag?: ReactNode; art?: ReactNode; thumb?: string; dim?: boolean }) {
-  return (
-    <Link href={href} className="group flex flex-1 flex-col border border-rule bg-card transition-colors hover:border-rule-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mosaic">
+/** Without href it is a static card, for records that aren't yours to act on. */
+export function PosterCard({ href, n, title, note, cover, live, tag, art, thumb = "h-48", dim }: { href?: string; n: string; title: ReactNode; note: ReactNode; cover?: Cover; live?: boolean; tag?: ReactNode; art?: ReactNode; thumb?: string; dim?: boolean }) {
+  const body = (
+    <>
       {art ?? <PosterThumb cover={cover} live={live} label={`${typeof title === "string" ? title : n} poster`} className={cx(thumb, "border-b border-rule", dim && "opacity-25 grayscale")} />}
       <span className="grid flex-1 content-start gap-1.5 px-4 pb-4 pt-3">
         <span className="flex h-6 items-center justify-between gap-2">
@@ -41,8 +42,10 @@ export function PosterCard({ href, n, title, note, cover, live, tag, art, thumb 
         <span className="text-xl font-medium tracking-tight text-ink">{title}</span>
         <span className="font-mono text-xs leading-relaxed text-muted">{note}</span>
       </span>
-    </Link>
+    </>
   );
+  if (!href) return <div className="flex flex-1 flex-col border border-rule bg-card">{body}</div>;
+  return <Link href={href} className="group flex flex-1 flex-col border border-rule bg-card transition-colors hover:border-rule-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mosaic">{body}</Link>;
 }
 
 /** A word set in giant mosaic type (short-word tiles so the letters stay legible), dissolving in; lit when on.

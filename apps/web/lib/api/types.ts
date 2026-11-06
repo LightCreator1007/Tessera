@@ -57,9 +57,16 @@ export type OwnerEvent = {
 /** GET /v1/identity/owners/{owner}: whether the owner joined with World ID, and any team exclusion with the confirmed failures behind it. */
 export type OwnerIdentity = {
   owner: string;
+  /** Verified with World ID. Absent on coordinators older than sign-in, where joining was the only check. */
+  verified?: boolean;
   joined: boolean;
   credential: string | null;
   excluded: { reason: string; evidence: { job: number; round: number; operator: string; kind: string }[]; at: number } | null;
+};
+/** GET /v1/owners/{owner}: an address's nodes, verified work, posted jobs and a per-kind tally of its history. */
+export type OwnerRecord = {
+  owner: string; operators: string[]; rounds: number; ops: number; jobs: number[];
+  kinds: Partial<Record<OwnerEvent["kind"], { count: number; amount: number }>>; firstAt: number | null; indexedTo: number | null;
 };
 export type OwnerHistory = { owner: string; operators: string[]; events: OwnerEvent[]; next: string | null; indexedTo: number | null };
 export type Published = {
