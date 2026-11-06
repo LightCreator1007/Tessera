@@ -116,6 +116,11 @@ export async function rpContext(cfg: IdentityConfig): Promise<RpContext> {
   return { rp_id: cfg.rpId, nonce: s.nonce, created_at: s.created_at, expires_at: s.expires_at, signature: s.sig };
 }
 
+export type JoinInvite = { operator: string; owner: string; nullifier: string; inviteDeadline: number; inviteSig: string; consentDeadline: number; consentSig: string; credential: string };
+
+/** The arguments of NodeRegistry.join. The coordinator reuses this wallet's World ID check, so no new proof is needed. */
+export const requestInvite = (owner: string, pairingCode: string) => call<JoinInvite>("/join", { owner, pairingCode });
+
 export type Verified = { owner: string; nullifier: string; credential: Credential; sybilScore?: number | null };
 
 /** Hands the IDKit result to the coordinator, which checks it with World and records one human for this wallet. */
