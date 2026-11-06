@@ -16,6 +16,7 @@ SCHEMA = "tod.model"  # Arkiv's arkiv.schema tag; readers filter on it plus our 
 RECORD_VERSION = 1
 CONTENT_TYPE = "application/x-tod-weights"
 MAX_ATTEMPTS = 8
+SWARM_TRIES = 3  # after this many failed uploads the model is indexed without a Swarm copy, rather than not at all
 STUCK_TX = 30  # checks 5 s apart; after that a human looks at the tx before anything is signed again
 
 db = sqlite3.connect(config.DB_PATH, check_same_thread=False)
@@ -123,9 +124,16 @@ def step(job: int, store, client, specs: dict) -> str:
             return "failed"
         if config.SWARM_ENABLED and not ref:
             # Before the Arkiv create, so the record carries swarmRef from its first version. Saved straight away so
-            # a crash after this never uploads again; a Swarm outage retries here like an Arkiv one.
-            ref = swarm_client().put(blob, h)
-            _set(job, swarm_ref=ref)
+            # a crash after this never uploads again. Swarm is only a copy: an outage must not keep the model off
+            # Arkiv, so after a few tries the record goes out without swarmRef.
+            try:
+                ref = swarm_client().put(blob, h)
+                _set(job, swarm_ref=ref)
+            except Exception as e:
+                why = f"Swarm upload: {type(e).__name__}: {str(e)[:200]}"
+                if attempts + 1 < SWARM_TRIES:
+                    return _retry(job, attempts, why)
+                log.warning("publish job %s: indexing without a Swarm copy after %s", job, _scrub(why))
         rec = record(job, round_, h, len(blob), json.loads(specs[job]) if job in specs else None, ref)
         key = client.find(rec)  # a record from an earlier run that crashed after it was mined
         if key:

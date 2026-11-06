@@ -87,7 +87,10 @@ def step(job: int, client, swarm, datasets) -> str:
         for p in pieces:
             if p.keccak not in refs:
                 refs[p.keccak] = swarm.put(p.data, p.keccak)
-                _set(job, refs=json.dumps(refs))  # saved per piece, so a crash mid-way never uploads one twice
+                # Saved per piece, so a crash mid-way never uploads one twice. An upload is progress, so the count
+                # starts over: a flaky gateway shouldn't use up a many-file set's tries while it is still moving.
+                attempts = 0
+                _set(job, refs=json.dumps(refs), attempts=0)
         rec = record(job, S.manifest(d["datasetHash"], pieces, refs))
         key = client.find(rec)  # a record from an earlier run that crashed after it was mined
         if key:
