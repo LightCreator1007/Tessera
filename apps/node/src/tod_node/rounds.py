@@ -2,6 +2,7 @@
 import json
 import logging
 import os
+import urllib.error
 from collections.abc import Callable
 from pathlib import Path
 
@@ -65,6 +66,7 @@ class RoundLoop:
         self.dom = enc.domain(chain_id, market.address)
         self.accepting = True  # False once a stop is requested: finish reveals, start nothing new
         self.skipped: set[tuple[int, int]] = set()
+        self.waiting: set[tuple[int, int]] = set()  # rounds whose inputs the coordinator refused so far
 
     def _mine(self, state):
         """(job, round, round, our nodeRound) for every open round this node is on, oldest first."""
@@ -104,6 +106,13 @@ class RoundLoop:
         if rec is None:
             try:
                 hs = self.train(state, job, rnd)
+            except (urllib.error.URLError, OSError) as e:
+                # The coordinator lists a round's roster a tick after opening it, so an early fetch can be refused.
+                # Try again on later ticks; tick only commits in the commit window, so this stops when it closes.
+                if (job, rnd) not in self.waiting:
+                    self.waiting.add((job, rnd))
+                    self.emit("round.waiting", job=job, round=rnd, reason=f"inputs not available yet: {e}")
+                return
             except Exception as e:  # a broken job must not take the node down or retrain every tick
                 return self._skip(job, rnd, f"training failed: {e}")
             problem = check_hashes(hs, r["startWeightsHash"], segments)
