@@ -15,6 +15,8 @@ NetworkOpt = Annotated[str | None, typer.Option("--network", envvar="TOD_NETWORK
 CoordOpt = Annotated[str | None, typer.Option("--coordinator", envvar="TOD_COORDINATOR", help="Coordinator base URL.")]
 KeyOpt = Annotated[str, typer.Option("--key-env", help="Env var holding this verifier's private key.")]
 BAD_INPUT, NOT_ELIGIBLE, UNREACHABLE = 2, 3, 4
+# The anvil deploy registers exactly these two verifiers; any other key name must be set explicitly.
+DEV_KEYS = {"VERIFIER_A_PRIVATE_KEY": "verifier/a", "VERIFIER_B_PRIVATE_KEY": "verifier/b"}
 
 
 def _print_version(value: bool) -> None:
@@ -54,7 +56,10 @@ def _setup(network, coordinator, key_env, as_json):
     if not key:
         if net.chain_id != ANVIL_CHAIN_ID:
             fail(as_json, BAD_INPUT, f"{key_env} is not set", "bad_config")
-        key = dev_key("verifier/a" if key_env.endswith("_A_PRIVATE_KEY") else "verifier/b")
+        if key_env not in DEV_KEYS:
+            fail(as_json, BAD_INPUT, f"{key_env} is not set, and only {' or '.join(DEV_KEYS)} have anvil dev keys",
+                 "bad_config")
+        key = dev_key(DEV_KEYS[key_env])
     key = bytes.fromhex(key.removeprefix("0x")) if isinstance(key, str) else key
     try:
         ledger = Ledger(net)

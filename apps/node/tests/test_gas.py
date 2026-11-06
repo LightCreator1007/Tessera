@@ -1,15 +1,13 @@
-"""ensure_gas: a low node asks the coordinator with a valid operator signature, and a refusal is logged, not fatal."""
+"""ensure_gas: the node asks with a valid operator signature, the coordinator decides, a refusal is logged, not fatal."""
 import hashlib
 import http.server
 import json
 import threading
-from types import SimpleNamespace
-
 import pytest
 from eth_account import Account
 from eth_account.messages import encode_defunct
 
-from tod_node.gas import LOW_WEI, ensure_gas
+from tod_node.gas import ensure_gas
 
 OP = Account.create()
 
@@ -39,28 +37,26 @@ def coordinator():
     srv.shutdown()
 
 
-def w3(balance):
-    return SimpleNamespace(eth=SimpleNamespace(get_balance=lambda a: balance))
-
-
-def test_low_balance_asks_with_the_operator_signature(coordinator):
+def test_asks_with_the_operator_signature(coordinator):
     url, calls, _ = coordinator
     events = []
-    ensure_gas(w3(0), url, OP.key, emit=lambda t, **k: events.append((t, k)))
+    ensure_gas(url, OP.key, emit=lambda t, **k: events.append((t, k)))
     assert calls == [("/v1/identity/topup", OP.address)] and events == [("gas.topup", {"sent": 7, "balance": 9})]
 
 
-def test_enough_gas_sends_nothing(coordinator):
-    url, calls, _ = coordinator
-    ensure_gas(w3(LOW_WEI), url, OP.key)
-    assert calls == []
+def test_a_funded_node_logs_nothing(coordinator):
+    url, calls, reply = coordinator
+    reply.update(body={"sent": 0, "balance": 10**15})  # the coordinator decides it has enough
+    events = []
+    ensure_gas(url, OP.key, emit=lambda t, **k: events.append((t, k)))
+    assert len(calls) == 1 and events == []
 
 
 def test_a_refusal_is_an_event_not_a_crash(coordinator):
     url, _, reply = coordinator
     reply.update(code=403, body={"detail": "the operator's owner has not joined with World ID here"})
     events = []
-    ensure_gas(w3(0), url, OP.key, emit=lambda t, **k: events.append((t, k)))
+    ensure_gas(url, OP.key, emit=lambda t, **k: events.append((t, k)))
     assert events[0][0] == "error" and "403" in events[0][1]["reason"] and "World ID" in events[0][1]["reason"]
-    ensure_gas(w3(0), "http://127.0.0.1:9", OP.key, emit=lambda t, **k: events.append((t, k)))
+    ensure_gas("http://127.0.0.1:9", OP.key, emit=lambda t, **k: events.append((t, k)))
     assert "unreachable" in events[1][1]["reason"]
