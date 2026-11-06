@@ -11,11 +11,9 @@ Arkiv caps a bytes attribute at 128 KiB, so bytes go to Swarm and Arkiv holds wh
 
 ## One entity and its Swarm copy
 
-- Arkiv entity: `0x7520c05c3930792074b817fe5055baca626026dd81f5801cbaff81e5fb015032` (job 1, round 3, writer `0x8Bb9FE30662594A7b7c193100bf92696Abb9c200`)
-- Swarm reference: `5ee28cee150d75f349576b33f099a6bb2a5d0385b1663d168e64c81404a61ad6`, open it at https://api.gateway.ethswarm.org/bytes/5ee28cee150d75f349576b33f099a6bb2a5d0385b1663d168e64c81404a61ad6
-- Check: the download is 407,116 bytes with keccak `0xc5dbdfa76801bb73a40993eef7a07cebcf41b17e0341786cbd0fa9b6651136ef`, the entity's `keccak` and that round's `aggregateHash` onchain.
-
-This record is from a test run and expires after one day. The final demo run writes 30-day records, and this section gets updated with one of those.
+- Arkiv entity: `0xabfe22c89b506ce08afbcc3197fd2e649caf717350fda748ea0a70834cd465bc` (job 1's final model, round 2; writer `0x8Bb9FE30662594A7b7c193100bf92696Abb9c200`; expires at Rabdi block 1,593,023, about 30 days after it was written on 6 November)
+- Swarm reference: `bfce0d94c0010fee6c1149ad78126f66ed2d299972a669acbe6f28444209d1da`, open it at https://api.gateway.ethswarm.org/bytes/bfce0d94c0010fee6c1149ad78126f66ed2d299972a669acbe6f28444209d1da
+- Check: the download is 407,116 bytes with keccak `0xfc51bceb6e53a931e39f13e73c350f769119da881512656873ae408bc735db2c`. That equals the entity's `keccak` and the round's `aggregateHash` on the chain, which we compared when this was written.
 
 ## Postage batch and Bee node
 
