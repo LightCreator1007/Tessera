@@ -11,7 +11,7 @@ from eth_utils import keccak
 from api import config
 from tod_datasets import shards as S
 
-from . import MAX_ATTEMPTS, RATE_LIMIT_WAIT, STUCK_TX, _broadcast, _lock, _scrub, db, rate_limited
+from . import MAX_ATTEMPTS, RATE_LIMIT_WAIT, STUCK_TX, _broadcast, _lock, _scrub, db, q, q1, transient
 
 log = logging.getLogger("tod.publish.shards")
 CACHE = Path(os.environ.get("TOD_DATASETS", Path.home() / ".cache" / "tod" / "datasets"))
@@ -39,7 +39,7 @@ def enqueue(job: int, spec: dict):
 
 
 def status(job: int) -> dict | None:
-    row = db.execute("SELECT state, arkiv_key, tx, refs, error FROM shard_sets WHERE job = ?", (job,)).fetchone()
+    row = q1("SELECT state, arkiv_key, tx, refs, error FROM shard_sets WHERE job = ?", (job,))
     if not row:
         return None
     return {"state": row[0], "arkivKey": row[1], "arkivTx": row[2], "uploaded": len(json.loads(row[3])),
@@ -66,8 +66,7 @@ def attributes(rec: dict) -> dict:
 
 def step(job: int, client, swarm, datasets) -> str:
     """Moves one job as far as it can go. Safe to call again after a crash at any line, like the model publisher."""
-    row = db.execute("SELECT data, refs, state, attempts, tx, tx_checks FROM shard_sets WHERE job = ?",
-                     (job,)).fetchone()
+    row = q1("SELECT data, refs, state, attempts, tx, tx_checks FROM shard_sets WHERE job = ?", (job,))
     if not row or row[2] != "pending":
         return row[2] if row else "absent"
     d, refs, _, attempts, tx, tx_checks = json.loads(row[0]), json.loads(row[1]), *row[2:]
@@ -84,7 +83,14 @@ def step(job: int, client, swarm, datasets) -> str:
             # Row-list shards, or a spec cut differently: nodes train on the spec's table, so never list other rows.
             _set(job, state="failed", error="spec shard table is not the canonical contiguous split")
             return "failed"
+        # Jobs on the same dataset and split cut byte-identical files, and Swarm is content-addressed: reuse any
+        # reference an earlier job already got for the same keccak instead of uploading it again.
+        known = {k: v for (r,) in q("SELECT refs FROM shard_sets WHERE refs IS NOT NULL")
+                 for k, v in json.loads(r).items()}
         for p in pieces:
+            if p.keccak not in refs and p.keccak in known:
+                refs[p.keccak] = known[p.keccak]
+                _set(job, refs=json.dumps(refs))
             if p.keccak not in refs:
                 refs[p.keccak] = swarm.put(p.data, p.keccak)
                 # Saved per piece, so a crash mid-way never uploads one twice. An upload is progress, so the count
@@ -102,9 +108,9 @@ def step(job: int, client, swarm, datasets) -> str:
         return "pending"
     except Exception as e:  # nothing was signed yet, so retrying is safe
         error = _scrub(f"{type(e).__name__}: {str(e)[:200]}")
-        if rate_limited(e):  # slow down, without using up a try
+        if transient(e):  # a 429 or the network failing: wait, without using up a try
             _set(job, error=error, next_try=time.time() + RATE_LIMIT_WAIT)
-            log.warning("shards for job %s: rate limited, waiting %s s", job, RATE_LIMIT_WAIT)
+            log.warning("shards for job %s: %s; waiting %s s", job, error[:120], RATE_LIMIT_WAIT)
             return "pending"
         attempts += 1
         failed = attempts >= MAX_ATTEMPTS
@@ -144,7 +150,7 @@ def worker(client, swarm, specs: dict, stop: threading.Event, every=5.0, dataset
         for job, raw in list(specs.items()):
             enqueue(job, json.loads(raw))
         now = time.time()
-        for (job,) in db.execute("SELECT job FROM shard_sets WHERE state = 'pending' AND next_try <= ?", (now,)).fetchall():
+        for (job,) in q("SELECT job FROM shard_sets WHERE state = 'pending' AND next_try <= ?", (now,)):
             try:
                 step(job, client, swarm, datasets)
             except Exception:  # one broken job must not stop the others

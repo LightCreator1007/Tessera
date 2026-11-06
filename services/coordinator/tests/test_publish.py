@@ -173,9 +173,9 @@ def test_record_from_an_earlier_run_is_adopted(on):
     assert P.step(7, store, ark, {}) == "indexed" and ark.sent == []
 
 
-def test_arkiv_down_only_delays_and_gives_up_after_max_attempts(on):
+def test_arkiv_refusing_only_delays_and_gives_up_after_max_attempts(on):
     store, ark = on
-    ark.fail = ConnectionError("no route")
+    ark.fail = RuntimeError("arkiv_query: invalid query")  # Arkiv answering with an error; the network is fine
     P.enqueue(7, 12, store.put(b"weights"))
     states = [P.step(7, store, ark, {}) for _ in range(P.MAX_ATTEMPTS)]
     assert states[:-1] == ["pending"] * (P.MAX_ATTEMPTS - 1) and states[-1] == "failed"
@@ -232,6 +232,31 @@ def test_job_route_shows_published_and_models_reads_arkiv(on, monkeypatch):
         assert models[0]["chainId"] == 84532
     finally:
         T.JOBS.pop(7)
+
+
+def test_models_keeps_its_last_list_through_a_failed_arkiv_read(on, monkeypatch):
+    store, ark = on
+    monkeypatch.setattr(P, "_client", ark)
+    monkeypatch.setattr(A, "_models_cache", {"at": 0.0, "rows": []})
+    c = TestClient(A.app)
+    first = c.get("/v1/models").json()
+    A._models_cache["at"] -= A.MODELS_TTL + 1  # due for a fresh read
+    monkeypatch.setattr(ark, "list_models", lambda *a: (_ for _ in ()).throw(ConnectionError("429")))
+    assert c.get("/v1/models").json() == first and first
+    A._models_cache["at"] -= A.MODELS_STALE_OK  # too old to stand in for Arkiv
+    assert c.get("/v1/models").status_code == 502
+
+
+def test_network_errors_wait_without_using_up_tries(on):
+    store, ark = on
+    P.enqueue(7, 12, store.put(b"weights"))
+    ark.fail = urllib.error.URLError("[Errno -3] Temporary failure in name resolution")
+    for _ in range(P.MAX_ATTEMPTS + 1):
+        assert P.step(7, store, ark, {}) == "pending"
+    assert P.db.execute("SELECT attempts FROM published WHERE job = 7").fetchone()[0] == 0
+    ark.fail = ValueError("a real bug")  # anything else still counts
+    P.step(7, store, ark, {})
+    assert P.db.execute("SELECT attempts FROM published WHERE job = 7").fetchone()[0] == 1
 
 
 def test_models_is_503_when_off(monkeypatch):
@@ -433,3 +458,27 @@ def test_swarm_client_checks_the_read_back(monkeypatch):
     assert s.put(b"weights", "0x" + keccak(b"weights").hex()) == "ab" * 32
     with pytest.raises(RuntimeError):
         s.put(b"weights", H32)
+
+
+def test_request_threads_can_read_while_the_worker_writes(on):
+    import threading
+
+    store, ark = on
+    P.enqueue(7, 12, store.put(b"weights"))
+    errors, stop = [], threading.Event()
+
+    def reader():
+        while not stop.is_set():
+            try:
+                P.status(7), P.is_published("0x" + "00" * 32), P.due()
+            except Exception as e:  # sqlite3.InterfaceError before the reads took the lock
+                errors.append(e)
+                return
+
+    readers = [threading.Thread(target=reader) for _ in range(16)]
+    [t.start() for t in readers]
+    for i in range(300):
+        P._set(7, attempts=i % 5)
+    stop.set()
+    [t.join() for t in readers]
+    assert errors == []

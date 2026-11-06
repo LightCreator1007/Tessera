@@ -50,7 +50,7 @@ def _setup(network, coordinator, key_env, as_json):
     from tod_core.ledger import Ledger, Network
     from tod_core.txmgr import ANVIL_CHAIN_ID, dev_key
     from tod_node.prewarm import Prewarm
-    from tod_node.trainer import Coordinator, RoundRunner, preset_datasets
+    from tod_node.trainer import Coordinator, RoundRunner, dataset_cache, preset_datasets
 
     net = Network.load(network)
     key = os.environ.get(key_env)
@@ -66,7 +66,7 @@ def _setup(network, coordinator, key_env, as_json):
         ledger = Ledger(net)
     except Exception as e:
         fail(as_json, UNREACHABLE, f"chain {net.name}: {e}", "rpc_unreachable")
-    prewarm = Prewarm(preset_datasets(data_dir() / "datasets"))
+    prewarm = Prewarm(preset_datasets(dataset_cache(data_dir() / "datasets")))
     runner = RoundRunner(Coordinator(coordinator, key, net.chain_id, net.market), prewarm.datasets,
                          net.chain_id, net.market)
     return net, ledger, runner, key, prewarm

@@ -55,7 +55,9 @@ def main() -> None:
         requester.l.sender.transact(l.net.market, draft["createJobCalldata"])
     except Reverted as e:
         sys.exit(f"createJob failed: {e}")
-    job = max({e.args["jobId"] for e in l.events() if e.name == "JobCreated"} - before)
+    # Ours by requester, not the newest: with several requesters posting at once, the newest may be someone else's.
+    job = max(e.args["jobId"] for e in l.events() if e.name == "JobCreated" and e.args["jobId"] not in before
+              and e.args["requester"].lower() == requester.address.lower())
     p = l.rebuild().jobs[job]["params"]
     print(f"job {job}: {units / 1e6:g} TOD for {draft['computeOps'] / 1e9:g} Gop over {p.rounds} rounds, {p.minQuorum}-{p.maxPerRound} nodes a round, "
           f"stake {p.stakePerNode / 1e6:g} TOD per node, requested by {requester.address}", flush=True)
