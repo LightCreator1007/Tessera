@@ -39,7 +39,7 @@ export function fromLive(r: LiveCompetition): Competition {
     id: String(r.id), title: r.title, task: r.task, host: r.host, status, prize: r.prize, budget: 0, fee: 0,
     deadline: new Date(r.deadline * 1000).toISOString(), labelsSeed: null, labelsHash: r.labelsHash, committedAt: r.createdBlock,
     entries: r.entrants.map((op) => ({ op, seed: 0, skill: 0, scoreHash: "", score: scores.get(op.toLowerCase()) })),
-    live: true, items: r.items, revealWindow: r.revealWindow, arkiv: r.arkiv ?? null,
+    live: true, items: r.items, revealWindow: r.revealWindow, arkiv: r.arkiv ?? null, stage: r.status, settled: r.settled,
   };
 }
 
