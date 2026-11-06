@@ -86,10 +86,13 @@ def actors(chain):
     return tag, Actor(chain, "coordinator"), Actor(chain, "verifier/a"), Actor(chain, "verifier/b")
 
 
-def join(chain, tag: int, i: int, stake: int):
+def join(chain, tag: int, i: int, stake: int, faucet=None):
     """A paired owner and operator with `stake` deposited, through the two signatures a real join needs."""
     l = chain[0]
-    owner, op = Actor(chain, f"owner/{tag}/{i}", tokens=stake / 1e6), Actor(chain, f"op/{tag}/{i}")
+    owner = Actor(chain, f"owner/{tag}/{i}", tokens=0 if faucet else stake / 1e6)
+    op = Actor(chain, f"op/{tag}/{i}")
+    if faucet:
+        claim_faucet(chain, owner, faucet)
     deadline = l.head()[1] + 1800
     nullifier = h(f"human/{tag}/{i}")
     invite = enc.sign(dev_key("admitter"), "Invite", l.net.chain_id, l.net.registry,
@@ -102,9 +105,11 @@ def join(chain, tag: int, i: int, stake: int):
     return owner, op
 
 
-def create_job(chain, tag: int, rounds: int = ROUNDS, budget: int = BUDGET) -> tuple[int, Actor]:
+def create_job(chain, tag: int, rounds: int = ROUNDS, budget: int = BUDGET, faucet=None) -> tuple[int, Actor]:
     l = chain[0]
-    requester = Actor(chain, f"requester/{tag}/{rounds}", tokens=budget / 1e6)
+    requester = Actor(chain, f"requester/{tag}/{rounds}", tokens=0 if faucet else budget / 1e6)
+    if faucet:
+        claim_faucet(chain, requester, faucet)
     requester.l.token.approve(l.net.market, budget)
     params = {
         "budget": budget, "stakePerNode": l.market.minStake(budget, rounds, 3), "rounds": rounds, "segments": K,
@@ -238,6 +243,70 @@ def test_full_round_pays_and_rebuilds(chain):
     assert l.token.balanceOf(owner.address) == pay
     assert l.market.claimable(owner.address) == 0
     assert {"Paid", "Claimed", "NodeFreed", "RoundFinalized"} <= {e.name for e in l.events()}
+
+
+def claim_faucet(chain, actor, faucet):
+    _, network, rpc, tmp = chain
+    env = {k: v for k, v in os.environ.items() if not k.endswith("_PRIVATE_KEY")}
+    env["WALLET_PRIVATE_KEY"] = actor.key.hex()
+    return subprocess.run(
+        [sys.executable, str(REPO / "scripts/faucet.py"), "claim", "--network", str(network), "--rpc", rpc,
+         "--faucet", faucet, "--account", actor.address, "--journal-dir", str(tmp / "claims")],
+        check=True, capture_output=True, text=True, env=env)
+
+
+def test_faucet_to_stake_settlement_claim_and_withdrawal(chain):
+    """Contract handoff rehearsal; the separate runtime suite performs actual training/replay."""
+    l, network, rpc, tmp = chain
+    tag, coordinator, va, vb = actors(chain)
+    deployed = script("faucet.py", "deploy", "--out", str(tmp / "faucet.json"),
+                      "--journal-dir", str(tmp / "faucet-deploy"), net=str(network), rpc=rpc)
+    faucet = json.loads(deployed.stdout.splitlines()[-1])["faucet"]
+    script("fund.py", faucet, "--tokens", "1000", "--journal-dir", str(tmp / "faucet"), net=str(network), rpc=rpc)
+    supply = l.token.totalSupply()
+    assert not l.token.hasRole(l.token.MINTER_ROLE(), faucet)
+
+    budget = 30_000_000
+    stake = l.market.minStake(budget, 1, 3)
+    pairs = [join(chain, tag, i, stake, faucet=faucet) for i in range(4)]
+    ops = [op for _, op in pairs]
+    job, requester = create_job(chain, tag, rounds=1, budget=budget, faucet=faucet)
+    assert l.token.balanceOf(requester.address) == 100_000_000 - budget
+    assert l.token.balanceOf(faucet) == 500_000_000
+    before_nonce = l.w3.eth.get_transaction_count(requester.address)
+    with pytest.raises(subprocess.CalledProcessError) as blocked:
+        claim_faucet(chain, requester, faucet)
+    assert "Cooldown active" in blocked.value.stderr
+    assert l.w3.eth.get_transaction_count(requester.address) == before_nonce
+
+    coordinator.l.market.openRound(job, [op.address for op in ops], list(range(4)))
+    commit_reveal(l, job, 1, ops)
+    draw_seed(l, coordinator, job, 1)
+    failure = [{"operator": ops[0].address, "kind": int(Kind.REPLAY_MISMATCH), "blameFrom": False}]
+    for verifier in (va, vb):
+        verifier.l.market.attestRound(job, 1, h("faucet-rehearsal-report"), failure)
+    assert l.registry.getNode(ops[0].address).stake == 0
+    round_state = l.market.getRound(job, 1)
+    assert round_state.budget == budget + stake // 2
+    payouts = equal_split(round_state.budget + round_state.drip, ops[1:])
+    finalize(l, coordinator, [va, vb], job, 1, payouts)
+    assert l.market.getRound(job, 1).status == RoundStatus.SETTLED
+    assert l.market.claimable(pairs[0][0].address) == 0
+    assert l.token.balanceOf(pairs[0][0].address) == 100_000_000 - stake
+    for owner, op in pairs[1:]:
+        pay = dict(payouts)[op.address]
+        assert l.market.claimable(owner.address) == pay
+        owner.l.market.claim()
+        owner.l.registry.withdrawStake(op.address, stake)
+        assert l.token.balanceOf(owner.address) == 100_000_000 + pay
+        assert l.market.claimable(owner.address) == 0
+        assert l.registry.getNode(op.address).stake == 0
+    assert l.token.totalSupply() == supply
+    assert_rebuild_matches_views(l)
+    status = script("faucet.py", "status", "--faucet", faucet, "--account", requester.address,
+                    net=str(network), rpc=rpc)
+    assert json.loads(status.stdout)["inventory"] == 500_000_000
+    print(f"Faucet {faucet}; job {job}: settled, three honest owners claimed, bad node slashed and unpaid.")
 
 
 def test_rebuild_follows_slash_no_reveal_and_revert(chain):
@@ -741,3 +810,52 @@ def test_revoked_minter_can_still_fund_eth_only(public):
     result = public_fund(public, [target], "--tokens", "0", "--eth", "0.001", "--yes")
     assert result.returncode == 0, result.stderr
     assert w3.eth.get_balance(target) == 10**15
+
+
+def test_faucet_public_deploy_and_claim_require_confirmation(public):
+    w3, deploy_bundle, roles, env, tmp = public
+    w3.provider.make_request("anvil_setBalance", [roles["faucet"], hex(10**19)])
+    assert deploy_bundle("--yes").returncode == 0
+    network = str(tmp / "out.toml")
+    rpc = w3.provider.endpoint_uri
+
+    def run_faucet(action, *args):
+        return subprocess.run(
+            [sys.executable, str(REPO / "scripts/faucet.py"), action, "--network", network, "--rpc", rpc,
+             "--journal-dir", str(tmp / "faucet-commands"), *args],
+            capture_output=True, text=True, env=env, stdin=subprocess.DEVNULL)
+
+    nonce = w3.eth.get_transaction_count(roles["deployer"])
+    stopped = run_faucet("deploy")
+    assert stopped.returncode != 0 and "Nothing was sent" in stopped.stderr
+    assert roles["deployer"] in stopped.stdout and "gas" in stopped.stdout
+    assert w3.eth.get_transaction_count(roles["deployer"]) == nonce
+    bundle = tmp / "faucet.json"
+    created = run_faucet("deploy", "--yes", "--out", str(bundle))
+    assert created.returncode == 0, created.stderr
+    faucet = json.loads(bundle.read_text())["faucet"]
+    mint = subprocess.run(
+        [sys.executable, str(REPO / "scripts/fund.py"), faucet, "--network", network, "--rpc", rpc,
+         "--tokens", "200", "--eth", "0", "--yes", "--journal-dir", str(tmp / "mint")],
+        capture_output=True, text=True, env=env)
+    assert mint.returncode == 0, mint.stderr
+
+    env["WALLET_PRIVATE_KEY"] = dev_key("public/faucet-claimant").hex()
+    claimant = LocalSigner(env["WALLET_PRIVATE_KEY"]).address
+    w3.provider.make_request("anvil_setBalance", [claimant, hex(10**18)])
+    refused = run_faucet("claim", "--faucet", faucet)
+    assert refused.returncode != 0 and "Nothing was sent" in refused.stderr
+    assert claimant in refused.stdout
+    assert w3.eth.get_transaction_count(claimant) == 0
+    claimed = run_faucet("claim", "--faucet", faucet, "--yes")
+    assert claimed.returncode == 0, claimed.stderr
+    ledger = Ledger(Network.load(network, rpc))
+    assert ledger.token.balanceOf(claimant) == 100_000_000
+    nonce = w3.eth.get_transaction_count(claimant)
+    repeated = run_faucet("claim", "--faucet", faucet, "--yes")
+    assert repeated.returncode != 0 and "Cooldown active" in repeated.stderr
+    assert w3.eth.get_transaction_count(claimant) == nonce
+    del env["WALLET_PRIVATE_KEY"]
+    status = run_faucet("status", "--faucet", faucet, "--account", claimant)
+    assert status.returncode == 0, status.stderr
+    assert json.loads(status.stdout)["inventory"] == 100_000_000
