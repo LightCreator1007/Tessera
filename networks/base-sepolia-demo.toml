@@ -1,0 +1,30 @@
+# Confirmed Base Sepolia test deployment; supply a private Alchemy RPC at runtime.
+name = "base-sepolia-demo"
+chainId = 84532
+rpc = ""
+rpcEnv = "BASE_SEPOLIA_RPC_URL"
+verifierUrl = "https://base-sepolia.blockscout.com/api/"
+logSpan = 200
+probationSeconds = 0
+threshold = 2
+
+[token]
+cap = 1000000000000
+
+[roles]
+tokenAdmin = "0x1f520f9C13deA09D8DA9d8cCcd7e9F1237C553c7"
+deployer = "0x160079dc7596D12007891be11f9EcC0b5689C4e3"
+coordinator = "0xBafBfb2e170a62b797AfDbCb1CEAC0Dc89d7A060"
+admitter = "0x285818EC744B88Db9Fad59508f7eD0E56B60A5aD"
+# Authorized minter EOA; the claim contract is contracts.faucet below.
+faucet = "0x239E04aaDd9d9D09FB1c948Ea67aF76E5Fa9783d"
+verifiers = ["0x2bf8af09b6c43D1b58A9c5f764DF402239b34E21", "0x5500a0eb5C940d2227232f2B4Bcde7F4B4D3DD77"]
+
+[contracts]
+token = "0xfFa825C3C07B2B334D80aa730100c3D9320AE44b"
+registry = "0x09570EEa33b199aC6C5Ce5d6f2934eA6EfFadC34"
+market = "0xa4acE0e126B0B3b021f501DDE6a506cafDdA1581"
+faucet = "0x85359b52D9705F835C57591C7337B0C2e60B55fA"
+exchange = "0xBC202C5B2c239298041f191Bc90cBBC25Ec17Aa8"
+testUSDC = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+deployBlock = 55089330
