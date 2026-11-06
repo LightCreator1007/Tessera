@@ -1,5 +1,5 @@
 // Coordinator reads. Uses the live coordinator when NEXT_PUBLIC_COORDINATOR_URL is set, otherwise the demo fixtures; every result carries its source so the UI can label it.
-// Live reads go to /api/coord on this origin and next.config rewrites them to the coordinator, which sends no CORS headers.
+// Live reads go to /api/coord on this origin, a route handler that proxies to the coordinator, which sends no CORS headers.
 import { keccak256 } from "viem";
 import * as fx from "@/mocks/fixtures";
 import type {
@@ -38,9 +38,12 @@ export async function request(url: string, init: RequestInit = {}, timeoutMs = T
   }
 }
 
+/** The proxy answers 502 with x-proxy when the coordinator itself didn't answer; that is "unreachable", not a 5xx from it. */
+const failed = (res: Response, path: string) => new ApiError(res.status === 502 && res.headers.get("x-proxy") === "tod" ? 0 : res.status, `${res.status} on ${path}`);
+
 async function get<T>(path: string): Promise<Sourced<T>> {
   const res = await request(`${BASE}${path}`, { headers: { accept: "application/json" } });
-  if (!res.ok) throw new ApiError(res.status, `${res.status} on ${path}`);
+  if (!res.ok) throw failed(res, path);
   try {
     return { data: (await res.json()) as T, source: "live" };
   } catch {
@@ -50,7 +53,7 @@ async function get<T>(path: string): Promise<Sourced<T>> {
 
 async function getBytes(path: string): Promise<Sourced<Uint8Array>> {
   const res = await request(`${BASE}${path}`);
-  if (!res.ok) throw new ApiError(res.status, `${res.status} on ${path}`);
+  if (!res.ok) throw failed(res, path);
   return { data: new Uint8Array(await res.arrayBuffer()), source: "live" };
 }
 
