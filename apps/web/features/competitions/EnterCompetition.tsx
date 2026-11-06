@@ -90,7 +90,7 @@ export function EnterCompetition({ id }: { id: string }) {
             },
             {
               key: "person", title: person ? "Verified as one person" : "Prove you're one person", done: person || entered, note: "World ID",
-              body: <><p className="text-sm text-muted">One entry per person. World ID proves that without telling ToD who you are.</p><TxButton tx={human} label="Verify with World ID" onRun={() => human.run(() => setWallet({ personVerified: true }))} /><TxStatus tx={human} /></>,
+              body: <><p className="text-sm text-muted">One entry per person. World ID proves that without telling Tessera who you are.</p><TxButton tx={human} label="Verify with World ID" onRun={() => human.run(() => setWallet({ personVerified: true }))} /><TxStatus tx={human} /></>,
             },
             {
               key: "fund", title: pay.shortBy > 0 && !entered ? `Get ${formatToken(pay.shortBy)} more TOD` : "Fee covered", done: pay.shortBy <= 0 || entered, note: pay.need === 0 ? "from earnings" : <Money units={w.usdc} />,

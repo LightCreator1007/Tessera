@@ -132,7 +132,7 @@ function MobileBar({ onMenu }: { onMenu: () => void }) {
       </button>
       <Link href="/" className="flex items-center gap-2">
         <BrandMark className="size-6 p-1" />
-        <span className="text-sm font-medium text-ink">ToD</span>
+        <span className="text-sm font-medium text-ink">Tessera</span>
       </Link>
       <span className="ml-auto">
         {w.connected && w.address ? <Link href="/me" aria-label="Your profile"><Identicon value={w.address} className="size-6" /></Link> : <Button onClick={openConnect}>Connect</Button>}
@@ -230,9 +230,9 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle?: () =>
             </button>
           </Tip>
         ) : (
-          <Link href="/" aria-label="ToD home" className={cx(ROW, "min-w-0 flex-1 rounded-md")}>
+          <Link href="/" aria-label="Tessera home" className={cx(ROW, "min-w-0 flex-1 rounded-md")}>
             <Slot><BrandMark className="-m-0.5 size-6 p-1" /></Slot>
-            <Label className="font-medium text-ink">ToD</Label>
+            <Label className="font-medium text-ink">Tessera</Label>
           </Link>
         )}
         {onToggle && (

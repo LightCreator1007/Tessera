@@ -85,7 +85,7 @@ export function NodeSettings() {
 
       <section className="flex flex-col">
         <h3 className="text-sm font-medium text-ink">Limits</h3>
-        <SettingRow label="CPU threads" htmlFor="threads" hint={`ToD uses at most this many of the laptop's ${s.laptop.cores} cores. Jobs that need more aren't offered.`} note={midRound && draft.threads !== s.applied.threads ? "Applies after this round" : undefined}>
+        <SettingRow label="CPU threads" htmlFor="threads" hint={`Tessera uses at most this many of the laptop's ${s.laptop.cores} cores. Jobs that need more aren't offered.`} note={midRound && draft.threads !== s.applied.threads ? "Applies after this round" : undefined}>
           <NumField id="threads" value={draft.threads} min={1} max={s.laptop.cores} unit={`of ${s.laptop.cores}`} onChange={(v) => patch({ threads: v ?? 1 })} />
         </SettingRow>
         <SettingRow label="Memory" htmlFor="ram" hint={`Of ${s.laptop.ramGb} GB. The node refuses workloads that need more.`}>

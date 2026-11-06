@@ -328,7 +328,7 @@ export function JoinFlow() {
                     ),
                   },
                   {
-                    key: "approve", title: "Allow ToD to move this TOD", done: w.allowance >= units || staked, note: "exact amount only",
+                    key: "approve", title: "Allow Tessera to move this TOD", done: w.allowance >= units || staked, note: "exact amount only",
                     body: (
                       <>
                         <p className="text-sm text-muted">Your wallet asks once. The allowance is for {formatToken(units)} TOD exactly, nothing more.</p>

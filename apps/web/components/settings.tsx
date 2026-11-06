@@ -174,7 +174,7 @@ function WalletSection() {
           <span className="text-xs text-muted">{formatToken(w.usdc)} {TOKEN_SYMBOL} in the wallet · {formatToken(w.claimable)} earned, unclaimed</span>
           <Link href="/me" onClick={closeSettings} className="inline-flex w-fit items-center gap-1.5 text-xs text-ink underline decoration-subtle underline-offset-4 hover:decoration-ink"><UserRound className="size-3.5" aria-hidden />View profile</Link>
         </SettingRow>
-        <SettingRow label="Network" hint="ToD runs on Base Sepolia while it's a testnet.">
+        <SettingRow label="Network" hint="Tessera runs on Base Sepolia while it's a testnet.">
           {w.wrongNetwork ? (
             <span className="flex flex-wrap items-center gap-2"><Pill tone="warn">Wrong network</Pill><Button onClick={w.switchNetwork}>Switch to Base Sepolia</Button></span>
           ) : <Pill tone="neutral">Base Sepolia</Pill>}
@@ -271,7 +271,7 @@ function Display() {
           <Checkbox label="Show it" checked={p.splash} onChange={(on) => setPrefs({ splash: on })} />
           {p.splash && p.motion === "reduced" && <p className="text-xs text-muted">Hidden while motion is reduced.</p>}
         </SettingRow>
-        <SettingRow label="Theme" hint="ToD is dark only: black, white and the mosaic's reds.">
+        <SettingRow label="Theme" hint="Tessera is dark only: black, white and the mosaic's reds.">
           <Pill tone="neutral">Dark</Pill>
         </SettingRow>
       </Group>
