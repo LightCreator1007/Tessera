@@ -1,0 +1,86 @@
+# Whole local stack in one command: anvil, deploy, coordinator, a seeded MNIST job, two verifiers and three nodes.
+# From the repo root (contracts/lib checked out): docker compose -f docker/compose.dev.yml up --build
+# Every service shares anvil's network, so 127.0.0.1:8545 and the coordinator at 127.0.0.1:8000 work the same inside
+# and outside. Each node's local API is on 127.0.0.1:7777-7779. node-0 runs fake:lazy, so a round shows a slash.
+# Local chain only: every key is a public dev key.
+
+x-app: &app
+  image: tod-dev
+  network_mode: service:anvil
+  volumes: [dev-data:/dev-data]
+  environment: &env
+    # deploy writes the fresh addresses here; every service reads this copy, never the one baked into the image
+    TOD_NETWORK: /dev-data/anvil.toml
+    TOD_COORDINATOR: http://127.0.0.1:8000
+    STORE_DIR: /dev-data/store
+    DB_PATH: /dev-data/coordinator.db
+    TOPUP_JOURNAL_DIR: /dev-data/topup
+    IDENTITY_MODE: dev
+
+# The same ceiling the tod-node wrapper sets, per process.
+x-limits: &limits
+  cpus: 2
+  mem_limit: 2g
+  memswap_limit: 2g
+  pids_limit: 256
+
+services:
+  anvil:
+    image: tod-dev
+    build: {context: .., dockerfile: docker/dev.Dockerfile}
+    # The chain is saved to the volume every 10 s and on stop, so restarting the stack keeps contracts and stakes.
+    command: anvil --host 0.0.0.0 --block-time 1 --state /dev-data/anvil-state.json --state-interval 10
+    volumes: [dev-data:/dev-data]
+    ports: ["127.0.0.1:8545:8545", "127.0.0.1:8000:8000", "127.0.0.1:7777-7779:7777-7779"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen(u.Request('http://127.0.0.1:8545', data=b'{\"jsonrpc\":\"2.0\",\"method\":\"eth_chainId\",\"params\":[],\"id\":1}', headers={'content-type': 'application/json'}), timeout=2)"]
+      interval: 2s
+      retries: 30
+
+  deploy:
+    <<: *app
+    command: python docker/dev/deploy.py  # keeps a deployment still on the chain, so a rerun is safe
+    depends_on: {anvil: {condition: service_healthy}}
+
+  coordinator:
+    <<: *app
+    command: python docker/dev/coordinator.py
+    depends_on: {deploy: {condition: service_completed_successfully}}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/v1/health', timeout=2)"]
+      interval: 2s
+      retries: 60
+
+  seed:
+    <<: *app
+    command: python docker/dev/seed.py
+    depends_on: {coordinator: {condition: service_healthy}}
+
+  verifier-a: &verifier
+    <<: [*app, *limits]
+    command: tod-verifier run --key-env VERIFIER_A_PRIVATE_KEY
+    environment: {<<: *env, TOD_VERIFIER_DATA: /dev-data/verifier-a}
+    depends_on: {seed: {condition: service_completed_successfully}}
+
+  verifier-b:
+    <<: *verifier
+    command: tod-verifier run --key-env VERIFIER_B_PRIVATE_KEY
+    environment: {<<: *env, TOD_VERIFIER_DATA: /dev-data/verifier-b}
+
+  node-0: &node
+    <<: [*app, *limits]
+    command: tod-node run
+    stop_grace_period: 240s  # a graceful stop finishes a pending reveal
+    environment: {<<: *env, TOD_DATA: /dev-data/node0, TOD_API_BIND: "0.0.0.0:7777", TOD_MODE: "fake:lazy"}
+    depends_on: {seed: {condition: service_completed_successfully}}
+
+  node-1:
+    <<: *node
+    environment: {<<: *env, TOD_DATA: /dev-data/node1, TOD_API_BIND: "0.0.0.0:7778"}
+
+  node-2:
+    <<: *node
+    environment: {<<: *env, TOD_DATA: /dev-data/node2, TOD_API_BIND: "0.0.0.0:7779"}
+
+volumes:
+  dev-data:
