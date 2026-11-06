@@ -9,7 +9,7 @@ log = logging.getLogger(__name__)
 
 
 def run(ledger, loop, stop: threading.Event, poll: float = 2.0, emit=lambda *a, **k: None,
-        on_tick=lambda: None) -> None:
+        on_tick=lambda state: None) -> None:
     """Returns once `stop` is set and no committed round is waiting for its reveal."""
     state, draining = ChainState(), None
     while True:
@@ -24,7 +24,7 @@ def run(ledger, loop, stop: threading.Event, poll: float = 2.0, emit=lambda *a, 
                     emit("node.draining", pending=[f"{j}/{r}" for j, r in pending])
                     draining = pending
             loop.tick(state)
-            on_tick()
+            on_tick(state)
         except Exception:
             # A sync that fails part way has applied some events without moving last_block, so start over.
             log.exception("tick failed; rebuilding chain state")

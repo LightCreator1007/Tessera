@@ -28,7 +28,7 @@ class Api:
         self.status, self.events, self.stop, self.token = status, events, stop, token
         self.last_tick = time.monotonic()
 
-    def tick(self) -> None:
+    def tick(self, state=None) -> None:
         self.last_tick = time.monotonic()
 
     def serve(self, bind: str) -> ThreadingHTTPServer:

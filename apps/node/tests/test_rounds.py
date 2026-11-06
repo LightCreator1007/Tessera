@@ -196,3 +196,24 @@ def test_final_weights_upload_is_retried(monkeypatch):
     t.runner.run = lambda *a: ([b"\1" * 32], np.zeros(2, np.float32), b"\2" * 32)
     st = SimpleNamespace(rounds={(1, 1): {"nodeRounds": {"0xa": {"shard": 0}}}})
     assert t(st, 1, 1) == [b"\1" * 32] and len(puts) == 3 and puts[0] == puts[2]
+
+
+def test_inputs_refused_for_now_are_retried_not_skipped(store):
+    """Right after openRound the coordinator may not list the roster yet, so its blob routes answer 403."""
+    import urllib.error
+
+    calls, events = [], []
+
+    def flaky(*a):
+        calls.append(a)
+        if len(calls) == 1:
+            raise urllib.error.HTTPError("http://c/v1/blobs/0x1", 403, "Forbidden", {}, None)
+        return list(HS)
+
+    market = FakeMarket(store)
+    node = RoundLoop(market, ME, 31337, store, flaky, emit=lambda t, **k: events.append(t))
+    node.tick(state())
+    assert market.commits == {} and events == ["round.waiting"]
+    node.tick(state())
+    assert (1, 1) in market.commits and events == ["round.waiting", "round.committed"]
+    assert (1, 1) not in node.skipped
