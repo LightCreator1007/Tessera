@@ -1,5 +1,6 @@
 """Pool join: check the human, the pairing code and one nullifier per human, then sign the pool Invite."""
 import base64
+import collections
 import json
 import os
 import secrets
@@ -11,7 +12,7 @@ from pathlib import Path
 from eth_account import Account
 from eth_account.messages import encode_defunct
 from eth_utils import is_address, to_checksum_address
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from tod_core import encodings as enc
@@ -49,7 +50,37 @@ def check_admitter(network: str | None) -> None:
 
 check_admitter(os.environ.get("TOD_NETWORK"))
 
-router = APIRouter(prefix="/v1/identity")
+MAX_BODY = 64 * 1024  # bytes; an IDKit result is a few KB, so anything near this is not a join
+RP_SIGNATURES_PER_MINUTE = int(os.environ.get("RP_SIGNATURES_PER_MINUTE", "20"))
+
+
+async def small_body(request: Request) -> None:
+    """413 before parsing anything large. Reading the body here caches it for the route."""
+    if int(request.headers.get("content-length") or 0) > MAX_BODY or len(await request.body()) > MAX_BODY:
+        raise HTTPException(413, f"request body over {MAX_BODY} bytes")
+
+
+class RateLimit:
+    """At most `per_minute` hits per key in any 60 s window, kept in memory."""
+
+    def __init__(self, per_minute: int, now=time.monotonic):
+        self.per_minute, self.now = per_minute, now
+        self.hits: dict[str, collections.deque] = {}
+
+    def allow(self, key: str) -> bool:
+        t, q = self.now(), self.hits.setdefault(key, collections.deque())
+        while q and t - q[0] >= 60:
+            q.popleft()
+        if len(q) >= self.per_minute:
+            return False
+        q.append(t)
+        return True
+
+
+# ponytail: keyed by the TCP peer, so behind a tunnel every caller shares one budget; key on the tunnel's
+# client-IP header once one is deployed.
+rp_limit = RateLimit(RP_SIGNATURES_PER_MINUTE)
+router = APIRouter(prefix="/v1/identity", dependencies=[Depends(small_body)])
 db = sqlite3.connect(config.DB_PATH, check_same_thread=False)
 db.execute("CREATE TABLE IF NOT EXISTS humans (nullifier TEXT PRIMARY KEY, owner TEXT, credential TEXT, seen INTEGER)")
 # Agent Pass: the owner's World account (iss, sub), and approvals waiting on the owner.
@@ -134,12 +165,15 @@ def test_page():
 
 
 @router.post("/rp-signature", response_model=RpSignature)
-def rp_signature(req: RpSignatureRequest):
+def rp_signature(req: RpSignatureRequest, request: Request):
     # Only our own action, so this route can't be used to sign requests for anything else.
     if req.action != worldid.ACTION:
         raise HTTPException(400, f"only the {worldid.ACTION!r} action is signed")
     if not worldid.RP_SIGNING_KEY:
         raise HTTPException(503, "World ID is not configured (WORLD_ID_RP_SIGNING_KEY)")
+    # Only requests we would sign count: each signature opens a World ID request under our RP, so cap it per caller.
+    if not rp_limit.allow(request.client.host if request.client else "?"):
+        raise HTTPException(429, f"over {RP_SIGNATURES_PER_MINUTE} RP signatures a minute; wait and retry")
     return RpSignature(**worldid.sign_request(worldid.RP_SIGNING_KEY, req.action))
 
 
@@ -156,15 +190,19 @@ def checked_consent(owner: str, pairing_code: str) -> tuple[str, dict, bytes]:
         consent = {"owner": to_checksum_address(code["owner"]), "operator": operator,
                    "consentDeadline": int(code["consentDeadline"])}
         consent_sig = bytes.fromhex(code["signature"].removeprefix("0x"))
-        signer = enc.recover("Consent", config.CHAIN_ID, config.NODE_REGISTRY, consent, consent_sig)
     except (ValueError, KeyError, TypeError) as e:
         raise HTTPException(400, f"bad pairing code: {e}")
+    # The cheap checks come before recovering the signature, so junk can't make each request expensive.
     if consent["owner"] != owner:
         raise HTTPException(400, "pairing code was made for a different owner")
-    if signer != operator:
-        raise HTTPException(400, "pairing code signature does not match its operator")
     if consent["consentDeadline"] <= int(time.time()):
         raise HTTPException(400, "pairing code expired; run `tod-node pair` again")
+    try:
+        signer = enc.recover("Consent", config.CHAIN_ID, config.NODE_REGISTRY, consent, consent_sig)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(400, f"bad pairing code: {e}")
+    if signer != operator:
+        raise HTTPException(400, "pairing code signature does not match its operator")
     return operator, consent, consent_sig
 
 

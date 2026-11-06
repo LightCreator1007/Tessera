@@ -140,3 +140,33 @@ def test_an_admitter_the_network_does_not_register_is_refused(tmp_path):
     net.write_text(f'[roles]\nadmitter = "{identity.ADMITTER.address.lower()}"\n')
     identity.check_admitter(str(net))
     identity.check_admitter(None)
+
+
+def test_rp_signatures_are_rate_limited(monkeypatch):
+    from identity import worldid
+    monkeypatch.setattr(worldid, "RP_SIGNING_KEY", "0x" + "ab" * 32)
+    monkeypatch.setattr(identity, "rp_limit", identity.RateLimit(3))
+    assert client.post("/v1/identity/rp-signature", json={"action": "other"}).status_code == 400  # uses no budget
+    codes = [client.post("/v1/identity/rp-signature", json={"action": worldid.ACTION}).status_code for _ in range(4)]
+    assert codes == [200, 200, 200, 429]
+
+
+def test_rate_limit_window_slides():
+    t = [0.0]
+    lim = identity.RateLimit(2, now=lambda: t[0])
+    assert [lim.allow("a"), lim.allow("a"), lim.allow("a"), lim.allow("b")] == [True, True, False, True]
+    t[0] = 60
+    assert lim.allow("a")
+
+
+def test_oversized_bodies_are_refused_before_parsing(owner):
+    big = {"owner": owner, "pairingCode": "x", "proof": {"pad": "a" * identity.MAX_BODY}}
+    assert client.post("/v1/identity/join", json=big).status_code == 413
+
+
+def test_owner_mismatch_is_refused_without_checking_the_signature(owner):
+    body = json.dumps({"consentDeadline": int(time.time()) + 60, "operator": Account.create().address,
+                       "owner": Account.create().address, "signature": "0x" + "11" * 65}).encode()
+    code = identity.PAIR_PREFIX + base64.urlsafe_b64encode(body).decode().rstrip("=")
+    r = join(owner, code)
+    assert r.status_code == 400 and "different owner" in r.json()["detail"]
