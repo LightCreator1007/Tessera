@@ -1,5 +1,6 @@
 "use client";
 // Job detail: breadcrumb bar, title and summary, pill tabs (Overview, Rounds, Contributors, Model, Spec via ?tab), and the Properties rail, which gains the owner actions (refund, follow-up job) when the job is yours.
+import { calls } from "@/lib/chain";
 import { RoundPlates } from "@/components/mosaic/isoScenes";
 import Link from "next/link";
 import { useQueries } from "@tanstack/react-query";
@@ -114,7 +115,7 @@ function OwnerActions({ job }: { job: Job }) {
       <p className="text-xs font-medium text-ink">You posted this job</p>
       {ended && refundable > 0 && !refunded && (
         <>
-          <TxButton tx={refund} label={`Withdraw ${formatToken(refundable)} TOD refund`} onRun={() => refund.run(() => { setRefunded(true); setWallet((x) => ({ usdc: x.usdc + refundable })); })} />
+          <TxButton tx={refund} label={`Withdraw ${formatToken(refundable)} TOD refund`} onRun={() => refund.send(() => calls.withdrawRefund(job.id), () => { setRefunded(true); setWallet((x) => ({ usdc: x.usdc + refundable })); })} />
           <TxStatus tx={refund} />
         </>
       )}

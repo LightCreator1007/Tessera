@@ -1,5 +1,6 @@
 "use client";
 // Owner panel on a node's page: what your node is doing now, earnings and claim, stake, the CLI commands, and stopping. Shown only to the wallet that owns the node; everyone else sees the public record alone.
+import { calls, watchOperator } from "@/lib/chain";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -43,6 +44,8 @@ export function OwnerNode() {
   const [more, setMore] = useState("10");
   const [busy, setBusy] = useState(false);
   const node = w.node;
+  // Live mode reads this operator's stake from NodeRegistry.
+  useEffect(() => { watchOperator(node ? node.operator : null); }, [node]);
   const live = (jobs.data?.data ?? []).find((j) => j.status === "running") ?? null;
   const round = useRound(live?.id ?? Number.NaN, busy && live ? live.currentRound : null);
   if (!node) return null;
@@ -62,6 +65,7 @@ export function OwnerNode() {
   const idle = (nodes.data?.data ?? []).filter((n) => n.online && n.idle).length;
   const lowStake = node.stake < MIN_STAKE;
   const moreUnits = Math.round(Number(more) * TOD);
+  const needsApprove = moreUnits > 0 && w.allowanceTo.registry < moreUnits;
 
   return (
     <section aria-label="Your node" className="flex flex-col gap-4 rounded-xl border border-brand-line bg-brand-soft p-4">
@@ -97,7 +101,7 @@ export function OwnerNode() {
         <Card className="flex flex-col gap-3 p-4">
           <SectionTitle title="Earnings" sub="pay collects here" />
           <p className="text-xl text-ink"><Money units={w.claimable} live /></p>
-          <TxButton tx={claim} variant="secondary" label="Claim to wallet" disabled={w.claimable === 0} why="Nothing to claim yet" onRun={() => claim.run(() => setWallet((x) => ({ usdc: x.usdc + x.claimable, claimable: 0, claims: [...x.claims, { amount: x.claimable, at: Date.now() }] })))} />
+          <TxButton tx={claim} variant="secondary" label="Claim to wallet" disabled={w.claimable === 0} why="Nothing to claim yet" onRun={() => claim.send(calls.claim, () => setWallet((x) => ({ usdc: x.usdc + x.claimable, claimable: 0, claims: [...x.claims, { amount: x.claimable, at: Date.now() }] })))} />
           <TxStatus tx={claim} />
         </Card>
         <Card className="flex flex-col gap-3 p-4">
@@ -113,8 +117,8 @@ export function OwnerNode() {
           <div className="flex flex-wrap items-center gap-2">
             <label className="sr-only" htmlFor="add-stake">Add stake, TOD</label>
             <input id="add-stake" inputMode="decimal" value={more} onChange={(e) => setMore(e.target.value.replace(/[^0-9.]/g, ""))} className="h-8 w-20 rounded-md border border-field bg-surface px-2 font-mono text-sm text-ink outline-none focus:border-muted" />
-            <TxButton tx={add} variant="secondary" label="Add" disabled={!(moreUnits > 0) || moreUnits > w.usdc} why={moreUnits > w.usdc ? "Not enough TOD in your wallet" : "Enter an amount"} onRun={() => add.run(() => setWallet((x) => ({ usdc: x.usdc - moreUnits, node: x.node && { ...x.node, stake: x.node.stake + moreUnits } })))} />
-            <TxButton tx={withdraw} variant="secondary" label="Withdraw all" disabled={busy || node.stake === 0} why={busy ? "Opens when this round ends" : "Nothing staked"} onRun={() => withdraw.run(() => setWallet((x) => ({ usdc: x.node ? x.usdc + x.node.stake : x.usdc, node: x.node && { ...x.node, stake: 0 } })))} />
+            <TxButton tx={add} variant="secondary" label={!isDemo && needsApprove ? "Approve" : "Add"} disabled={!(moreUnits > 0) || moreUnits > w.usdc} why={moreUnits > w.usdc ? "Not enough TOD in your wallet" : "Enter an amount"} onRun={() => !isDemo && needsApprove ? add.send(() => calls.approve("registry", moreUnits)) : add.send(() => calls.depositStake(node.operator, moreUnits), () => setWallet((x) => ({ usdc: x.usdc - moreUnits, node: x.node && { ...x.node, stake: x.node.stake + moreUnits } })))} />
+            <TxButton tx={withdraw} variant="secondary" label="Withdraw all" disabled={busy || node.stake === 0} why={busy ? "Opens when this round ends" : "Nothing staked"} onRun={() => withdraw.send(() => calls.withdrawStake(node.operator, node.stake), () => setWallet((x) => ({ usdc: x.node ? x.usdc + x.node.stake : x.usdc, node: x.node && { ...x.node, stake: 0 } })))} />
           </div>
           <TxStatus tx={add} />
           <TxStatus tx={withdraw} />
