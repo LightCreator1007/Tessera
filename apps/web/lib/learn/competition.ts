@@ -4,13 +4,14 @@ import { mulberry32, sha256 } from "./replay";
 export const ITEMS = 2000;
 export const CLASSES = 10;
 
-export type Entry = { op: string; seed: number; skill: number; scoreHash: string };
+/** score: the fraction of items right, as the Competitions contract counted it; only set on live competitions. */
+export type Entry = { op: string; seed: number; skill: number; scoreHash: string; score?: number };
 export type Competition = {
   id: string;
   title: string;
   task: string;
   host: string;
-  status: "open" | "finished" | "unrevealed";
+  status: "open" | "closed" | "finished" | "unrevealed";
   prize: number;
   budget: number;
   /** Entry fee in TOD units. It joins the prize pool. */
@@ -21,6 +22,11 @@ export type Competition = {
   labelsHash: string;
   committedAt: number;
   entries: Entry[];
+  /** Read from the Competitions contract, not an example: scores are onchain and there's no browser re-check. */
+  live?: boolean;
+  items?: number;
+  /** Seconds the host has to reveal labels after the deadline, and entrants then have to reveal entries. */
+  revealWindow?: number;
 };
 
 export function labelBytes(seed: number) {
@@ -66,6 +72,7 @@ export async function rescore(c: Competition, e: Entry, onStep?: (step: number, 
 }
 
 export function scoreOf(c: Competition, e: Entry) {
+  if (e.score !== undefined) return e.score;
   const labels = labelBytes(seedOf(c));
   return correct(labels, predictionBytes(labels, e.seed, e.skill)) / ITEMS;
 }

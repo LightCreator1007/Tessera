@@ -3,7 +3,7 @@
 import { keccak256 } from "viem";
 import * as fx from "@/mocks/fixtures";
 import type {
-  Draft, DraftRequest, ModelRecord, NodeEvent, NodeHealth, NodeStatus, Spec, Workload,
+  Draft, DraftRequest, LiveCompetition, ModelRecord, NodeEvent, NodeHealth, NodeStatus, Spec, Workload,
   Config, Evidence, Health, Job, JobState, Node, NodeChain, Pool, Round, RoundSummary, RoundVerdicts, Settlement, Sourced, OwnerHistory, OwnerIdentity } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_COORDINATOR_URL ? "/api/coord" : undefined;
@@ -79,6 +79,7 @@ export const api = {
   config: () => (BASE ? get<Config>("/v1/config") : demo(() => fx.config, "config")),
   health: () => (BASE ? get<Health>("/v1/health") : demo(() => ({ ...fx.health, block: demoBlock() }), "health")),
   pool: () => (BASE ? get<Pool>("/v1/pool") : demo(() => fx.pool, "pool")),
+  competitions: () => (BASE ? get<LiveCompetition[]>("/v1/competitions") : demo(() => [] as LiveCompetition[], "competitions")),
   jobs: () => (BASE ? get<Job[]>("/v1/jobs") : demo(() => fx.jobs, "jobs")),
   job: (id: number) => (BASE ? get<Job>(`/v1/jobs/${id}`) : demo(() => findJob(id), `Job ${id}`)),
   jobState: (id: number) => (BASE ? get<JobState>(`/v1/jobs/${id}/state`) : demo(() => fx.jobStates[id] ?? null, `Job ${id}`)),
