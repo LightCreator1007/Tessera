@@ -60,7 +60,13 @@ class Driver:
         self._data: dict[str, tuple] = {}
 
     def tick(self):
-        self.state.sync(self.l)
+        try:
+            self.state.sync(self.l)
+        except Exception:
+            # A sync that fails part way has applied some events without moving last_block, and the retry would
+            # apply them again (a stake counted twice, say). Start over from the deploy block instead.
+            self.state = ChainState()
+            raise
         phases = {k: Phase(self.l.market.phase(*k)) for k, r in self.state.rounds.items()
                   if r["status"] == RoundStatus.OPEN}
         self.publish(phases)

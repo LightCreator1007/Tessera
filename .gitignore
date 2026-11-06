@@ -24,3 +24,4 @@ txmgr-topup/
 __pycache__/
 .pytest_cache/
 node_modules/
+/coordinator.db

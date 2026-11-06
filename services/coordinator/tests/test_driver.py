@@ -148,6 +148,17 @@ def test_a_broken_round_does_not_stop_the_tick(world):
     assert (1, 1) not in tables.SETTLEMENTS and tables.ROUNDS[1][1].status == "verifying"
 
 
+def test_a_sync_that_fails_part_way_starts_over(world):
+    def flaky(ledger):
+        world.s.nodes[OPS[0]]["stake"] += 15  # an event applied before the RPC error
+        raise OSError("rpc dropped")
+
+    world.s.sync = flaky
+    with pytest.raises(OSError):
+        world.d.tick()
+    assert world.d.state is not world.s and not world.d.state.nodes  # the next tick rebuilds from the deploy block
+
+
 def test_reports_no_reveals_before_voiding(world):
     nrs = world.s.rounds[(1, 1)]["nodeRounds"]
     for op in OPS[1:3]:
