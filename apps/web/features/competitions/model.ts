@@ -36,7 +36,7 @@ export function fromLive(r: LiveCompetition, readAt = Date.now()): Competition {
   const status = r.status === "settled" && r.scored === 0 ? "closed" : LIVE_STATUS[r.status];
   // Older coordinators send only entrants and a leaderboard; newer ones send standings with ranks and commit counts.
   const entries = r.standings
-    ? r.standings.map((s) => ({ op: s.entrant, seed: 0, skill: 0, scoreHash: "", score: s.score === null ? undefined : s.score / r.items, rank: s.rank, tied: s.tied, commits: s.commits }))
+    ? r.standings.map((s) => ({ op: s.entrant, seed: 0, skill: 0, scoreHash: "", score: s.score === null ? undefined : s.score / r.items, rank: s.rank, tied: s.tied, commits: s.commits, share: s.share }))
     : r.entrants.map((op) => {
       const i = r.leaderboard.findIndex((e) => e.entrant.toLowerCase() === op.toLowerCase());
       return { op, seed: 0, skill: 0, scoreHash: "", score: i < 0 ? undefined : r.leaderboard[i].score / r.items, rank: i < 0 ? null : i + 1 };

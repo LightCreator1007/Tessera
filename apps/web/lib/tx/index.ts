@@ -34,6 +34,14 @@ export const REVERT_COPY: Record<string, string> = {
   NotJoined: "This operator hasn't joined the network yet.",
   CooldownActive: "The faucet sent you test TOD recently. Wait for its cooldown and try again.",
   EmptyFaucet: "The faucet is out of test TOD. Ask the team to top it up.",
+  BadPass: "The entry pass expired or is for another wallet. Try again for a fresh one.",
+  NotOpen: "There's no competition with that id.",
+  Closed: "Entries are closed. The deadline has passed.",
+  NotYet: "It's too early for this step. Wait for the window to open.",
+  TooLate: "The window for this step has closed.",
+  NotEntered: "This wallet has no entry in this competition.",
+  WrongReveal: "The file and salt don't hash to the commitment. Use the reveal file saved when you committed.",
+  AlreadyDone: "This was already done.",
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

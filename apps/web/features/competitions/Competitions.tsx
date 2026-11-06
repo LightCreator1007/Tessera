@@ -8,7 +8,8 @@ import { Countdown } from "./Countdown";
 import { CompetitionNotebooks } from "./Notebooks";
 import { Term } from "@/components/term";
 import { ReVerify } from "@/features/verify/ReVerify";
-import { Command } from "@/components/flow";
+import { Command, More } from "@/components/flow";
+import { LiveAction } from "./LiveActions";
 import { isDemo } from "@/lib/api/client";
 import { PosterCard } from "@/components/mosaic/PosterCard";
 import { coverFor } from "@/components/mosaic/figures";
@@ -22,7 +23,7 @@ const LABEL: Record<Status, string> = { open: "Open", closed: "Closed", finished
 const TONE: Record<Status, Tone> = { open: "ok", closed: "neutral", finished: "neutral", unrevealed: "danger" };
 const NOT_LIVE = isDemo
   ? "Competitions aren't on chain yet. Hosting and entering run on the test wallet in this browser."
-  : "These are read from the Competitions contract. Until the web wallet signs transactions, host and enter with docker/dev/competition.py.";
+  : "These are read from the Competitions contract. Hosting, entering, revealing and settling are signed by your wallet.";
 const REL = { host: "Hosting", entered: "Entered" } as const;
 
 const date = (iso: string) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(iso));
@@ -73,7 +74,7 @@ export function CompetitionList() {
   return (
     <div className="flex min-h-full flex-col">
       <PageHeader icon={Trophy} title="competitions" heading="Competitions" meta={<DocsLink href="/docs/learn#no-faking">Why scores can&apos;t be rigged</DocsLink>}>
-        {isDemo ? <ButtonLink href="/competitions/new" variant="primary" icon={Plus}>Host a competition</ButtonLink> : <Disabled icon={Plus}>Host a competition</Disabled>}
+        <ButtonLink href="/competitions/new" variant="primary" icon={Plus}>Host a competition</ButtonLink>
       </PageHeader>
       <div className="flex flex-col gap-3 px-4 pt-4 md:px-6">
         {isDemo && <ExampleBanner />}
@@ -147,7 +148,7 @@ function rulesFor(c: Competition) {
 const CLI = "docker compose -f docker/compose.dev.yml exec coordinator python docker/dev/competition.py";
 
 /** Live only: who moves the competition next, and the command that does it until the web wallet signs. */
-function NextStep({ c }: { c: Competition }) {
+function NextStep({ c, w }: { c: Competition; w: ReturnType<typeof useCompetitions>["w"] }) {
   const id = c.id;
   const steps: Record<string, { who: string; text: string; cmd?: string }> = {
     open: { who: "Entrants", text: `Entries close ${when(c)}. Commit your predictions; you can replace them until then.`, cmd: `${CLI} enter ${id} --name <you> --predictions <file>` },
@@ -171,7 +172,8 @@ function NextStep({ c }: { c: Competition }) {
     <section aria-label="What happens next" className="flex flex-col gap-2">
       <Eyebrow>What happens next</Eyebrow>
       <p className="text-sm text-muted"><span className="text-ink">{s.who}:</span> {s.text}</p>
-      {s.cmd && <Command cmd={s.cmd} label="Until the web wallet signs, from the host's machine" />}
+      <LiveAction c={c} w={w} />
+      {s.cmd && <More label="Or from the command line"><Command cmd={s.cmd} label="On the local dev stack" /></More>}
     </section>
   );
 }
@@ -354,7 +356,8 @@ export function CompetitionDetail({ id }: { id: string }) {
   return (
     <div className="flex min-h-full flex-col">
       <PageHeader title={<Crumbs items={[{ href: "/competitions", label: "competitions" }, { label: <span title={c.title} className="block max-w-56 truncate sm:max-w-md">{c.title}</span> }]} />}>
-        {isOpen && rel === null && (isDemo && gate.ok ? <ButtonLink href={`/competitions/${c.id}/enter`} variant="primary" icon={Trophy}>Enter</ButtonLink> : <Disabled icon={Trophy}>Enter</Disabled>)}
+        {isOpen && rel === null && (gate.ok ? <ButtonLink href={`/competitions/${c.id}/enter`} variant="primary" icon={Trophy}>Enter</ButtonLink> : <Disabled icon={Trophy}>Enter</Disabled>)}
+        {isOpen && rel === "entered" && c.live && <ButtonLink href={`/competitions/${c.id}/enter`} variant="secondary" icon={Trophy}>Replace entry</ButtonLink>}
       </PageHeader>
       <div className="flex flex-col gap-8 px-4 py-6 md:px-6 lg:flex-row">
         <div className="flex min-w-0 flex-1 flex-col gap-8">
@@ -400,7 +403,7 @@ export function CompetitionDetail({ id }: { id: string }) {
               The {c.live ? span(c.revealWindow) : "48-hour"} reveal window closed without labels matching the commitment, so no score can be trusted. Under the rules the prize is split between the {c.entries.length} entrants.
             </Banner>
           )}
-          {c.live && <NextStep c={c} />}
+          {c.live && <NextStep c={c} w={w} />}
           <Rules c={c} />
         </div>
         <aside className="flex shrink-0 flex-col gap-4 lg:w-80">

@@ -19,6 +19,8 @@ export type Config = {
   threshold: number;
   token: string;
   verifiers: string[];
+  /** Absent or null where this network has no Competitions contract. */
+  competitions?: string | null;
 };
 export type Health = { block: number | null; chainId: number; ok: boolean; storeOk: boolean; version: string };
 export type Job = {

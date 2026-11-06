@@ -9,6 +9,8 @@ export type Entry = {
   op: string; seed: number; skill: number; scoreHash: string; score?: number;
   /** Live only: the contract's rank (null until scored), whether it ties, and how many times it was committed. */
   rank?: number | null; tied?: boolean; commits?: number;
+  /** Live only: TOD this entrant claimed as an equal share when the labels stayed hidden. */
+  share?: number;
 };
 export type Competition = {
   id: string;

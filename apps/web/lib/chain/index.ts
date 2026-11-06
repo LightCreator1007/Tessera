@@ -33,7 +33,7 @@ export const tokenAbi = parseAbi([
 ]);
 export const faucetAbi = parseAbi(["function claim()", "error CooldownActive(uint256 nextClaim)", "error EmptyFaucet()"]);
 
-export type Contracts = { chainId: number; market: Address; registry: Address; token: Address; faucet: Address | null };
+export type Contracts = { chainId: number; market: Address; registry: Address; token: Address; faucet: Address | null; competitions: Address | null };
 export type ChainWallet = {
   address: Address | null;
   chainId: number | null;
@@ -83,7 +83,7 @@ const remember = (rdns: string | null) => {
 };
 
 export function getContracts(): Promise<Contracts> {
-  contracts ??= api.config().then(({ data: c }) => ({ chainId: c.chainId, market: c.jobMarket as Address, registry: c.nodeRegistry as Address, token: c.token as Address, faucet: FAUCET }))
+  contracts ??= api.config().then(({ data: c }) => ({ chainId: c.chainId, market: c.jobMarket as Address, registry: c.nodeRegistry as Address, token: c.token as Address, faucet: FAUCET, competitions: (c.competitions ?? null) as Address | null }))
     .catch((e) => { contracts = null; throw e; });
   return contracts;
 }
