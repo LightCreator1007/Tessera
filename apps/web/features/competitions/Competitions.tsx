@@ -92,12 +92,14 @@ export const RULES = [
   ["Who can enter", "One entry per verified person. The host's own identity is blocked from entering."],
 ] as const;
 
-const span = (s: number) => (s % 3600 === 0 ? `${s / 3600} hours` : s % 60 === 0 ? `${s / 60} minutes` : `${s} seconds`);
+// An unknown window says so rather than "0 seconds".
+const span = (s?: number) =>
+  s === undefined ? "the reveal window" : s % 3600 === 0 ? `${s / 3600} hours` : s % 60 === 0 ? `${s / 60} minutes` : `${s} seconds`;
 
 /** A live competition's rules carry its own size and windows, as the contract enforces them. */
 function rulesFor(c: Competition) {
   if (!c.live) return RULES;
-  const w = span(c.revealWindow ?? 0);
+  const w = span(c.revealWindow);
   return RULES.map(([k, v]): readonly [string, string] =>
     k === "Scoring" ? [k, `Accuracy on ${(c.items ?? ITEMS).toLocaleString()} hidden labels, counted by the contract when each entry is revealed.`]
       : k === "Labels not revealed" ? [k, `If the host doesn't reveal labels that match the commitment within ${w} of the deadline, the prize is split evenly between entrants.`]
@@ -232,7 +234,7 @@ export function CompetitionDetail({ id }: { id: string }) {
           </header>
           {rel === "host" && isOpen && (
             <Banner tone="pending" title="You host this competition.">
-              Keep the labels file you committed. After the deadline you have {c.live ? span(c.revealWindow ?? 0) : "48 hours"} to reveal it; if it doesn&apos;t hash to the commitment, the prize is split between entrants.
+              Keep the labels file you committed. After the deadline you have {c.live ? span(c.revealWindow) : "48 hours"} to reveal it; if it doesn&apos;t hash to the commitment, the prize is split between entrants.
             </Banner>
           )}
           {mine && (
@@ -253,7 +255,7 @@ export function CompetitionDetail({ id }: { id: string }) {
           )}
           {c.status === "unrevealed" && (
             <Banner tone="danger" title="The host didn't reveal the labels.">
-              The {c.live ? span(c.revealWindow ?? 0) : "48-hour"} reveal window closed without labels matching the commitment, so no score can be trusted. Under the rules the prize is split between the {c.entries.length} entrants.
+              The {c.live ? span(c.revealWindow) : "48-hour"} reveal window closed without labels matching the commitment, so no score can be trusted. Under the rules the prize is split between the {c.entries.length} entrants.
             </Banner>
           )}
           <Rules c={c} />
