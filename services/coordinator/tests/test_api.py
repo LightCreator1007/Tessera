@@ -38,6 +38,8 @@ def test_job_routes_return_their_shapes(monkeypatch):
     monkeypatch.setitem(T.WORKLOADS, "mlp-exact/1",
                         Workload(id="mlp-exact/1", replayClass="exact", defaults={"H": 200}, tier="core"))
     assert c.get("/v1/jobs").json()[0]["trust"] == "chain"
+    assert [j["id"] for j in c.get("/v1/jobs", params={"requester": OP.upper().replace("0X", "0x")}).json()] == [1]
+    assert c.get("/v1/jobs", params={"requester": "0x" + "00" * 20}).json() == []
     assert c.get("/v1/jobs/1/spec").content == b'{"version":4}'
     assert c.get("/v1/jobs/1/rounds").json() == [{"round": 1, "status": "finalized", "startHash": H, "aggregateHash": H}]
     assert c.get("/v1/jobs/1/rounds/1").json()["outcome"] == "Accepted"

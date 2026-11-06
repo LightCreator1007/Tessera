@@ -90,3 +90,14 @@ def test_route_pages_newest_first():
     assert [e["kind"] for e in rest["events"]] == ["staked", "joined"] and rest["next"] is None
     assert c.get("/v1/owners/0x12/history").status_code == 400
     assert c.get(f"/v1/owners/{OWNER}/history", params={"before": "x"}).status_code == 400
+
+
+def test_record_tallies_one_owner():
+    history.scan(Ledger(EVENTS), 0)
+    c = TestClient(A.app)
+    r = c.get(f"/v1/owners/{OWNER}").json()
+    assert r["operators"] == [OP] and r["indexedTo"] == 20 and r["firstAt"] == 1010
+    assert r["kinds"]["paid"] == {"count": 1, "amount": 5} and r["kinds"]["slashed"]["amount"] == 15
+    assert "budget" not in r["kinds"]
+    assert c.get(f"/v1/owners/{REQ}").json()["kinds"]["budget"] == {"count": 1, "amount": 60}
+    assert c.get("/v1/owners/0x12").status_code == 400

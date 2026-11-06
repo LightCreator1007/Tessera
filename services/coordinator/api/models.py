@@ -110,6 +110,23 @@ class OwnerEvent(BaseModel):
     at: int  # block time
 
 
+class KindTally(BaseModel):
+    count: int
+    amount: int  # summed token units; 0 for kinds without an amount
+
+
+class OwnerRecord(BaseModel):
+    """An owner's public record in one read: its nodes, verified work, money and standing, from the history indexer."""
+    owner: Address
+    operators: list[Address]
+    rounds: int  # accepted rounds credited, as /providers/{owner}/compute
+    ops: int
+    jobs: list[int]  # jobs this owner posted, as requester
+    kinds: dict[str, KindTally]  # history event kind -> count and amount
+    firstAt: int | None  # time of the first indexed event; null before any
+    indexedTo: int | None
+
+
 class OwnerHistory(BaseModel):
     owner: Address
     operators: list[Address]  # nodes this owner has joined

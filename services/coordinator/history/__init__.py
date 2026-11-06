@@ -130,6 +130,15 @@ def operators(owner: str) -> list[str]:
         return [r[0] for r in db.execute("SELECT op FROM operators WHERE owner = ? ORDER BY op", (owner.lower(),))]
 
 
+def tally(owner: str) -> dict:
+    """Per kind, how many events and their summed amount, plus the first event's time: the owner's record in one read."""
+    with _lock:
+        found = db.execute("SELECT kind, count(*), coalesce(sum(amount), 0), min(at) FROM owner_events WHERE owner = ? GROUP BY kind",
+                           (owner.lower(),)).fetchall()
+    first = min((r[3] for r in found if r[3] is not None), default=None)
+    return {"kinds": {k: {"count": n, "amount": amt} for k, n, amt, _ in found}, "firstAt": first}
+
+
 def indexed_to() -> int | None:
     """The last block indexed, or None before the first pass."""
     with _lock:
