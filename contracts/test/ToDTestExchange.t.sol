@@ -131,6 +131,29 @@ contract ToDTestExchangeTest is Test {
         assertEq(tod.allowance(bob, address(desk)), 0);
     }
 
+    function test_twentyUsdcReserveSupportsTwoMinimumRedemptionsAndReuse() public {
+        ToDTestExchange limited = new ToDTestExchange(address(tod), address(usdc));
+        usdc.mint(address(limited), 20e6);
+        vm.startPrank(alice);
+        tod.approve(address(limited), 30e6);
+        limited.swap(true, 10e6, 10e6, block.timestamp);
+        limited.swap(true, 10e6, 10e6, block.timestamp);
+        vm.expectRevert(ToDTestExchange.InsufficientInventory.selector);
+        limited.swap(true, 10e6, 10e6, block.timestamp);
+        assertEq(tod.balanceOf(alice), 80e6);
+        assertEq(usdc.balanceOf(alice), 20e6);
+        assertEq(tod.allowance(alice, address(limited)), 10e6);
+        usdc.approve(address(limited), 10e6);
+        limited.swap(false, 10e6, 10e6, block.timestamp);
+        limited.swap(true, 10e6, 10e6, block.timestamp);
+        vm.stopPrank();
+        assertEq(tod.balanceOf(alice), 80e6);
+        assertEq(usdc.balanceOf(alice), 20e6);
+        assertEq(tod.balanceOf(address(limited)), 20e6);
+        assertEq(usdc.balanceOf(address(limited)), 0);
+        assertEq(tod.allowance(alice, address(limited)), 0);
+    }
+
     function test_mainnetAndInvalidTokensRejected() public {
         vm.chainId(1);
         vm.expectRevert(ToDTestExchange.UnsupportedChain.selector);
