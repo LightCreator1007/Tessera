@@ -14,7 +14,7 @@ from tod_datasets.canonical import split
 import scheduler
 from api import config, nodes, tables
 from api.draft import mlp
-from api.models import Evidence, EvidenceRef, Job, Payout, Round, Seat
+from api.models import Evidence, EvidenceRef, Job, JobState, Payout, Round, RoundState, Seat
 from identity import router as identity
 
 log = logging.getLogger(__name__)
@@ -179,6 +179,11 @@ class Driver:
         tables.EVIDENCE[(job, rnd)] = Evidence(job=job, round=rnd, reports=[], aggregate=ref(f.agg_evidence),
                                                pay=ref(f.pay_evidence))
         tables.SETTLEMENTS[(job, rnd)] = {"settlement": f.settlement, "sigs": {}}
+        # /state feeds the web app's loss chart: the gate already measured the validation loss for the evidence.
+        earlier = [s for s in tables.STATES.get(job, JobState(job=job, rounds=[])).rounds if s.round != rnd]
+        here = RoundState(round=rnd, metric=json.loads(f.agg_evidence)["gate"]["valAfter"],
+                          seconds=int(self.now()) - r["openedAt"])
+        tables.STATES[job] = JobState(job=job, rounds=sorted([*earlier, here], key=lambda s: s.round))
         log.info("job %s round %s: settlement ready for the verifiers", job, rnd)
 
     def open_rounds(self):

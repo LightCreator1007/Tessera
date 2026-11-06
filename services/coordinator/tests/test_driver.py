@@ -1,4 +1,5 @@
 """The round driver against a fake market: report no-reveals, void, settle and publish, finalize, open rounds."""
+import json
 from types import SimpleNamespace as NS
 
 import numpy as np
@@ -39,7 +40,7 @@ class Market:
 
 @pytest.fixture
 def world(tmp_path, monkeypatch):
-    for t in ("JOBS", "ROUNDS", "SPECS", "MODELS", "EVIDENCE", "SETTLEMENTS", "CONTROL", "MISSED", "REARMED"):
+    for t in ("JOBS", "ROUNDS", "SPECS", "MODELS", "EVIDENCE", "SETTLEMENTS", "STATES", "CONTROL", "MISSED", "REARMED"):
         monkeypatch.setattr(tables, t, {})
     store = DiskStore(tmp_path)
     spec_bytes = canonical(SPEC)
@@ -89,6 +90,9 @@ def test_settles_like_a_verifier_and_publishes_what_it_needs(world):
     assert world.store.has("0x" + mine.settlement["aggregateHash"].hex())  # next round's start weights
     assert tables.ROUNDS[1][1].status == "verifying" and OPS[0] in blobs.allowed(1, 1)
     assert not world.market.calls  # nothing is sent before the verifiers sign
+    gate = json.loads(world.store.get(ev.aggregate.hash))["gate"]
+    assert tables.STATES[1].model_dump() == {"job": 1, "rounds": [{"round": 1, "metric": gate["valAfter"], "seconds": 990}],
+                                             "trust": "untrusted"}
 
 
 def test_finalizes_once_the_threshold_signed(world):
