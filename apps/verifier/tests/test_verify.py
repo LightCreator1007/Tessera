@@ -91,3 +91,30 @@ def test_each_failure_is_attested_with_its_own_kind(monkeypatch):
 
 
 ROOT, HS = b"\7" * 32, [b"\0" * 32]
+
+
+def test_a_round_with_too_few_reveals_is_dropped_after_one_try():
+    class Short(Market):
+        def lockSeed(self, job, rnd):
+            self.calls.append("lockSeed")
+            raise Reverted("QuorumNotMet")
+
+    m = Short()
+    loop = VerifierLoop(m, "0xV", None)
+    loop.tick(state())
+    loop.tick(state())
+    assert m.calls == ["lockSeed"] and loop.done == {(1, 1)}
+
+
+def test_a_replay_that_cannot_run_yet_is_tried_again(monkeypatch):
+    def not_yet(*a):
+        raise OSError("dataset 0x11 is still downloading")
+
+    monkeypatch.setattr(verify, "replay_round", not_yet)
+    m = Market()
+    loop = VerifierLoop(m, "0xV", None)
+    loop.tick(state(seed=b"\1" * 32))  # must not raise out of the daemon tick
+    assert m.calls == [] and loop.done == set()
+    monkeypatch.setattr(verify, "replay_round", lambda *a: {"0x0": {"kind": None}})
+    loop.tick(state(seed=b"\1" * 32))
+    assert m.calls == [("attest", [])]

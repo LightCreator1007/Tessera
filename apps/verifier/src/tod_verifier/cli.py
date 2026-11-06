@@ -49,6 +49,7 @@ def _setup(network, coordinator, key_env, as_json):
         fail(as_json, BAD_INPUT, "need --network and --coordinator (or TOD_NETWORK and TOD_COORDINATOR)", "bad_config")
     from tod_core.ledger import Ledger, Network
     from tod_core.txmgr import ANVIL_CHAIN_ID, dev_key
+    from tod_node.prewarm import Prewarm
     from tod_node.trainer import Coordinator, RoundRunner, preset_datasets
 
     net = Network.load(network)
@@ -65,9 +66,10 @@ def _setup(network, coordinator, key_env, as_json):
         ledger = Ledger(net)
     except Exception as e:
         fail(as_json, UNREACHABLE, f"chain {net.name}: {e}", "rpc_unreachable")
-    runner = RoundRunner(Coordinator(coordinator, key, net.chain_id, net.market), preset_datasets(data_dir() / "datasets"),
+    prewarm = Prewarm(preset_datasets(data_dir() / "datasets"))
+    runner = RoundRunner(Coordinator(coordinator, key, net.chain_id, net.market), prewarm.datasets,
                          net.chain_id, net.market)
-    return net, ledger, runner, key
+    return net, ledger, runner, key, prewarm
 
 
 @app.command()
@@ -82,7 +84,8 @@ def replay(
     """Replay every revealed node of one round and print the verdicts. Sends no transaction."""
     from .verify import replay_round
 
-    _, ledger, runner, _ = _setup(network, coordinator, key_env, as_json)
+    _, ledger, runner, _, prewarm = _setup(network, coordinator, key_env, as_json)
+    runner.datasets = prewarm.load  # a one-off replay just waits for the download
     state = ledger.rebuild()
     if (job, round_) not in state.rounds:
         fail(as_json, NOT_ELIGIBLE, f"round {job}/{round_} not found on chain", "round_not_found")
@@ -107,9 +110,10 @@ def run(
     from .cosign import CoordinatorApi, CoSigner
     from .verify import VerifierLoop
 
-    net, ledger, runner, key = _setup(network, coordinator, key_env, as_json)
+    net, ledger, runner, key, prewarm = _setup(network, coordinator, key_env, as_json)
     signer = LocalSigner(key)
     events = EventLog(data_dir() / "events.ndjson")
+    prewarm.emit = events.append
     sender = TxManager(ledger.w3, signer, data_dir() / "journal")
     market = ledger.using(sender).market
     cosigner = CoSigner(market, ledger.registry, runner, CoordinatorApi(coordinator, key), key, net.chain_id,
@@ -119,5 +123,5 @@ def run(
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: stop.set())
     events.append("verifier.started", version=version("tod-verifier"), network=net.name, verifier=signer.address)
-    run_daemon(ledger, loop, stop, poll=poll, emit=events.append)
+    run_daemon(ledger, loop, stop, poll=poll, emit=events.append, on_tick=prewarm)
     events.append("verifier.stopped")

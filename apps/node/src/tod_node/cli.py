@@ -233,10 +233,13 @@ def run(
     if coordinator:
         from .gas import ensure_gas
         ensure_gas(coordinator, account.key, emit=events.append)
+        from .prewarm import Prewarm
         from .trainer import Coordinator, LazyTrainer, Trainer, preset_datasets
+        prewarm = Prewarm(preset_datasets(data_dir() / "datasets"), emit=events.append)
         train = (LazyTrainer if mode == "fake:lazy" else Trainer)(Coordinator(coordinator, account.key, net.chain_id, net.market),
-                        preset_datasets(data_dir() / "datasets"), account.address, net.chain_id, net.market)
+                        prewarm.datasets, account.address, net.chain_id, net.market)
     else:
+        prewarm = None
         def train(state, job, rnd):
             raise RuntimeError("no coordinator set, so no spec or start weights to train from")
 
@@ -255,10 +258,10 @@ def run(
     events.append("node.started", version=version("tod-node"), network=net.name, chainId=net.chain_id,
                   operator=account.address, mode=mode)
     api, server = _start_api(events, stop)
-    beat = _heartbeat(coordinator, account, events) if coordinator else (lambda state: None)
+    beat = _heartbeat(coordinator, account, events, prewarm) if coordinator else (lambda state: None)
     try:
         run_daemon(ledger, loop, stop, poll=poll, emit=events.append,
-                   on_tick=lambda state: (api.tick(), beat(state)))
+                   on_tick=lambda state: (api.tick(), prewarm and prewarm(state), beat(state)))
     finally:
         if server:
             server.shutdown()
@@ -289,7 +292,7 @@ def _start_api(events, stop: threading.Event):
     return api, server
 
 
-def _heartbeat(coordinator: str, account, events):
+def _heartbeat(coordinator: str, account, events, prewarm=None):
     """The matcher seats only nodes whose heartbeat says the job's workload passed the self-test, so run it once here."""
     from .heartbeat import Heartbeat
 
@@ -299,7 +302,8 @@ def _heartbeat(coordinator: str, account, events):
     result = {vec["workload"]: {"hash": got, "seconds": round(time.perf_counter() - t0, 3), "ok": got == vec["hash"]}}
     if not result[vec["workload"]]["ok"]:
         events.append("error", what="selftest", reason=f"{vec['workload']} does not reproduce its vector here")
-    return Heartbeat(coordinator, account.key, account.address, version("tod-node"), result, emit=events.append)
+    return Heartbeat(coordinator, account.key, account.address, version("tod-node"), result, emit=events.append,
+                     prewarm=prewarm)
 
 
 @app.command()
