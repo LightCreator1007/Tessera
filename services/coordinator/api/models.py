@@ -72,6 +72,37 @@ class Job(BaseModel):
     stakePerNode: int
     modelSpecHash: Hex32
     trust: Trust = "chain"
+    published: "Published | None" = None  # null while Arkiv publishing is off or the job has no final model yet
+
+
+class Published(BaseModel):
+    """Where the job's final model is indexed on Arkiv. The keccak is the on-chain aggregateHash, the protocol hash."""
+    round: int
+    keccak: Hex32
+    state: Literal["pending", "indexed", "failed"]
+    arkivKey: Hex32 | None
+    arkivTx: Hex32 | None
+    swarmRef: str | None = None  # 64 hex, no 0x: the model's bytes on Swarm, when Swarm is on
+
+
+class ModelRecord(BaseModel):
+    """One model record read straight from Arkiv, not from the coordinator's own tables."""
+    arkivKey: Hex32
+    owner: Address
+    expiresAt: int
+    job: int
+    round: int
+    keccak: Hex32
+    size: int
+    chainId: int
+    jobMarket: Address
+    workload: str | None = None
+    datasetHash: Hex32 | None = None
+    url: str | None = None
+    swarmRef: str | None = None
+
+
+Job.model_rebuild()  # Published is declared after Job
 
 
 class RoundState(BaseModel):

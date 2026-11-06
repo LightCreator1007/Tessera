@@ -61,7 +61,8 @@ PUT /v1/blobs/{h}                               HEAD /v1/blobs/{h}
 POST /v1/nodes/heartbeat                        GET /v1/nodes
 GET /v1/pool                                    POST /v1/admin/jobs/{job}/mode
 POST /v1/admin/jobs/{job}/pause                 POST /v1/admin/nodes/{op}/rearm
-GET /v1/admin/txs
+GET /v1/admin/txs                               GET /v1/models
+POST /v1/admin/jobs/{job}/publish
 """
 
 

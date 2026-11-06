@@ -5,7 +5,7 @@ import tomllib
 from dataclasses import dataclass, field
 from enum import IntEnum
 from pathlib import Path
-from typing import Iterator, NamedTuple
+from typing import Iterable, Iterator, NamedTuple
 
 from requests import HTTPError
 from web3 import Web3
@@ -188,16 +188,20 @@ class Ledger:
         block = self.w3.eth.get_block("latest")
         return block["number"], block["timestamp"]
 
-    def events(self, from_block: int | None = None, to_block: int | None = None) -> Iterator[Event]:
-        """All events of both contracts in chain order. Pages by `logSpan`, halving when an RPC refuses a range."""
+    def events(self, from_block: int | None = None, to_block: int | None = None,
+               names: Iterable[str] | None = None) -> Iterator[Event]:
+        """All events of both contracts in chain order, or only `names`. Pages by `logSpan`, halving when an RPC
+        refuses a range."""
         start = self.net.deploy_block if from_block is None else from_block
         end = self.w3.eth.block_number if to_block is None else to_block
         span = self.net.log_span
+        query = {"address": [self.net.market, self.net.registry]}
+        if names is not None:  # filtered by the node, so a long scan for one event downloads only that event
+            query["topics"] = [[self._topic(n) for n in names]]
         while start <= end:
             stop = min(start + span - 1, end)
             try:
-                logs = self.w3.eth.get_logs({"address": [self.net.market, self.net.registry],
-                                             "fromBlock": start, "toBlock": stop})
+                logs = self.w3.eth.get_logs({**query, "fromBlock": start, "toBlock": stop})
             except (Web3RPCError, HTTPError) as e:
                 # sepolia.base.org refuses a wide range with HTTP 413, not a JSON-RPC error; other HTTP errors aren't about range.
                 wrong_status = isinstance(e, HTTPError) and getattr(e.response, "status_code", None) != 413
@@ -208,6 +212,12 @@ class Ledger:
             for entry in logs:
                 yield self._decode(entry)
             start = stop + 1
+
+    def _topic(self, name: str) -> str:
+        for c in (self._market, self._registry):
+            if any(e.get("type") == "event" and e["name"] == name for e in c.abi):
+                return c.events[name].topic
+        raise ValueError(f"no event {name} on either contract")
 
     def rebuild(self) -> "ChainState":
         return ChainState().sync(self)
