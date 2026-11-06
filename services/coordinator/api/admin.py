@@ -1,10 +1,12 @@
-"""Admin routes for operating the coordinator: job mode and pause, node re-arm, transaction queue."""
+"""Admin routes for operating the coordinator: job mode and pause, node re-arm, Arkiv publishing, transaction queue."""
 import time
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from . import auth, tables
+import publish
+
+from . import auth, config, tables
 
 router = APIRouter(prefix="/v1/admin", dependencies=[Depends(auth.admin)])
 
@@ -35,6 +37,22 @@ def rearm(op: str):
     tables.MISSED.pop(op.lower(), None)
     tables.REARMED[op.lower()] = int(time.time())
     return {"op": op, "missedCommitsInARow": 0}
+
+
+@router.post("/jobs/{job}/publish")
+def publish_model(job: int):
+    """Queue the job's latest aggregate for Arkiv by hand, or put a failed one back in the queue.
+
+    The round driver does the same through publish.enqueue once a job's last round is final.
+    """
+    if not config.ARKIV_ENABLED:
+        raise HTTPException(503, "Arkiv publishing is off on this coordinator")
+    if job not in tables.MODELS:
+        raise HTTPException(404, "job has no model yet")
+    rounds = tables.ROUNDS.get(job) or {}
+    publish.enqueue(job, max(rounds) if rounds else 0, tables.MODELS[job])
+    publish.retry(job)
+    return publish.status(job)
 
 
 @router.get("/txs")

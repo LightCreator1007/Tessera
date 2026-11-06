@@ -25,3 +25,14 @@ DB_PATH = os.environ.get("DB_PATH", "coordinator.db")
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")  # empty disables the admin routes
 CLOCK_SKEW = 30  # s allowed between a node's request timestamp and ours
 ONLINE_WITHIN = 60  # s since the last heartbeat for a node to count as online
+
+# Arkiv indexing of finished models. Both unset means publishing is off and the API leaves `published` out.
+ARKIV_RPC_URL = os.environ.get("ARKIV_RPC_URL", "")
+ARKIV_ACCESS_KEY = os.environ.get("ARKIV_ACCESS_KEY", "")  # sent as X-API-KEY; without it the public RPC rate-limits
+ARKIV_PRIVATE_KEY = os.environ.get("ARKIV_PRIVATE_KEY", "")  # a writer key of its own, holding test tGLM only
+if ARKIV_PRIVATE_KEY and COORDINATOR_KEY and         ARKIV_PRIVATE_KEY.removeprefix("0x").lower() == COORDINATOR_KEY.removeprefix("0x").lower():
+    raise RuntimeError("ARKIV_PRIVATE_KEY must not be the coordinator's key")
+ARKIV_ENABLED = bool(ARKIV_RPC_URL and ARKIV_PRIVATE_KEY)
+# Arkiv counts in 2 s blocks and caps a lifetime at 7,884,000 of them (about 182 days)
+ARKIV_LIFETIME_BLOCKS = min(7_884_000, max(1, int(float(os.environ.get("ARKIV_LIFETIME_DAYS", "30")) * 86400 / 2)))
+PUBLIC_URL = os.environ.get("PUBLIC_URL", "").rstrip("/")  # the coordinator's public base URL, put in each record

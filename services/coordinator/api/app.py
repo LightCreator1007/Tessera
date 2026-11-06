@@ -2,6 +2,7 @@
 
 After changing a route, regenerate the schema with `uv run python -m api.export`.
 """
+import threading
 import time
 from contextlib import asynccontextmanager
 
@@ -9,14 +10,15 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.responses import RedirectResponse, Response
 
 import driver
+import publish
 from identity import router as identity
 from tod_core import encodings
 from tod_core.finalize import message
 
 from . import admin, auth, blobs, config, nodes
 from .draft import build as build_draft
-from .models import (Collected, Config, Dispute, DisputeIn, Draft, DraftRequest, Evidence, Health, Job, JobState, Payout,
-                     Round, RoundSummary, Selftest, SettlementOut, SignatureIn, Workload)
+from .models import (Collected, Config, Dispute, DisputeIn, Draft, DraftRequest, Evidence, Health, Job, JobState,
+                     ModelRecord, Payout, Published, Round, RoundSummary, Selftest, SettlementOut, SignatureIn, Workload)
 from .tables import DISPUTES, EVIDENCE, JOBS, MODELS, ROUNDS, SELFTESTS, SETTLEMENTS, SPECS, STATES, WORKLOADS
 
 if config.COORDINATOR_KEY is None:
@@ -27,7 +29,12 @@ if config.COORDINATOR_KEY is None:
 async def lifespan(_):
     blobs.store.self_test()  # never serve from a store that cannot read back what it wrote
     driver.start(blobs.store)  # off unless TOD_NETWORK is set
+    stop = threading.Event()
+    if config.ARKIV_ENABLED:
+        threading.Thread(target=publish.worker, args=(blobs.store, publish.client(), SPECS, stop),
+                         name="arkiv-publish", daemon=True).start()
     yield
+    stop.set()
 
 
 app = FastAPI(title="ToD coordinator", version=config.VERSION, lifespan=lifespan)
@@ -85,14 +92,48 @@ def draft(req: DraftRequest):
     return build_draft(req, blobs.store)
 
 
+def _with_published(j: Job) -> Job:
+    p = publish.status(j.id)
+    return j.model_copy(update={"published": Published(**p) if p else None})
+
+
 @v1.get("/jobs", response_model=list[Job])
 def jobs():
-    return list(JOBS.values())
+    return [_with_published(j) for j in JOBS.values()]
 
 
 @v1.get("/jobs/{job}", response_model=Job)
 def job(job: int):
-    return _found(JOBS, job, "job")
+    return _with_published(_found(JOBS, job, "job"))
+
+
+_models_cache: dict = {"at": 0.0, "rows": []}
+MODELS_TTL = 15  # s; every arkiv_query is billed against the access key's monthly quota
+
+
+@v1.get("/models", response_model=list[ModelRecord])
+def models():
+    """Finished models as Arkiv holds them, read from Arkiv rather than from this coordinator's tables."""
+    if not config.ARKIV_ENABLED:
+        raise HTTPException(503, "Arkiv publishing is off on this coordinator")
+    if time.time() - _models_cache["at"] > MODELS_TTL:
+        try:
+            rows = publish.client().list_models(publish.SCHEMA, config.JOB_MARKET)
+        except Exception as e:
+            raise HTTPException(502, f"Arkiv read failed: {type(e).__name__}")
+        _models_cache.update(at=time.time(), rows=[r for r in map(publish.from_arkiv, rows) if r])
+    return _models_cache["rows"]
+
+
+@v1.get("/models/{h}")
+def model_bytes(h: str):
+    """The bytes of a published final model, with no BlobAccess: these are public by design. Check their keccak."""
+    if not publish.is_published(h):
+        raise HTTPException(404, "not a published model")
+    data = blobs.store.get(h)
+    if data is None:
+        raise HTTPException(404, "model bytes are not on this coordinator")
+    return Response(data, media_type=publish.CONTENT_TYPE, headers={"X-Keccak": h.lower()})
 
 
 @v1.get("/jobs/{job}/spec")
