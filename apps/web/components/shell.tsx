@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Bell, BookOpen, ChevronDown, ChevronsUpDown, Coins, Cpu, House, Laptop, Layers, LogOut, Trophy, Menu,
-  PanelLeftClose, PanelLeftOpen, Plus, Rocket, ScanFace, Settings, Terminal, UserRound, Wallet, X, Boxes, type LucideIcon,
+  PanelLeftClose, PanelLeftOpen, Plus, Rocket, ScanFace, Settings, Terminal, UserRound, Wallet, X, Boxes, Network, type LucideIcon,
 } from "lucide-react";
 import { useWallet } from "@/lib/wallet";
 import { CREDENTIAL_LABEL, useHuman } from "@/lib/identity";
@@ -32,6 +32,7 @@ const NAV: NavItem[] = [
   { href: "/jobs", label: "jobs", icon: Layers, match: (p) => p.startsWith("/jobs") && p !== "/jobs/new" },
   { href: "/nodes", label: "nodes", icon: Cpu, match: (p) => p.startsWith("/nodes") && p !== "/nodes/add" },
   { href: "/models", label: "models", icon: Boxes, match: (p) => p.startsWith("/models") },
+  { href: "/stack", label: "stack", icon: Network, match: (p) => p.startsWith("/stack") },
   { href: "/competitions", label: "competitions", icon: Trophy, match: (p) => p.startsWith("/competitions") && p !== "/competitions/new" },
   { href: "/balance", label: "balance", icon: Coins, match: (p) => p.startsWith("/balance") },
 ];
