@@ -85,34 +85,55 @@ def preset_datasets(cache: Path) -> Datasets:
     return load
 
 
-class Trainer:
-    def __init__(self, coordinator: Coordinator, datasets: Datasets, operator: str, chain_id: int, market: str):
-        self.c, self.datasets, self.operator = coordinator, datasets, operator.lower()
+class RoundRunner:
+    """Fetches a round's inputs and runs one shard's training. The node trains with it and verifiers replay with it,
+    so both sides compute the same bytes by construction."""
+
+    def __init__(self, coordinator: Coordinator, datasets: Datasets, chain_id: int, market: str):
+        self.c, self.datasets = coordinator, datasets
         self.dom = enc.domain(chain_id, market)
         self._data: dict[str, tuple] = {}  # one dataset stays in memory across rounds
+        self._inputs: dict[tuple[int, int], tuple] = {}  # a verifier replays many shards of one round
 
-    def __call__(self, state, job: int, rnd: int) -> list[bytes]:
-        params, r = state.jobs[job]["params"], state.rounds[(job, rnd)]
-        spec_hash = bytes(params.modelSpecHash)
-        spec_bytes = self.c.get(params.specURI.rsplit("/", 1)[-1], job, rnd)
-        if k256(spec_bytes) != spec_hash:
-            raise ValueError("spec does not match modelSpecHash")
-        spec = json.loads(spec_bytes)
-        wl, train = workload(spec), spec["train"]
-        start = from_blob(spec_hash, self.c.get("0x" + bytes(r["startWeightsHash"]).hex(), job, rnd), wl.n_params())
-        data_hash = "0x" + bytes(params.datasetHash).hex()
-        if data_hash not in self._data:
-            self._data = {data_hash: self.datasets(data_hash)}
-        X, y = self._data[data_hash]
-        shard = next(v["shard"] for op, v in r["nodeRounds"].items() if op.lower() == self.operator)
+    def inputs(self, state, job: int, rnd: int):
+        if (job, rnd) not in self._inputs:
+            params, r = state.jobs[job]["params"], state.rounds[(job, rnd)]
+            spec_hash = bytes(params.modelSpecHash)
+            spec_bytes = self.c.get(params.specURI.rsplit("/", 1)[-1], job, rnd)
+            if k256(spec_bytes) != spec_hash:
+                raise ValueError("spec does not match modelSpecHash")
+            spec = json.loads(spec_bytes)
+            wl = workload(spec)
+            start = from_blob(spec_hash, self.c.get("0x" + bytes(r["startWeightsHash"]).hex(), job, rnd), wl.n_params())
+            data_hash = "0x" + bytes(params.datasetHash).hex()
+            if data_hash not in self._data:
+                self._data = {data_hash: self.datasets(data_hash)}
+            self._inputs = {(job, rnd): (spec_hash, spec, wl, start, *self._data[data_hash])}
+        return self._inputs[(job, rnd)]
+
+    def run(self, state, job: int, rnd: int, shard: int) -> tuple[list[bytes], np.ndarray, bytes]:
+        """(checkpoint hashes h_0..h_K, final weights, spec hash) for one shard of one round."""
+        spec_hash, spec, wl, start, X, y = self.inputs(state, job, rnd)
+        train = spec["train"]
         rows = sampler(self.dom, job, shard, spec["data"]["shards"][shard], rounds_done(state, job, rnd, shard),
                        train["H"], train["B"])
         final = {}
-        hs = run_round(wl, start, X, y, rows, train["H"], params.segments, spec_hash,
+        hs = run_round(wl, start, X, y, rows, train["H"], state.jobs[job]["params"].segments, spec_hash,
                        on_checkpoint=lambda k, w: final.update(w=w))
+        return hs, final["w"], spec_hash
+
+
+class Trainer:
+    def __init__(self, coordinator: Coordinator, datasets: Datasets, operator: str, chain_id: int, market: str):
+        self.runner, self.operator = RoundRunner(coordinator, datasets, chain_id, market), operator.lower()
+
+    def __call__(self, state, job: int, rnd: int) -> list[bytes]:
+        r = state.rounds[(job, rnd)]
+        shard = next(v["shard"] for op, v in r["nodeRounds"].items() if op.lower() == self.operator)
+        hs, final, spec_hash = self.runner.run(state, job, rnd, shard)
         try:
             # The merge needs our final weights; a failed upload only makes them unavailable, it doesn't cost stake.
-            self.c.put(to_blob(spec_hash, final["w"]), job, rnd)
+            self.runner.c.put(to_blob(spec_hash, final), job, rnd)
         except (urllib.error.URLError, OSError) as e:
             log.warning("job %s round %s: final weights upload failed: %s", job, rnd, e)
         return hs
