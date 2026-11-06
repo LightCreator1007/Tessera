@@ -13,6 +13,7 @@ import { Command, TxButton, TxStatus } from "@/components/flow";
 import { Banner, ButtonLink, Card, EmptyState, Eyebrow, Money, PhaseStrip, SectionTitle, Skeleton, cx } from "@/components/primitives";
 import { CompetitionNudge } from "@/features/competitions/Nudge";
 import { DemoChip, MIN_STAKE } from "./JoinFlow";
+import { LocalNode } from "./LocalNode";
 
 const TOD = 1_000_000;
 const PROBATION_HOURS = 5;
@@ -120,15 +121,7 @@ export function OwnerNode() {
         </Card>
       </div>
 
-      <details className="group rounded-lg border border-rule bg-surface">
-        <summary className="flex h-10 cursor-pointer items-center px-3 text-sm text-ink">On the laptop: status, logs, stop</summary>
-        <div className="flex flex-col gap-2 px-3 pb-3">
-          <Command cmd="tod-node status" />
-          <Command cmd="tod-node logs" />
-          <Command cmd="tod-node stop" />
-          <p className="text-xs text-muted">The web can&apos;t switch a laptop off. Stop it there, then withdraw the stake here. <Link href="/docs/cli" className="text-ink underline decoration-rule-strong underline-offset-4">CLI reference</Link></p>
-        </div>
-      </details>
+      <LocalNode compact />
     </section>
   );
 }
