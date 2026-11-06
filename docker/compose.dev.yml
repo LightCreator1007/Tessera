@@ -33,7 +33,9 @@ services:
     # The chain is saved to the volume every 10 s and on stop, so restarting the stack keeps contracts and stakes.
     command: anvil --host 0.0.0.0 --block-time 1 --state /dev-data/anvil-state.json --state-interval 10
     volumes: [dev-data:/dev-data]
-    ports: ["127.0.0.1:8545:8545", "127.0.0.1:8000:8000", "127.0.0.1:7777-7779:7777-7779"]
+    # TOD_BIND=0.0.0.0 lets other PCs on the LAN reach the chain and the coordinator for a demo; every key here is
+    # public, so only do that on a network you trust. The node APIs stay on this machine.
+    ports: ["${TOD_BIND:-127.0.0.1}:8545:8545", "${TOD_BIND:-127.0.0.1}:8000:8000", "127.0.0.1:7777-7779:7777-7779"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen(u.Request('http://127.0.0.1:8545', data=b'{\"jsonrpc\":\"2.0\",\"method\":\"eth_chainId\",\"params\":[],\"id\":1}', headers={'content-type': 'application/json'}), timeout=2)"]
       interval: 2s
