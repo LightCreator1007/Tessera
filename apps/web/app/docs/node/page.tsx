@@ -13,7 +13,7 @@ export default function Page() {
     { key: "init", title: "Create the operator key and run the self-test", sub: "The key never leaves the data volume. The self-test refuses to continue if this machine's math drifts from the reference.", body: <CodePanel code={"tod-node init\ntod-node selftest"} />, open: true },
     { key: "pair", title: "Pair it with your wallet", sub: `Prints a pairing code that expires after ${PAIR_TTL_MIN} minutes.`, body: <PairCommand />, open: true },
     { key: "join", title: "Paste the code, verify, stake", sub: "On the web: paste the code, prove you are one person with World ID, then approve and stake 15 TOD. The stake is one bond for every job.", body: <ButtonLink href="/nodes/add" variant="primary">Open add a node</ButtonLink>, open: true },
-    { key: "run", title: "Start it", sub: <>Runs in the background and restarts after a reboot. <Code>run</Code> is planned for release R2.</>, body: <CodePanel code="tod-node run" />, open: true },
+    { key: "run", title: "Start it", sub: <>Runs in Docker and restarts after a crash or reboot.</>, body: <CodePanel code="tod-node run" />, open: true },
   ];
   return (
     <>
