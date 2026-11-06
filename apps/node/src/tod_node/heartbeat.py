@@ -21,17 +21,21 @@ class Heartbeat:
         self.last: float | None = None
         self.sent_profile = False  # profile and self-test only ride on the first heartbeat that gets through
         self.failing = False
+        self.last_busy: bool | None = None
 
     def __call__(self, state) -> None:
         t = self.now()
-        if self.last is not None and t - self.last < INTERVAL:
-            return
-        self.last = t
         busy_job = (state.nodes.get(self.operator) or {}).get("busyJob", 0)
         body = {"version": self.version, "busy": bool(busy_job), "job": busy_job or None}
         if self.prewarm:
             # Busy while a dataset downloads: a round seated now would be missed, and missing costs stake.
             body.update(busy=body["busy"] or self.prewarm.busy(), prewarm={"datasets": self.prewarm.names()})
+        # A change of busy goes out at once: a job's first round opens within seconds of the job appearing, and a
+        # heartbeat up to INTERVAL old would still say idle while its dataset downloads.
+        changed = body["busy"] != self.last_busy
+        if self.last is not None and t - self.last < INTERVAL and not changed:
+            return
+        self.last, self.last_busy = t, body["busy"]
         if not self.sent_profile:
             body.update(profile={"os": platform.system(), "arch": platform.machine(), "cores": os.cpu_count()},
                         selftest=self.selftest)
