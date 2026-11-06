@@ -19,7 +19,7 @@ class Refused(Exception):
 
 
 class Chain:
-    """The registry and the faucet key on TOD_NETWORK, opened on first use so the API starts without an RPC."""
+    """The registry, market and faucet key on TOD_NETWORK, opened on first use so the API starts without an RPC."""
 
     def __init__(self):
         self._ledger = self._sender = None
@@ -40,6 +40,10 @@ class Chain:
     def node(self, operator: str) -> tuple[bool, str]:
         n = self._open().registry.getNode(operator)
         return n.joined, n.owner
+
+    def confirmed(self, job: int, rnd: int, operator: str) -> int:
+        """The failure kind both verifiers confirmed for this operator in this round, 0 for none."""
+        return int(self._open().market.getNodeRound(job, rnd, operator).confirmed)
 
     def balance(self, operator: str) -> int:
         return self._open().w3.eth.get_balance(operator)
