@@ -122,7 +122,7 @@ function OwnerActions({ job }: { job: Job }) {
       )}
       {refunded && <p className="text-sm text-ok">Refund sent to your wallet.</p>}
       {ended && refundable <= 0 && <p className="text-sm text-muted">Every round opened, so there is nothing to refund.</p>}
-      {!ended && <p className="text-sm text-muted">Rounds that never open are refundable once the job ends. There is no cancel.</p>}
+      {!ended && <p className="text-sm text-muted">Rounds that never open come back to you once the job ends. You can't cancel a running job, but one stuck waiting for nodes can be abandoned once its wait runs out.</p>}
       <Link href="/jobs/new" className="inline-flex min-h-6 items-center self-start text-sm text-muted underline decoration-rule-strong underline-offset-4 hover:text-ink hover:decoration-ink">Post a follow-up job</Link>
     </div>
   );
