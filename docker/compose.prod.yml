@@ -1,6 +1,6 @@
 # One host running the coordinator, both verifiers and Caddy for TLS on Base Sepolia. docker/prod-up.sh writes the env
 # files and starts it. Each service only sees its own keys, and state in the named volumes survives a rebuild.
-name: tessra
+name: tessera
 
 x-app: &app
   restart: unless-stopped
@@ -9,11 +9,11 @@ x-app: &app
 services:
   coordinator:
     <<: *app
-    image: tessra-coordinator
+    image: tessera-coordinator
     build: {context: .., dockerfile: docker/app.Dockerfile, args: {APP: coordinator}}
     working_dir: /data
     entrypoint: [uvicorn, "api.app:app", --app-dir, /app/services/coordinator, --host, 0.0.0.0, --port, "8000"]
-    env_file: ["${TESSRA_ENV:-/etc/tessra}/coordinator.env"]
+    env_file: ["${TESSERA_ENV:-/etc/tessera}/coordinator.env"]
     environment:
       TOD_NETWORK: base-sepolia-demo
       CHAIN_ID: "84532"
@@ -40,10 +40,10 @@ services:
 
   verifier-a: &verifier
     <<: *app
-    image: tessra-verifier
+    image: tessera-verifier
     build: {context: .., dockerfile: docker/app.Dockerfile, args: {APP: verifier}}
     command: [run, --key-env, VERIFIER_A_PRIVATE_KEY]
-    env_file: ["${TESSRA_ENV:-/etc/tessra}/verifier-a.env"]
+    env_file: ["${TESSERA_ENV:-/etc/tessera}/verifier-a.env"]
     environment: {TOD_NETWORK: base-sepolia-demo, TOD_COORDINATOR: "http://coordinator:8000", TOD_VERIFIER_DATA: /data}
     volumes: [verifier-a-data:/data]
     depends_on: {coordinator: {condition: service_healthy}}
@@ -51,7 +51,7 @@ services:
   verifier-b:
     <<: *verifier
     command: [run, --key-env, VERIFIER_B_PRIVATE_KEY]
-    env_file: ["${TESSRA_ENV:-/etc/tessra}/verifier-b.env"]
+    env_file: ["${TESSERA_ENV:-/etc/tessera}/verifier-b.env"]
     volumes: [verifier-b-data:/data]
 
   caddy:

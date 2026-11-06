@@ -2,7 +2,7 @@
 # Starts docker/compose.prod.yml on an Ubuntu host: installs Docker, writes each service's env file from Parameter Store, then builds and runs. Safe to rerun.
 set -eu
 SITE="${1:?usage: docker/prod-up.sh <public host name>}"
-ENV_DIR="${TESSRA_ENV:-/etc/tessra}"
+ENV_DIR="${TESSERA_ENV:-/etc/tessera}"
 cd "$(dirname "$0")/.."
 
 if ! command -v docker >/dev/null; then
@@ -37,8 +37,8 @@ write("coordinator.env", {**{k: v for k, v in params.items() if not k.startswith
 (
   umask 077
   mkdir -p "$ENV_DIR"
-  aws ssm get-parameters-by-path --region "${AWS_REGION:-ap-south-1}" --path /tessra --with-decryption --output json \
+  aws ssm get-parameters-by-path --region "${AWS_REGION:-ap-south-1}" --path /tessera --with-decryption --output json \
     | python3 -c "$WRITE_ENV" "$ENV_DIR"
-  printf 'SITE=%s\nTESSRA_ENV=%s\n' "$SITE" "$ENV_DIR" > "$ENV_DIR/compose.env"
+  printf 'SITE=%s\nTESSERA_ENV=%s\n' "$SITE" "$ENV_DIR" > "$ENV_DIR/compose.env"
 )
 docker compose --env-file "$ENV_DIR/compose.env" -f docker/compose.prod.yml up -d --build
