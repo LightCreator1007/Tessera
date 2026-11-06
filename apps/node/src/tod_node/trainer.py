@@ -137,3 +137,20 @@ class Trainer:
         except (urllib.error.URLError, OSError) as e:
             log.warning("job %s round %s: final weights upload failed: %s", job, rnd, e)
         return hs
+
+
+class LazyTrainer(Trainer):
+    """fake:lazy, for demos and tests: skips training and claims checkpoints made by nudging the start weights.
+
+    Its commit and reveal are well formed, so only a verifier's replay can catch it.
+    """
+
+    def __call__(self, state, job: int, rnd: int) -> list[bytes]:
+        spec_hash, _, _, start, _, _ = self.runner.inputs(state, job, rnd)
+        K = state.jobs[job]["params"].segments
+        ws = [start + np.float32(j * 1e-3) for j in range(K + 1)]
+        try:
+            self.runner.c.put(to_blob(spec_hash, ws[-1]), job, rnd)
+        except (urllib.error.URLError, OSError) as e:
+            log.warning("job %s round %s: final weights upload failed: %s", job, rnd, e)
+        return [k256(to_blob(spec_hash, w)) for w in ws]

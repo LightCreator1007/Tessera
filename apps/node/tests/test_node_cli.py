@@ -182,3 +182,13 @@ def test_run_needs_a_network(run, monkeypatch):
     run("init")
     result = run("run", "--json")
     assert result.exit_code == BAD_INPUT and json.loads(result.output)["code"] == "bad_config"
+
+
+def test_fake_mode_is_refused_off_test_chains(run, monkeypatch, tmp_path):
+    toml = tmp_path / "main.toml"
+    toml.write_text('name = "mainnet"\nchainId = 1\nrpc = "http://127.0.0.1:9"\nlogSpan = 2000\nroles = {}\n'
+                    '[contracts]\ntoken = "0x0"\nregistry = "0x0"\nmarket = "0x0"\ndeployBlock = 1\n')
+    monkeypatch.setenv("TOD_NETWORK", str(toml))
+    run("init")
+    result = run("run", "--mode", "fake:lazy", "--json")
+    assert result.exit_code == BAD_INPUT and "test chains" in json.loads(result.output)["error"]

@@ -8,7 +8,7 @@ from tod_core.ledger import Kind
 from tod_node import devnet
 from tod_node.devnet import Actor, BlobServer
 from tod_node.rounds import RoundLoop, RoundStore
-from tod_node.trainer import Coordinator, RoundRunner, Trainer
+from tod_node.trainer import Coordinator, LazyTrainer, RoundRunner, Trainer
 from tod_verifier.verify import VerifierLoop, report_bytes
 
 pytestmark = pytest.mark.skipif(not (shutil.which("anvil") and shutil.which("forge")), reason="needs foundry")
@@ -69,3 +69,24 @@ def test_report_is_canonical():
     a = report_bytes(1, 2, "0xV", {"0xB": {"kind": None}, "0xA": {"kind": "ReplayMismatch"}})
     b = report_bytes(1, 2, "0xV", {"0xA": {"kind": "ReplayMismatch"}, "0xB": {"kind": None}})
     assert a == b and b" " not in a
+
+
+def test_a_lazy_node_is_caught_too(chain, tmp_path):
+    """fake:lazy, the demo's cheating mode, fails replay like any other cheat."""
+    l, net_file, tmp = chain
+    srv = BlobServer(l.net)
+    job_args, _, _, datasets = devnet.mlp_job(srv)
+    job, ops = devnet.open_round(l, net_file, tmp, "lazy", nodes=3, **job_args)
+    net = l.net
+    nodes = [RoundLoop(op.l.market, op.address, net.chain_id, RoundStore(tmp_path / f"z{i}.json"),
+                       (LazyTrainer if i == 2 else Trainer)(Coordinator(srv.url, op.key, net.chain_id, net.market),
+                                                           datasets, op.address, net.chain_id, net.market))
+             for i, op in enumerate(ops)]
+    for _ in range(2):
+        for n in nodes:
+            n.tick(l.rebuild())
+    runner = RoundRunner(Coordinator(srv.url, b"\1" * 32, net.chain_id, net.market), datasets, net.chain_id, net.market)
+    from tod_verifier.verify import replay_round
+    results = replay_round(runner, l.rebuild(), job, 1)
+    assert [v["kind"] for _, v in sorted(results.items(), key=lambda kv: [o.address for o in ops].index(kv[0]))] == \
+        [None, None, "ReplayMismatch"]
