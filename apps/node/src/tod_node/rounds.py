@@ -10,8 +10,8 @@ from tod_core.ledger import Phase, Reverted, RoundStatus
 
 log = logging.getLogger(__name__)
 
-# (job, round, the round from ChainState) -> checkpoint hashes h_0..h_K, where h_0 is the round's startWeightsHash.
-Trainer = Callable[[int, int, dict], list[bytes]]
+# (ChainState, job, round) -> checkpoint hashes h_0..h_K, where h_0 is the round's startWeightsHash.
+Trainer = Callable[[object, int, int], list[bytes]]
 
 
 class RoundStore:
@@ -86,7 +86,7 @@ class RoundLoop:
             phase = Phase(self.market.phase(job, rnd))
             try:
                 if phase == Phase.COMMIT and not nr["committed"] and self.accepting:
-                    self._commit(job, rnd, r, state.jobs[job]["params"].segments)
+                    self._commit(state, job, rnd)
                 elif phase == Phase.REVEAL and nr["committed"]:
                     self._reveal(job, rnd)
             except Reverted as e:
@@ -98,11 +98,12 @@ class RoundLoop:
         self.skipped.add((job, rnd))
         self.emit("round.skipped", job=job, round=rnd, reason=reason)
 
-    def _commit(self, job: int, rnd: int, r: dict, segments: int) -> None:
+    def _commit(self, state, job: int, rnd: int) -> None:
+        r, segments = state.rounds[(job, rnd)], state.jobs[job]["params"].segments
         rec = self.store.get(job, rnd)
         if rec is None:
             try:
-                hs = self.train(job, rnd, r)
+                hs = self.train(state, job, rnd)
             except Exception as e:  # a broken job must not take the node down or retrain every tick
                 return self._skip(job, rnd, f"training failed: {e}")
             problem = check_hashes(hs, r["startWeightsHash"], segments)
