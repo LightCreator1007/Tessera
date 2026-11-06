@@ -1,0 +1,17 @@
+# tod-tui (apps/tui): read-only terminal UI over the tod-node local API and the coordinator.
+
+[project]
+name = "tod-tui"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "textual>=8.2,<9",
+    "httpx>=0.27",
+]
+
+[project.scripts]
+tod-tui = "tod_tui.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.9,<0.13"]
+build-backend = "uv_build"
