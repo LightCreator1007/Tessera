@@ -13,7 +13,7 @@ from tod_core.finalize import message
 from tod_core.ledger import Phase, RoundStatus
 from tod_core.settle import needs_weights, settle
 from tod_datasets.canonical import split
-from tod_node.gas import node_post
+from tod_node.client import node_post
 
 log = logging.getLogger(__name__)
 RESEND_SECONDS = 30  # how often a kept signature is offered again while the coordinator lacks the threshold

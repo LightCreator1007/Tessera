@@ -57,3 +57,13 @@ def test_seed_is_locked_then_drawn_and_relocked_when_lost():
     m = Market(draw_error="TooLate")
     VerifierLoop(m, "0xV", None).tick(state(seed_block=10))
     assert m.calls == ["drawSeed", "lockSeed"]
+
+
+def test_only_the_two_registered_verifiers_get_anvil_dev_keys(monkeypatch):
+    from typer.testing import CliRunner
+
+    from tod_verifier.cli import app
+    monkeypatch.delenv("VERIFIER_C_PRIVATE_KEY", raising=False)
+    r = CliRunner().invoke(app, ["replay", "--job", "1", "--round", "1", "--network", "anvil",
+                                 "--coordinator", "http://127.0.0.1:9", "--key-env", "VERIFIER_C_PRIVATE_KEY"])
+    assert r.exit_code == 2 and "VERIFIER_A_PRIVATE_KEY or VERIFIER_B_PRIVATE_KEY" in r.output
