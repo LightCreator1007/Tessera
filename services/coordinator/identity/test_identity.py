@@ -124,3 +124,19 @@ def test_admitter_key_required_off_local_chain(tmp_path):
     ok = subprocess.run([sys.executable, "-c", code], cwd=cwd, env={**base, "ADMITTER_PRIVATE_KEY": key.key.hex()},
                         capture_output=True, text=True)
     assert ok.returncode == 0 and ok.stdout.strip() == key.address
+
+
+def test_dev_chain_falls_back_to_the_admitter_anvil_registers():
+    from tod_core.txmgr import dev_key
+    if not os.environ.get("ADMITTER_PRIVATE_KEY"):
+        assert identity.ADMITTER.address == Account.from_key(dev_key("admitter")).address
+
+
+def test_an_admitter_the_network_does_not_register_is_refused(tmp_path):
+    net = tmp_path / "net.toml"
+    net.write_text(f'[roles]\nadmitter = "{Account.create().address}"\n')
+    with pytest.raises(RuntimeError, match="joins would revert with BadSignature"):
+        identity.check_admitter(str(net))
+    net.write_text(f'[roles]\nadmitter = "{identity.ADMITTER.address.lower()}"\n')
+    identity.check_admitter(str(net))
+    identity.check_admitter(None)

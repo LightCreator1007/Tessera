@@ -5,6 +5,7 @@ import os
 import secrets
 import sqlite3
 import time
+import tomllib
 from pathlib import Path
 
 from eth_account import Account
@@ -15,6 +16,8 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from tod_core import encodings as enc
 from tod_core.hashing import k256
+from tod_core.ledger import REPO
+from tod_core.txmgr import dev_key
 
 from api import config
 
@@ -25,12 +28,26 @@ INVITE_TTL = 30 * 60  # s; same lifetime as the operator's consent
 DEV_CHAIN = 31337
 
 MODE = os.environ.get("IDENTITY_MODE", "dev")
-# Same name as .env.example. On anvil the coordinator key may stand in for the admitter,
-# since both are team keys there; anywhere else a missing key would sign Invites the registry rejects.
+# Same name as .env.example. On anvil the deploy script registers dev_key("admitter"), so that is the fallback;
+# anywhere else a missing key would sign Invites the registry rejects.
 _admitter_key = os.environ.get("ADMITTER_PRIVATE_KEY")
 if not _admitter_key and config.CHAIN_ID != DEV_CHAIN:
     raise RuntimeError("ADMITTER_PRIVATE_KEY is required off the local chain")
-ADMITTER = Account.from_key(_admitter_key or config.COORDINATOR_KEY)
+ADMITTER = Account.from_key(_admitter_key or dev_key("admitter"))
+
+
+def check_admitter(network: str | None) -> None:
+    """Refuse to start with an admitter the registry doesn't know: every join would revert with BadSignature."""
+    if not network:
+        return
+    path = Path(network) if network.endswith(".toml") else REPO / "networks" / f"{network}.toml"
+    expected = tomllib.loads(path.read_text()).get("roles", {}).get("admitter")
+    if expected and expected.lower() != ADMITTER.address.lower():
+        raise RuntimeError(f"ADMITTER_PRIVATE_KEY is {ADMITTER.address}, but {path.name} registers {expected} as the "
+                           "admitter; joins would revert with BadSignature")
+
+
+check_admitter(os.environ.get("TOD_NETWORK"))
 
 router = APIRouter(prefix="/v1/identity")
 db = sqlite3.connect(config.DB_PATH, check_same_thread=False)
