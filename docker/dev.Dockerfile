@@ -12,4 +12,4 @@ ENV OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 WORKDIR /app
 COPY . .
 # Contracts compiled at build time, so the deploy step starts in seconds (contracts/lib must be checked out).
-RUN uv sync --locked --all-packages --no-dev && cd contracts && forge build
+RUN uv sync --locked --all-packages --no-dev && cd contracts && forge build && node ../packages/abi/scripts/generate.mjs
