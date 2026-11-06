@@ -22,7 +22,8 @@ def allowed(job, rnd):
         who.add(tables.JOBS[job].requester.lower())
     if seated := tables.ROUNDS.get(job, {}).get(rnd):
         who |= {s.op.lower() for s in seated.roster}
-    return who
+    # Nodes fetch the spec the moment they see RoundOpened, which can be before the next tick publishes the roster.
+    return who | tables.SEATING.get((job, rnd), set())
 
 
 def authorize(h, method, job, rnd, expiry, signature):

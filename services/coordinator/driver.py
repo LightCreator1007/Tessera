@@ -192,6 +192,7 @@ class Driver:
         workloads = {job: spec["workload"]["id"] for job in self.state.jobs if (spec := self.spec(job))}
         for job, ops, shards in scheduler.queue(self.state, scheduler.rebuild(self.state), self.fleet(),
                                                 int(self.now()), workloads, tables.CONTROL, self.credentials()):
+            tables.SEATING[(job, self.state.jobs[job]["nextRound"])] = {op.lower() for op in ops}
             try:
                 self.l.market.openRound(job, ops, shards)
                 log.info("job %s: opened a round for %s on shards %s", job, ops, shards)

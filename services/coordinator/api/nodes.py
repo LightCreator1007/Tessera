@@ -1,16 +1,16 @@
 """Node heartbeats and the fleet and pool views built from them. Heartbeats are local state, kept in SQLite."""
 import json
-import sqlite3
 import time
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from . import auth, config, tables
+from .db import connect
 from .models import Address, Dispute
 
 router = APIRouter(prefix="/v1")
-db = sqlite3.connect(config.DB_PATH, check_same_thread=False)
+db = connect(config.DB_PATH)
 db.execute("CREATE TABLE IF NOT EXISTS nodes (op TEXT PRIMARY KEY, seen INTEGER, hb TEXT)")
 
 

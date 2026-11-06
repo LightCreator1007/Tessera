@@ -4,7 +4,6 @@ import collections
 import json
 import os
 import secrets
-import sqlite3
 import time
 import tomllib
 from pathlib import Path
@@ -21,6 +20,7 @@ from tod_core.ledger import REPO
 from tod_core.txmgr import dev_key
 
 from api import auth, config
+from api.db import connect
 
 from . import agentpass, topup, worldid
 from .exclusions import Exclusions
@@ -82,7 +82,7 @@ class RateLimit:
 # client-IP header once one is deployed.
 rp_limit = RateLimit(RP_SIGNATURES_PER_MINUTE)
 router = APIRouter(prefix="/v1/identity", dependencies=[Depends(small_body)])
-db = sqlite3.connect(config.DB_PATH, check_same_thread=False)
+db = connect(config.DB_PATH)
 db.execute("CREATE TABLE IF NOT EXISTS humans (nullifier TEXT PRIMARY KEY, owner TEXT, credential TEXT, seen INTEGER)")
 # Agent Pass: the owner's World account (iss, sub), and approvals waiting on the owner.
 db.execute("CREATE TABLE IF NOT EXISTS agent_links (owner TEXT PRIMARY KEY, iss TEXT, sub TEXT, linked INTEGER)")

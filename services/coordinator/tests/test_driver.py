@@ -40,7 +40,8 @@ class Market:
 
 @pytest.fixture
 def world(tmp_path, monkeypatch):
-    for t in ("JOBS", "ROUNDS", "SPECS", "MODELS", "EVIDENCE", "SETTLEMENTS", "STATES", "CONTROL", "MISSED", "REARMED"):
+    for t in ("JOBS", "ROUNDS", "SPECS", "MODELS", "EVIDENCE", "SETTLEMENTS", "STATES", "CONTROL", "MISSED", "REARMED",
+              "SEATING"):
         monkeypatch.setattr(tables, t, {})
     store = DiskStore(tmp_path)
     spec_bytes = canonical(SPEC)
@@ -134,6 +135,7 @@ def test_opens_the_next_round_on_idle_nodes(world):
     world.d.tick()
     (name, job, ops, shards), = world.market.calls
     assert (name, job, len(ops)) == ("openRound", 1, 3) and OPS[3] in ops  # the node that sat out goes first
+    assert set(ops) <= blobs.allowed(1, 2)  # seated nodes can fetch the spec before the next tick publishes round 2
     assert tables.ROUNDS[1][1].status == "finalized" and tables.JOBS[1].workload == "mlp-exact/1"
 
 

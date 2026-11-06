@@ -49,3 +49,24 @@ def test_admin_needs_localhost_and_the_token(monkeypatch):
     assert c.get("/v1/admin/txs", headers=ok).json() == []
     monkeypatch.setattr(auth.config, "ADMIN_TOKEN", "")
     assert c.get("/v1/admin/txs", headers={"Authorization": "Bearer "}).status_code == 403  # no token, no admin
+
+
+def test_heartbeats_and_driver_reads_share_the_connection_safely():
+    from concurrent.futures import ThreadPoolExecutor
+
+    from api import nodes
+
+    ops = [f"0x{i:040x}" for i in range(1, 9)]
+
+    def beat(op):
+        for _ in range(50):
+            nodes.heartbeat(nodes.Heartbeat(**FIRST), op=op)  # the API threadpool
+
+    def read(_):
+        for _ in range(50):
+            nodes.heartbeats(), nodes.fleet()  # the driver thread, every tick
+
+    with ThreadPoolExecutor(16) as pool:
+        for f in [pool.submit(beat, op) for op in ops] + [pool.submit(read, i) for i in range(8)]:
+            f.result()  # raised sqlite3.InterfaceError or a None row before the lock
+    assert set(ops) <= set(nodes.heartbeats())

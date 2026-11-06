@@ -12,6 +12,7 @@ EVIDENCE: dict[tuple[int, int], Evidence] = {}
 MODELS: dict[int, str] = {}  # job -> latest aggregate hash
 CONTROL: dict[int, dict] = {}  # job -> {auto, paused}, read by the round driver
 DISPUTES: list[dict] = []  # open {job, round, verifier, operator, segments, deadline}; a verifier reopens after a restart
+SEATING: dict[tuple[int, int], set[str]] = {}  # (job, round) -> lowercase operators, set just before openRound
 SETTLEMENTS: dict[tuple[int, int], dict] = {}  # (job, round) -> {settlement, sigs: {verifier: signature}}
 MISSED: dict[str, int] = {}  # operator -> commits missed in a row
 REARMED: dict[str, int] = {}  # operator -> unix time of its last re-arm; misses in rounds opened before it don't count
