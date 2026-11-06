@@ -1,5 +1,4 @@
 # tod-tui (apps/tui): read-only terminal UI over the tod-node local API and the coordinator.
-# Standalone uv project: joining the root workspace would edit the root pyproject.toml and uv.lock, which others own.
 
 [project]
 name = "tod-tui"
@@ -12,9 +11,6 @@ dependencies = [
 
 [project.scripts]
 tod-tui = "tod_tui.cli:main"
-
-[dependency-groups]
-dev = ["pytest>=8"]
 
 [build-system]
 requires = ["uv_build>=0.9,<0.13"]

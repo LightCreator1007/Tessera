@@ -4,6 +4,7 @@
 [tool.uv.workspace]
 members = [
     "apps/node",
+    "apps/tui",
     "apps/verifier",
     "packages/core",
     "packages/datasets",
