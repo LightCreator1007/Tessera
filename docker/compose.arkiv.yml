@@ -9,6 +9,6 @@ services:
       ARKIV_RPC_URL: https://rpc.rabdi.db-chain.testnet.arkiv.network
       ARKIV_PRIVATE_KEY: "${ARKIV_PRIVATE_KEY:-}"
       ARKIV_ACCESS_KEY: "${ARKIV_ACCESS_KEY:-}"
-      ARKIV_LIFETIME_DAYS: "1"
+      ARKIV_LIFETIME_DAYS: "30"  # records must outlive the judging, and anyone can extend them after
       SWARM_API_URL: https://api.gateway.ethswarm.org
       CHAIN_CONFIRMATIONS: "0"
