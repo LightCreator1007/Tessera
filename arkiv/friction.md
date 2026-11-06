@@ -1,6 +1,6 @@
 # What got in the way with Arkiv
 
-Everything here happened while building ToD at ETHGlobal Mumbai, on the Rabdi testnet, between 6 and 8 November 2026. Each item says how to reproduce it.
+Everything here happened while building ToD at ETHGlobal Mumbai, on the Rabdi testnet, between 5 and 7 November 2026. Each item says how to reproduce it.
 
 ## 1. The keyless RPC rate-limits a normal write path within minutes
 
