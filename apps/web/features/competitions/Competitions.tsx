@@ -69,7 +69,7 @@ export function CompetitionList() {
                   cover={coverFor(c.id)}
                   live={c.status === "open"}
                   tag={rel ? <Pill tone="brand">{REL[rel as keyof typeof REL]}</Pill> : <Pill tone={TONE[c.status]}>{LABEL[c.status]}</Pill>}
-                  note={`${prize === null ? "prize not reported" : `${prize} TOD prize`} · ${c.entries.length} ${c.entries.length === 1 ? "entry" : "entries"} · closes ${date(c.deadline)}`}
+                  note={`${prize === null ? "prize not reported" : `${prize} TOD prize`} · ${c.entries.length} ${c.entries.length === 1 ? "entry" : "entries"} · closes ${when(c)}`}
                 />
               );
             })}
@@ -94,8 +94,12 @@ export const RULES = [
 ] as const;
 
 // An unknown window says so rather than "0 seconds".
+const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? "" : "s"}`;
 const span = (s?: number) =>
-  s === undefined ? "the reveal window" : s % 3600 === 0 ? `${s / 3600} hours` : s % 60 === 0 ? `${s / 60} minutes` : `${s} seconds`;
+  s === undefined ? "the reveal window" : s % 3600 === 0 ? plural(s / 3600, "hour") : s % 60 === 0 ? plural(s / 60, "minute") : plural(s, "second");
+// A live competition can close within the hour, so its deadline shows the time too.
+const when = (c: Competition) =>
+  c.live ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC" }).format(new Date(c.deadline)) + " UTC" : date(c.deadline);
 
 /** A live competition's rules carry its own size and windows, as the contract enforces them. */
 function rulesFor(c: Competition) {
@@ -113,7 +117,7 @@ const CLI = "docker compose -f docker/compose.dev.yml exec coordinator python do
 function NextStep({ c }: { c: Competition }) {
   const id = c.id;
   const steps: Record<string, { who: string; text: string; cmd?: string }> = {
-    open: { who: "Entrants", text: `Entries close ${date(c.deadline)}. Commit your predictions; you can replace them until then.`, cmd: `${CLI} enter ${id} --name <you> --predictions <file>` },
+    open: { who: "Entrants", text: `Entries close ${when(c)}. Commit your predictions; you can replace them until then.`, cmd: `${CLI} enter ${id} --name <you> --predictions <file>` },
     "awaiting-labels": { who: "The host", text: `Entries are closed. The host has ${span(c.revealWindow)} to reveal labels that match the commitment.`, cmd: `${CLI} reveal ${id}` },
     scoring: { who: "Entrants, or anyone with their files", text: "The labels are out. Each entry revealed now is scored by the contract.", cmd: `${CLI} reveal ${id}` },
     "ready-to-settle": { who: "Anyone", text: "Scoring is over. Settling pays the best score; usually the winner calls it.", cmd: `${CLI} settle ${id}` },
@@ -259,7 +263,7 @@ export function CompetitionDetail({ id }: { id: string }) {
             <div className="flex flex-wrap items-center gap-2">
               <Pill tone={TONE[c.status]}>{LABEL[c.status]}</Pill>
               {rel && <Pill tone="brand">{REL[rel]}</Pill>}
-              <span className="text-xs text-muted">Deadline {date(c.deadline)}</span>
+              <span className="text-xs text-muted">Deadline {when(c)}</span>
             </div>
             <h1 className="text-xl font-medium text-ink">{c.title}</h1>
             <p className="max-w-lede text-sm text-muted">{c.task}</p>
