@@ -89,6 +89,60 @@ function readPalette(el: HTMLElement): Palette {
   return { ground: v("--mz-ground"), void: v("--mz-void"), bg, fg };
 }
 
+/**
+ * One pointer for every mosaic on the page: a single window listener, read by each renderer in its own frame. Mouse
+ * and pen only, so a touch scroll never paints a wake.
+ */
+export const pointer = { x: -1e5, y: -1e5, px: -1e5, py: -1e5, speed: 0, at: 0, live: false };
+const pointerSubs = new Set<() => void>();
+let pointerBound = false;
+
+export function watchPointer(fn: () => void) {
+  if (!pointerBound && typeof window !== "undefined") {
+    pointerBound = true;
+    window.addEventListener(
+      "pointermove",
+      (e) => {
+        if (e.pointerType === "touch") return;
+        const now = performance.now();
+        // After a pause, start a fresh segment at the pointer instead of streaking from where it last stopped.
+        const fresh = !pointer.live || now - pointer.at > 140;
+        const px = fresh ? e.clientX : pointer.x;
+        const py = fresh ? e.clientY : pointer.y;
+        const inst = fresh ? 0 : (Math.hypot(e.clientX - px, e.clientY - py) / Math.max(1, now - pointer.at)) * 1000;
+        Object.assign(pointer, { px, py, x: e.clientX, y: e.clientY, speed: Math.max(inst, pointerSpeed(now)), at: now, live: true });
+        pointerSubs.forEach((f) => f());
+      },
+      { passive: true },
+    );
+    document.addEventListener("pointerout", (e) => {
+      if (!e.relatedTarget) pointer.live = false;
+    });
+  }
+  pointerSubs.add(fn);
+  return () => {
+    pointerSubs.delete(fn);
+  };
+}
+
+/** Speed decays from the last move, so every renderer reads the same value without each one decaying it. */
+function pointerSpeed(now: number) {
+  return pointer.speed * Math.pow(0.9, Math.max(0, now - pointer.at) / 16.7);
+}
+
+/** Distance from a point to a segment; a zero-length segment (a resting pointer) is a point. */
+function segDist(px: number, py: number, ax: number, ay: number, bx: number, by: number) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len = dx * dx + dy * dy;
+  const h = len === 0 ? 0 : Math.min(1, Math.max(0, ((px - ax) * dx + (py - ay) * dy) / len));
+  return Math.hypot(px - ax - dx * h, py - ay - dy * h);
+}
+
+/** The wake's brush: base reach in px, how fast it fades, and how hard it lights. Tuned in /lab/vault (V1). */
+const WAKE = { reach: 70, fade: 0.035, gain: 0.55 };
+const WAKE_MAX = WAKE.reach * 1.28 * 2.2;
+
 export interface MosaicOptions {
   cell: number; // row height, px
   seed: number;
@@ -113,6 +167,10 @@ export class MosaicRenderer {
   private gap = 1;
   private lastT = 0;
   private rnd: () => number;
+  private wake: Float32Array = new Float32Array(0);
+  private wakeOn = false;
+  private wakeAt = 0;
+  private awake = false;
 
   constructor(private canvas: HTMLCanvasElement, private opts: MosaicOptions) {
     const ctx = canvas.getContext("2d");
@@ -177,6 +235,7 @@ export class MosaicRenderer {
     }
     this.tiles = tiles;
     this.levels = new Int8Array(tiles.length).fill(-2);
+    this.wake = new Float32Array(tiles.length);
     this.drawn = tiles.map((t) => t.word);
     this.jit = new Float32Array(tiles.length).map(() => (rnd() - 0.5) * 0.09);
     this.pal = readPalette(canvas);
@@ -188,9 +247,80 @@ export class MosaicRenderer {
     return { W: this.W, H: this.H };
   }
 
+  /** Pointer wake on or off (off for reduced motion and for texture behind working UI). */
+  setWake(on: boolean) {
+    this.wakeOn = on;
+    if (!on) {
+      this.wake.fill(0);
+      this.awake = false;
+      this.levels.fill(-2);
+    }
+  }
+
+  /** True while any tile still carries wake, so the host keeps drawing frames after its own clock has stopped. */
+  isAwake() {
+    return this.awake;
+  }
+
+  /** Whether the shared pointer is over this canvas or near enough for the brush to reach it. */
+  pointerNear() {
+    if (!this.wakeOn || !pointer.live) return false;
+    const b = this.canvas.getBoundingClientRect();
+    return pointer.x > b.left - WAKE_MAX && pointer.x < b.right + WAKE_MAX && pointer.y > b.top - WAKE_MAX && pointer.y < b.bottom + WAKE_MAX;
+  }
+
+  /**
+   * Updates each tile's wake: tiles near the pointer's last segment light toward the target fast and fade back slowly.
+   * The brush is lobed (its reach wobbles with angle and time) and grows with pointer speed. Rates use real frame time.
+   */
+  private stepWake(t: number) {
+    const n = this.tiles.length;
+    if (this.wake.length !== n) this.wake = new Float32Array(n);
+    const now = performance.now();
+    const scale = Math.min(6, Math.max(0, (now - (this.wakeAt || now)) / 16.7));
+    this.wakeAt = now;
+    const near = this.pointerNear();
+    if (!near && !this.awake) return;
+    const keep = Math.pow(1 - WAKE.fade, scale);
+    let awake = false;
+    let lx = 0;
+    let ly = 0;
+    let lpx = 0;
+    let lpy = 0;
+    let grow = 1;
+    if (near) {
+      const b = this.canvas.getBoundingClientRect();
+      lx = pointer.x - b.left;
+      ly = pointer.y - b.top;
+      lpx = pointer.px - b.left;
+      lpy = pointer.py - b.top;
+      grow = 1 + Math.min(pointerSpeed(now) / 1600, 1.2);
+    }
+    const maxR = WAKE.reach * 1.28 * grow;
+    for (let k = 0; k < n; k++) {
+      let w = this.wake[k];
+      let target = 0;
+      if (near) {
+        const tile = this.tiles[k];
+        const d = segDist(tile.cx, tile.cy, lpx, lpy, lx, ly);
+        if (d < maxR) {
+          const reach = WAKE.reach * (1 + 0.28 * Math.sin(3 * Math.atan2(tile.cy - ly, tile.cx - lx) + t * 1.7)) * grow;
+          if (d < reach) target = 1 - d / reach;
+        }
+      }
+      w = target > w ? w + (target - w) * 0.55 : w * keep;
+      if (w < 0.01) w = 0;
+      else awake = true;
+      this.wake[k] = w;
+    }
+    this.awake = awake;
+  }
+
   frame(field: FieldFn, t: number) {
     const { ctx, tiles, levels, pal, opts } = this;
     const c: FieldCtx = { t, W: this.W, H: this.H };
+    if (this.wakeOn) this.stepWake(t);
+    const wake = this.wakeOn ? this.wake : null;
     const dt = Math.max(0, t - this.lastT);
     this.lastT = t;
     const swaps = opts.twinkle > 0 ? Math.round(tiles.length * opts.twinkle * dt) : 0;
@@ -207,7 +337,11 @@ export class MosaicRenderer {
     ctx.font = this.font;
     for (let k = 0; k < tiles.length; k++) {
       const tile = tiles[k];
-      const lvl = quantize(field(tile, c), this.jit[k]);
+      let v = field(tile, c);
+      const wk = wake ? wake[k] : 0;
+      // Lit tiles step up toward bone; texture words light into the red ramp but never past it (bone is earned).
+      if (wk > 0 && v >= 0) v = v >= 0.1 ? v + wk * WAKE.gain * 0.6 : Math.max(v, Math.min(0.62, wk * WAKE.gain * 0.7));
+      const lvl = quantize(v, this.jit[k]);
       if (lvl === levels[k]) continue;
       levels[k] = lvl;
       const { x, y, w, h } = tile;

@@ -3,7 +3,7 @@
 
 import { reducedMotion, usePrefs } from "@/lib/prefs";
 import { useEffect, useRef } from "react";
-import { MosaicRenderer, VOCAB, type FieldFn } from "./engine";
+import { MosaicRenderer, VOCAB, watchPointer, type FieldFn } from "./engine";
 
 export interface MosaicProps {
   field: FieldFn;
@@ -24,6 +24,8 @@ export interface MosaicProps {
   palette?: string;
   className?: string;
   canvasRef?: (c: HTMLCanvasElement | null) => void;
+  /** Pointer wake (tiles light along the pointer's path and fade slowly). On for posters; off for texture behind working UI. */
+  wake?: boolean;
 }
 
 export function Mosaic({
@@ -40,12 +42,14 @@ export function Mosaic({
   palette,
   className,
   canvasRef,
+  wake = true,
 }: MosaicProps) {
   const ref = useRef<HTMLCanvasElement | null>(null);
   const rend = useRef<MosaicRenderer | null>(null);
   const fieldRef = useRef(field);
   fieldRef.current = field;
   const clock = useRef({ start: 0, t: 0 });
+  const wakeRef = useRef(false);
   const { motion } = usePrefs();
 
   useEffect(() => {
@@ -62,6 +66,7 @@ export function Mosaic({
       if (cancelled) return;
       r = new MosaicRenderer(canvas, { cell, rows, seed, vocab, twinkle, empty });
       r.layout();
+      r.setWake(wakeRef.current);
       rend.current = r;
       r.frame(fieldRef.current, clock.current.t);
       ro.observe(canvas);
@@ -80,6 +85,9 @@ export function Mosaic({
 
   useEffect(() => {
     const reduce = reducedMotion();
+    // The renderer may not exist yet (it waits for fonts), so it also picks this up when it is created.
+    wakeRef.current = wake && !reduce;
+    rend.current?.setWake(wakeRef.current);
     if (reduce) {
       clock.current.t = Number.isFinite(duration) ? duration : 4;
       const id = requestAnimationFrame(() => rend.current?.frame(fieldRef.current, clock.current.t));
@@ -89,16 +97,24 @@ export function Mosaic({
     let started = false;
     let running = false;
     // The clock starts the first time the canvas is on screen, so a reveal below the fold plays when you reach it,
-    // and a looping canvas off screen stops evaluating its field until it scrolls back.
+    // and a looping canvas off screen stops evaluating its field until it scrolls back. After the clock stops, frames
+    // keep coming while the pointer is near or a wake is still fading, then stop again.
     const tick = (now: number) => {
+      raf = 0;
       const t = (now - clock.current.start) / 1000;
       clock.current.t = Math.min(t, duration);
-      rend.current?.frame(fieldRef.current, clock.current.t);
-      if (t < duration && running) raf = requestAnimationFrame(tick);
+      const r = rend.current;
+      r?.frame(fieldRef.current, clock.current.t);
+      const more = t < duration || (r ? r.isAwake() || r.pointerNear() : false);
+      if (more && running) raf = requestAnimationFrame(tick);
     };
     const io = new IntersectionObserver(([e]) => {
       running = e.isIntersecting;
-      if (!running) return cancelAnimationFrame(raf);
+      if (!running) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+        return;
+      }
       if (!started) {
         started = true;
         clock.current.start = performance.now();
@@ -107,11 +123,17 @@ export function Mosaic({
       raf = requestAnimationFrame(tick);
     });
     if (ref.current) io.observe(ref.current);
+    const unwatch = wakeRef.current
+      ? watchPointer(() => {
+          if (running && started && !raf && rend.current?.pointerNear()) raf = requestAnimationFrame(tick);
+        })
+      : () => undefined;
     return () => {
       cancelAnimationFrame(raf);
       io.disconnect();
+      unwatch();
     };
-  }, [playKey, duration, motion]);
+  }, [playKey, duration, motion, wake]);
 
   // Static props changed (a slider moved after the clock stopped): draw one frame with the new field.
   useEffect(() => {
