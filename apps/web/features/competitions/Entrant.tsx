@@ -64,7 +64,9 @@ function StateLine({ c, e }: { c: Competition; e: CompetitionEntry }) {
   return <p className="rounded-xl border border-rule bg-band px-4 py-3 text-sm text-muted">{text[c.stage ?? e.status] ?? "This entry has no score yet."}</p>;
 }
 
-function PerClass({ b }: { b: EntryBreakdown }) {
+const nameOf = (names: string[] | undefined, l: number) => names?.[l] || String(l);
+
+function PerClass({ b, names }: { b: EntryBreakdown; names?: string[] }) {
   return (
     <section aria-label="Accuracy per class" className="flex flex-col gap-3">
       <Eyebrow>Accuracy per class</Eyebrow>
@@ -73,8 +75,8 @@ function PerClass({ b }: { b: EntryBreakdown }) {
           const v = r.count === 0 ? 0 : r.correct / r.count;
           return (
             <li key={r.label} className="grid grid-cols-12 items-center gap-3 text-xs">
-              <span className="col-span-2 font-mono text-muted sm:col-span-1">{r.label}</span>
-              <span className="col-span-6 h-2 overflow-hidden rounded-full bg-band sm:col-span-8" role="img" aria-label={`Class ${r.label}: ${pct(r.correct, r.count)}`}>
+              <span title={nameOf(names, r.label)} className="col-span-2 truncate font-mono text-muted sm:col-span-1">{nameOf(names, r.label)}</span>
+              <span className="col-span-6 h-2 overflow-hidden rounded-full bg-band sm:col-span-8" role="img" aria-label={`Class ${nameOf(names, r.label)}: ${pct(r.correct, r.count)}`}>
                 <span className="block h-full rounded-full bg-brand" style={{ width: `${v * 100}%` }} />
               </span>
               <span className="col-span-4 text-right font-mono tabular text-ink sm:col-span-3">{pct(r.correct, r.count)} <span className="text-muted">of {r.count.toLocaleString()}</span></span>
@@ -86,7 +88,7 @@ function PerClass({ b }: { b: EntryBreakdown }) {
   );
 }
 
-function Confusion({ b }: { b: EntryBreakdown }) {
+function Confusion({ b, names }: { b: EntryBreakdown; names?: string[] }) {
   if (!b.confusion) return <p className="text-xs text-muted">{b.classes.length} classes is too many for a confusion matrix; per-class accuracy is above.</p>;
   const n = new Map(b.confusion.map((x) => [`${x.label}:${x.predicted}`, x.count]));
   const truth = b.perClass.map((r) => r.label);
@@ -100,12 +102,12 @@ function Confusion({ b }: { b: EntryBreakdown }) {
       <div className="overflow-x-auto">
         <table className="border-separate border-spacing-0.5 font-mono text-xs tabular">
           <thead>
-            <tr><th className="p-1" /><>{b.classes.map((p) => <th key={p} scope="col" className="p-1 text-center font-normal text-muted">{p}</th>)}</></tr>
+            <tr><th className="p-1" /><>{b.classes.map((p) => <th key={p} scope="col" title={nameOf(names, p)} className="max-w-8 truncate p-1 text-center font-normal text-muted">{nameOf(names, p)}</th>)}</></tr>
           </thead>
           <tbody>
             {truth.map((t) => (
               <tr key={t}>
-                <th scope="row" className="p-1 pr-2 text-right font-normal text-muted">{t}</th>
+                <th scope="row" title={nameOf(names, t)} className="max-w-24 truncate p-1 pr-2 text-right font-normal text-muted">{nameOf(names, t)}</th>
                 {b.classes.map((p) => {
                   const v = n.get(`${t}:${p}`) ?? null;
                   const share = v === null ? 0 : v / (rowMax.get(t) || 1);
@@ -208,8 +210,8 @@ export function EntrantPage({ id, who }: { id: string; who: string }) {
               </div>
               <StateLine c={c} e={e} />
               {e.unavailable && <p className="text-sm text-muted">{e.unavailable}</p>}
-              {e.breakdown && <PerClass b={e.breakdown} />}
-              {e.breakdown && <Confusion b={e.breakdown} />}
+              {e.breakdown && <PerClass b={e.breakdown} names={c.settings?.classNames} />}
+              {e.breakdown && <Confusion b={e.breakdown} names={c.settings?.classNames} />}
               <EntrantNotebook c={c} who={who} you={you} />
             </>
           )}

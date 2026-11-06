@@ -1,7 +1,7 @@
 "use client";
 // Competitions as the signed-in wallet sees them: the contract's, against a coordinator, or in demo mode the examples plus this wallet's; and who may enter what.
 import { useWallet, type DemoWallet, type HostedCompetition } from "@/lib/wallet";
-import { isDemo } from "@/lib/api/client";
+import { COORD_BASE, isDemo } from "@/lib/api/client";
 import { useLiveCompetitions } from "@/lib/api/hooks";
 import type { LiveCompetition } from "@/lib/api/types";
 import { COMPETITIONS, ITEMS, labelBytes, type Competition } from "@/lib/learn/competition";
@@ -42,10 +42,11 @@ export function fromLive(r: LiveCompetition, readAt = Date.now()): Competition {
       return { op, seed: 0, skill: 0, scoreHash: "", score: i < 0 ? undefined : r.leaderboard[i].score / r.items, rank: i < 0 ? null : i + 1 };
     });
   return {
-    id: String(r.id), title: r.title, task: r.task, host: r.host, status, prize: r.prize, budget: 0, fee: 0,
+    id: String(r.id), title: r.listing?.title || r.title, task: r.listing?.summary || r.task, host: r.host, status, prize: r.prize, budget: 0, fee: 0,
     deadline: new Date(r.deadline * 1000).toISOString(), labelsSeed: null, labelsHash: r.labelsHash, committedAt: r.createdBlock,
     entries, live: true, items: r.items, revealWindow: r.revealWindow, arkiv: r.arkiv ?? null, stage: r.status, settled: r.settled,
-    chainNow: r.now, readAt,
+    chainNow: r.now, readAt, settings: r.listing ?? null, resources: r.resources ?? [],
+    bannerUrl: r.banner && COORD_BASE ? `${COORD_BASE}/v1/competitions/${r.id}/banner?v=${r.banner.sha256.slice(0, 12)}` : null,
   };
 }
 

@@ -199,6 +199,10 @@ export type LiveCompetition = {
   standings?: Standing[];
   /** The chain's time when this was read, which decides the status; the browser clock can be off. */
   now?: number;
+  /** The host's signed listing edits, a banner and downloadable files; absent on older coordinators. */
+  listing?: ListingSettings | null;
+  banner?: { contentType: string; sha256: string; updatedAt: number } | null;
+  resources?: Resource[];
   /** Arkiv entity keys for this competition's listing and, once settled, its result; null when publishing is off. */
   arkiv?: { listing?: string; result?: string } | null;
 };
@@ -237,3 +241,10 @@ export type OwnerCompetitions = {
     state: Standing["state"]; score: number | null; rank: number | null; tied: boolean; won: number; share: number; commits: number;
   }[];
 };
+
+export type ListingSettings = {
+  title: string; summary: string; rules: string; links: { label: string; url: string }[]; tags: string[]; classNames: string[];
+  notebookRules: "optional" | "required" | "off"; version?: number; sha256?: string; signature?: string; signedAt?: number; updatedAt?: number;
+};
+export type EnvSpec = { framework: "gymnasium"; entrypoint: string; seeds: number[]; episodes: number; maxSteps: number; metric: "mean-return" };
+export type Resource = { name: string; kind: "environment" | "starter" | "data"; description: string; env?: EnvSpec; sha256: string; size: number; updatedAt: number };

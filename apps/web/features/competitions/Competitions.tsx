@@ -2,7 +2,7 @@
 // Competition list and detail. Against a coordinator, the Competitions contract's competitions with onchain scores; in demo mode, examples plus this wallet's.
 import Link from "next/link";
 import { Fragment, useEffect, useState } from "react";
-import { ChevronDown, Lock, Plus, RotateCw, Trophy } from "lucide-react";
+import { ChevronDown, Download, ExternalLink, Lock, Plus, RotateCw, Settings, Trophy } from "lucide-react";
 import { AddressChip, Banner, Button, ButtonLink, Crumbs, DocsLink, EmptyState, Eyebrow, HashChip, Money, PageHeader, Pill, ROW, Segmented, Skeleton, TD, TH, THead, cx, type Tone } from "@/components/primitives";
 import { Countdown } from "./Countdown";
 import { CompetitionNotebooks } from "./Notebooks";
@@ -10,7 +10,7 @@ import { Term } from "@/components/term";
 import { ReVerify } from "@/features/verify/ReVerify";
 import { Command, More } from "@/components/flow";
 import { LiveAction } from "./LiveActions";
-import { isDemo } from "@/lib/api/client";
+import { COORD_BASE, isDemo } from "@/lib/api/client";
 import { PosterCard } from "@/components/mosaic/PosterCard";
 import { coverFor } from "@/components/mosaic/figures";
 import { formatToken } from "@/lib/money";
@@ -97,6 +97,7 @@ export function CompetitionList() {
                   n={String(k + 1).padStart(2, "0")}
                   title={<span title={c.title} className="line-clamp-2 break-words">{c.title}</span>}
                   cover={coverFor(c.id)}
+                  art={c.bannerUrl ? <img src={c.bannerUrl} alt="" className="h-48 w-full border-b border-rule object-cover" /> : undefined}
                   live={c.status === "open"}
                   tag={rel ? <Pill tone="brand">{REL[rel as keyof typeof REL]}</Pill> : <Pill tone={TONE[c.status]}>{LABEL[c.status]}</Pill>}
                   note={`${prize === null ? "prize not reported" : `${prize} TOD prize`} · ${c.entries.length} ${c.entries.length === 1 ? "entry" : "entries"} · closes ${when(c)}`}
@@ -178,8 +179,39 @@ function NextStep({ c, w }: { c: Competition; w: ReturnType<typeof useCompetitio
   );
 }
 
+function Resources({ c }: { c: Competition }) {
+  const files = c.resources ?? [];
+  if (files.length === 0 || !COORD_BASE) return null;
+  const size = (n: number) => (n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1024 / 1024).toFixed(2)} MB`);
+  return (
+    <section aria-label="Files" className="flex flex-col gap-3">
+      <Eyebrow>Files</Eyebrow>
+      <ul className="flex flex-col divide-y divide-rule rounded-xl border border-rule">
+        {files.map((r) => (
+          <li key={r.name} className="flex flex-col gap-2 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="flex min-w-0 items-center gap-2"><span className="truncate text-sm text-ink">{r.name}</span><Pill tone={r.kind === "environment" ? "brand" : "neutral"}>{r.kind === "environment" ? "RL environment" : r.kind}</Pill></span>
+              <a href={`${COORD_BASE}/v1/competitions/${c.id}/resources/${encodeURIComponent(r.name)}`} className="inline-flex items-center gap-1.5 text-xs text-muted underline decoration-subtle underline-offset-4 hover:text-ink"><Download className="size-3.5" aria-hidden />Download, {size(r.size)}</a>
+            </div>
+            {r.description && <p className="whitespace-pre-line break-words text-xs text-muted">{r.description}</p>}
+            {r.env && (
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-sm bg-band px-3 py-2 font-mono text-xs sm:grid-cols-4">
+                <div className="col-span-2 flex flex-col"><dt className="text-subtle">entrypoint</dt><dd className="truncate text-ink">{r.env.entrypoint}</dd></div>
+                <div className="flex flex-col"><dt className="text-subtle">seeds</dt><dd className="text-ink">{r.env.seeds.length}</dd></div>
+                <div className="flex flex-col"><dt className="text-subtle">episodes each</dt><dd className="text-ink">{r.env.episodes}</dd></div>
+                <div className="col-span-2 flex flex-col sm:col-span-4"><dt className="text-subtle">score</dt><dd className="text-ink">mean return, at most {r.env.maxSteps.toLocaleString()} steps an episode</dd></div>
+              </dl>
+            )}
+            <HashChip value={r.sha256} label="sha256" />
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function Rules({ c }: { c: Competition }) {
-  const rows = rulesFor(c);
+  const rows = c.settings?.rules ? [...rulesFor(c), ["Host's rules", c.settings.rules] as const] : rulesFor(c);
   return (
     <section aria-label="Rules" className="flex flex-col gap-3">
       <div className="flex items-center gap-2"><Eyebrow>Rules</Eyebrow>{c.live ? <Pill tone="ok">Enforced onchain</Pill> : <Pill tone="pending">Proposed</Pill>}</div>
@@ -357,10 +389,12 @@ export function CompetitionDetail({ id }: { id: string }) {
     <div className="flex min-h-full flex-col">
       <PageHeader title={<Crumbs items={[{ href: "/competitions", label: "competitions" }, { label: <span title={c.title} className="block max-w-56 truncate sm:max-w-md">{c.title}</span> }]} />}>
         {isOpen && rel === null && (gate.ok ? <ButtonLink href={`/competitions/${c.id}/enter`} variant="primary" icon={Trophy}>Enter</ButtonLink> : <Disabled icon={Trophy}>Enter</Disabled>)}
+        {isOpen && rel === "host" && c.live && <ButtonLink href={`/competitions/${c.id}/settings`} variant="secondary" icon={Settings}>Settings</ButtonLink>}
         {isOpen && rel === "entered" && c.live && <ButtonLink href={`/competitions/${c.id}/enter`} variant="secondary" icon={Trophy}>Replace entry</ButtonLink>}
       </PageHeader>
       <div className="flex flex-col gap-8 px-4 py-6 md:px-6 lg:flex-row">
         <div className="flex min-w-0 flex-1 flex-col gap-8">
+          {c.bannerUrl && <img src={c.bannerUrl} alt="" className="aspect-3/1 w-full rounded-xl border border-rule object-cover" />}
           {rel !== "host" && !c.live && <ExampleBanner />}
           {stale && <ReadFailed stale retry={retry} />}
           <header className="flex flex-col gap-2">
@@ -372,6 +406,12 @@ export function CompetitionDetail({ id }: { id: string }) {
             </div>
             <h1 className="break-words text-xl font-medium text-ink">{c.title}</h1>
             <p className="max-w-lede whitespace-pre-line break-words text-sm text-muted">{c.task}</p>
+            {c.settings && (c.settings.tags.length > 0 || c.settings.links.length > 0) && (
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                {c.settings.tags.map((t) => <Pill key={t} tone="neutral">{t}</Pill>)}
+                {c.settings.links.map((l) => <a key={l.url} href={l.url} target="_blank" rel="noopener noreferrer nofollow ugc" className="inline-flex items-center gap-1 text-xs text-muted underline decoration-subtle underline-offset-4 hover:text-ink">{l.label}<ExternalLink className="size-3" aria-hidden /></a>)}
+              </div>
+            )}
             {isOpen && rel === null && <p id="not-live" className="text-xs text-muted">{gate.ok ? NOT_LIVE : gate.text}</p>}
           </header>
           {rel === "host" && isOpen && (
@@ -397,7 +437,8 @@ export function CompetitionDetail({ id }: { id: string }) {
               {c.entries.length > 0 && <ul className="flex flex-wrap gap-2">{c.entries.map((e) => <li key={e.op}><AddressChip value={e.op} href={entrantHref(c, e.op)} you={!!you && e.op.toLowerCase() === you.toLowerCase()} /></li>)}</ul>}
             </section>
           )}
-          <CompetitionNotebooks c={c} you={you} entered={rel === "entered"} />
+          <Resources c={c} />
+          {c.settings?.notebookRules !== "off" && <CompetitionNotebooks c={c} you={you} entered={rel === "entered"} />}
           {c.status === "unrevealed" && (
             <Banner tone="danger" title="The host didn't reveal the labels.">
               The {c.live ? span(c.revealWindow) : "48-hour"} reveal window closed without labels matching the commitment, so no score can be trusted. Under the rules the prize is split between the {c.entries.length} entrants.

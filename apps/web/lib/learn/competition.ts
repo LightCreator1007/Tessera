@@ -42,6 +42,10 @@ export type Competition = {
   /** Live only: the chain's time at the last read, and the browser's time when that read landed, to correct clock skew. */
   chainNow?: number;
   readAt?: number;
+  /** Live only: the host's listing. The banner is a URL with its hash, so a new upload busts the cache. */
+  settings?: import("@/lib/api/types").ListingSettings | null;
+  bannerUrl?: string | null;
+  resources?: import("@/lib/api/types").Resource[];
 };
 
 export function labelBytes(seed: number) {
