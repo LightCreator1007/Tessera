@@ -108,6 +108,17 @@ def test_finalizes_once_the_threshold_signed(world):
     assert s["payouts"] == [{"operator": op, "amount": a} for op, a in want["payouts"]] and len(s["payouts"]) == 3
 
 
+def test_state_comes_back_after_a_restart_from_the_stored_evidence(world):
+    world.d.tick()
+    doc = world.store.get(tables.EVIDENCE[(1, 1)].aggregate.hash)
+    tables.STATES.clear()  # a restarted coordinator: the in-memory tables are empty, the store is not
+    r = world.s.rounds[(1, 1)]
+    r.update(status=RoundStatus.SETTLED, aggEvidenceHash=k256(doc), aggregateHash=b"\7" * 32)
+    world.d.publish({})
+    (st,) = tables.STATES[1].rounds
+    assert (st.round, st.metric, st.seconds) == (1, json.loads(doc)["gate"]["valAfter"], None)
+
+
 def test_voids_a_round_below_quorum(world):
     world.s.rounds[(1, 1)]["revealedCount"] = 1
     world.market.phases[(1, 1)] = Phase.VERIFY

@@ -110,6 +110,12 @@ class Driver:
                 payouts=[Payout(op=op, amount=a) for op, a in pending["payouts"]] if settled and pending else [])
             if settled:
                 tables.MODELS[job] = _hex(agg)
+                if not any(s.round == rnd for s in tables.STATES.get(job, JobState(job=job, rounds=[])).rounds):
+                    # After a restart: the evidence is still in the store under the hash the chain recorded.
+                    ev = bytes(r.get("aggEvidenceHash", ZERO32))
+                    doc = self.store.get(_hex(ev)) if ev != ZERO32 else None
+                    if doc is not None:
+                        _loss(job, rnd, doc, None)
 
     def advance(self, job: int, rnd: int, ph: Phase):
         r, quorum = self.state.rounds[(job, rnd)], self.state.jobs[job]["params"].minQuorum
@@ -179,11 +185,7 @@ class Driver:
         tables.EVIDENCE[(job, rnd)] = Evidence(job=job, round=rnd, reports=[], aggregate=ref(f.agg_evidence),
                                                pay=ref(f.pay_evidence))
         tables.SETTLEMENTS[(job, rnd)] = {"settlement": f.settlement, "sigs": {}}
-        # /state feeds the web app's loss chart: the gate already measured the validation loss for the evidence.
-        earlier = [s for s in tables.STATES.get(job, JobState(job=job, rounds=[])).rounds if s.round != rnd]
-        here = RoundState(round=rnd, metric=json.loads(f.agg_evidence)["gate"]["valAfter"],
-                          seconds=int(self.now()) - r["openedAt"])
-        tables.STATES[job] = JobState(job=job, rounds=sorted([*earlier, here], key=lambda s: s.round))
+        _loss(job, rnd, f.agg_evidence, int(self.now()) - r["openedAt"])
         log.info("job %s round %s: settlement ready for the verifiers", job, rnd)
 
     def open_rounds(self):
@@ -195,6 +197,13 @@ class Driver:
                 log.info("job %s: opened a round for %s on shards %s", job, ops, shards)
             except Reverted as e:
                 log.warning("job %s: openRound reverted with %s", job, e)
+
+
+def _loss(job: int, rnd: int, agg_evidence: bytes, seconds: int | None) -> None:
+    """/state feeds the web app's loss chart: the gate already measured the validation loss for the evidence."""
+    earlier = [s for s in tables.STATES.get(job, JobState(job=job, rounds=[])).rounds if s.round != rnd]
+    here = RoundState(round=rnd, metric=json.loads(agg_evidence)["gate"]["valAfter"], seconds=seconds)
+    tables.STATES[job] = JobState(job=job, rounds=sorted([*earlier, here], key=lambda s: s.round))
 
 
 def start(store) -> None:
