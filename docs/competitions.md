@@ -42,6 +42,8 @@ $C settle 1                                      # waits for the window, then pa
 $C status 1
 ```
 
+Hosts can use their own labels instead of MNIST (`--labels FILE`, one byte per item, with `--task` to say what's predicted), and entrants their own predictions (`--predictions FILE`, one byte per item). If a host misses the labels window, each entrant runs `$C claim-share ID --name NAME` for an equal part of the prize. A live competition's page says who acts next and shows the command.
+
 ## Limits
 
 Scoring is classification accuracy on one byte per item, so up to 256 classes. AUC, regression and other metrics would need a different scoring rule. There's no entry fee or compute budget yet, though the web wizard has fields for both. Labels and predictions are revealed onchain, so they're public after the deadline. Don't host a competition on data you can't publish.
