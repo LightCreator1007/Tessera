@@ -1,4 +1,4 @@
-"""Verifier loop decisions with a fake market: the safety breaker and the seed steps."""
+"""Verifier loop decisions with a fake market: the safety breaker, the seed steps and missing weights."""
 from types import SimpleNamespace
 
 from tod_core.ledger import Phase, Reverted, RoundStatus
@@ -67,3 +67,27 @@ def test_only_the_two_registered_verifiers_get_anvil_dev_keys(monkeypatch):
     r = CliRunner().invoke(app, ["replay", "--job", "1", "--round", "1", "--network", "anvil",
                                  "--coordinator", "http://127.0.0.1:9", "--key-env", "VERIFIER_C_PRIVATE_KEY"])
     assert r.exit_code == 2 and "VERIFIER_A_PRIVATE_KEY or VERIFIER_B_PRIVATE_KEY" in r.output
+
+
+def test_a_matching_replay_with_no_stored_weights_is_data_unavailable(monkeypatch):
+    nrs = {op: {"revealed": True, "shard": 0, "checkpointRoot": root, "updateHash": bytes([i]) * 32}
+           for i, (op, root) in enumerate([("0xa", ROOT), ("0xb", ROOT), ("0xc", b"\x09" * 32)])}
+    runner = SimpleNamespace(c=SimpleNamespace(url="http://coord"), run=lambda *a: (HS, None, None))
+    monkeypatch.setattr(verify.enc, "checkpoint_root", lambda hs: ROOT)
+    monkeypatch.setattr(verify, "stored", lambda url, h: h != "0x" + "01" * 32)
+    st = SimpleNamespace(rounds={(1, 1): {"status": RoundStatus.OPEN, "seed": b"\1" * 32, "seedBlock": 1,
+                                          "nodeRounds": nrs}})
+    got = {op: v["kind"] for op, v in verify.replay_round(runner, st, 1, 1).items()}
+    assert got == {"0xa": None, "0xb": "DataUnavailable", "0xc": "ReplayMismatch"}
+
+
+def test_each_failure_is_attested_with_its_own_kind(monkeypatch):
+    results = {"0x0": {"kind": "ReplayMismatch"}, "0x1": {"kind": "DataUnavailable"}, "0x2": {"kind": None},
+               "0x3": {"kind": None}, "0x4": {"kind": None}}
+    monkeypatch.setattr(verify, "replay_round", lambda *a: results)
+    market = Market()
+    VerifierLoop(market, "0xV", None).tick(state(seed=b"\1" * 32))
+    assert market.calls == [("attest", [("0x0", 3, False), ("0x1", 2, False)])]
+
+
+ROOT, HS = b"\7" * 32, [b"\0" * 32]

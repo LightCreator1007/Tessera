@@ -113,11 +113,13 @@ class Driver:
 
     def advance(self, job: int, rnd: int, ph: Phase):
         r, quorum = self.state.rounds[(job, rnd)], self.state.jobs[job]["params"].minQuorum
+        if ph in (Phase.VERIFY, Phase.FINALIZE):
+            self.report_no_reveals(job, rnd, r)  # before a void, which would close the round to reports
         if ph in (Phase.VERIFY, Phase.FINALIZE) and r["revealedCount"] < quorum:
             self.l.market.voidRound(job, rnd)
             log.info("job %s round %s: voided, %s of %s revealed", job, rnd, r["revealedCount"], quorum)
             return
-        # ponytail: reportNoReveal and finalizeFallback are left to anyone who gains from them; add here if nobody does
+        # ponytail: finalizeFallback is left to anyone who gains from it; add here if nobody does
         if ph != Phase.FINALIZE:
             return  # nodes commit and reveal, verifiers lock the seed and attest
         pending = tables.SETTLEMENTS.get((job, rnd))
@@ -131,6 +133,17 @@ class Driver:
                 "payouts": [{"operator": op, "amount": a} for op, a in s["payouts"]],
             }, [bytes.fromhex(sig.removeprefix("0x")) for sig in list(pending["sigs"].values())])  # API thread writes
             log.info("job %s round %s: finalized with %s signatures", job, rnd, len(pending["sigs"]))
+
+    def report_no_reveals(self, job: int, rnd: int, r: dict):
+        """Slash every seated node that didn't reveal; the contract escalates repeat misses in a job."""
+        for op, nr in sorted(r["nodeRounds"].items()):
+            if nr["revealed"] or nr["noRevealReported"]:
+                continue
+            try:
+                self.l.market.reportNoReveal(job, rnd, op)
+                log.info("job %s round %s: reported %s for not revealing", job, rnd, op)
+            except Reverted as e:
+                log.warning("job %s round %s: reportNoReveal %s: %s", job, rnd, op, e)
 
     def prepare(self, job: int, rnd: int):
         """Build the Settlement exactly as each verifier will, and publish everything they fetch to check it."""

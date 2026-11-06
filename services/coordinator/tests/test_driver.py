@@ -1,4 +1,4 @@
-"""The round driver against a fake market: void, settle and publish, finalize on two signatures, open rounds."""
+"""The round driver against a fake market: report no-reveals, void, settle and publish, finalize, open rounds."""
 from types import SimpleNamespace as NS
 
 import numpy as np
@@ -59,7 +59,7 @@ def world(tmp_path, monkeypatch):
         store.put(blob)
         return k256(blob)
 
-    nrs = {op: {"slot": i, "committed": True, "revealed": True, "confirmed": Kind.NONE,
+    nrs = {op: {"slot": i, "committed": True, "revealed": True, "noRevealReported": False, "confirmed": Kind.NONE,
                 "updateHash": put(start + np.float32(0.001) * (i + 1))} for i, op in enumerate(OPS[:3])}
     s.rounds[(1, 1)] = {"status": RoundStatus.OPEN, "fallback_": False, "openedAt": 10, "nodes": OPS[:3],
                         "shards": [0, 1, 2], "nodeRounds": nrs, "revealedCount": 3, "budget": 300, "drip": 0,
@@ -129,3 +129,14 @@ def test_a_broken_round_does_not_stop_the_tick(world):
     world.d.datasets = offline
     world.d.tick()  # logged, and the rest of the tick still runs
     assert (1, 1) not in tables.SETTLEMENTS and tables.ROUNDS[1][1].status == "verifying"
+
+
+def test_reports_no_reveals_before_voiding(world):
+    nrs = world.s.rounds[(1, 1)]["nodeRounds"]
+    for op in OPS[1:3]:
+        nrs[op]["revealed"] = False
+    nrs[OPS[2]]["noRevealReported"] = True  # already reported, by us or anyone else
+    world.s.rounds[(1, 1)]["revealedCount"] = 1
+    world.market.phases[(1, 1)] = Phase.VERIFY
+    world.d.tick()
+    assert world.market.calls == [("reportNoReveal", 1, 1, OPS[1]), ("voidRound", 1, 1)]
