@@ -1,0 +1,37 @@
+{
+  "name": "@tod/web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev -p 3100",
+    "build": "node scripts/rails.mjs && next build",
+    "start": "next start -p 3100",
+    "typecheck": "tsc --noEmit",
+    "rails": "node scripts/rails.mjs",
+    "gen:api": "openapi-typescript ../../services/coordinator/openapi.json -o lib/api/schema.d.ts"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.4",
+    "@types/d3-scale": "^4.0.9",
+    "@types/d3-shape": "^3.2.0",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "agentation": "3.1.2",
+    "dialkit": "2.0.2",
+    "motion": "14.3.1",
+    "tailwindcss": "^4.3.4",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.105.3",
+    "d3-scale": "^4.0.3",
+    "d3-shape": "^3.2.1",
+    "lucide-react": "^1.67.0",
+    "next": "^16.4.5",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "viem": "^2.57.16"
+  }
+}
