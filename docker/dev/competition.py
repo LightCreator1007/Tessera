@@ -155,8 +155,11 @@ def settle(ledger, args):
         sys.exit("labels aren't revealed yet; run reveal first")
     wait_until(ledger, c.labelsRevealedAt + c.revealWindow, "the scoring window to close")
     actor(ledger, "reveal/dev").l.competitions.settle(args.id)
-    out = http(f"/v1/competitions/{args.id}")
-    print(json.dumps(out["settled"]), flush=True)
+    c = ledger.competitions.competition(args.id)  # the chain, not the coordinator's few-second cache
+    if c.scored:
+        print(f"paid {c.prize / TOD:g} TOD to {c.best}, who scored {c.bestScore}/{c.items}", flush=True)
+    else:
+        print(f"nothing was scored; refunded {c.prize / TOD:g} TOD to the host {c.host}", flush=True)
 
 
 def status(_, args):
