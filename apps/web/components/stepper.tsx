@@ -1,5 +1,5 @@
 "use client";
-// A one-line stepper: numbered mono labels joined by hairlines. Done steps go ink (and can link back), the current one carries the vermilion caret.
+// A one-line stepper: numbered mono labels joined by hairlines. Done steps get a check (and can link back), the current one is ink.
 import Link from "next/link";
 import { Check } from "lucide-react";
 import { cx } from "@/components/primitives";
@@ -16,7 +16,6 @@ export function Stepper({ steps, current, label = "Progress" }: { steps: readonl
             <span className={cx("flex items-center gap-2 whitespace-nowrap transition-colors duration-150 ease-out", state === "done" && "text-muted hover:text-ink", state === "current" && "text-ink", state === "todo" && "text-subtle")}>
               {state === "done" ? <Check className="size-3.5" strokeWidth={2.5} aria-hidden /> : <span className="tabular">{String(i + 1).padStart(2, "0")}</span>}
               <span className={cx(i !== current && "hidden sm:inline")}>{s.word}</span>
-              {state === "current" && <span className="hq-caret" aria-hidden />}
             </span>
           );
           return (

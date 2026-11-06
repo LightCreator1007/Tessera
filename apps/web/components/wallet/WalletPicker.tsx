@@ -1,7 +1,7 @@
 "use client";
-// The wallet step as a page section: the wallets installed in this browser (EIP-6963), approve in one, land on the app's network. The page around it decides where to go once the wallet is ready.
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ArrowLeft, ArrowUpRight, Check, Smartphone, Wallet } from "lucide-react";
+// The wallet step: the wallets installed in this browser (EIP-6963) first, then the common ones that aren't installed, as install links. Approve in one, land on the app's network; the page or sheet around it decides where to go next.
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { ArrowLeft, ArrowUpRight, Check, Download, Smartphone, Wallet } from "lucide-react";
 import { useWallet } from "@/lib/wallet";
 import { demoOutcome } from "@/lib/tx";
 import { isDemo } from "@/lib/api/client";
@@ -18,11 +18,14 @@ const DEMO_WALLETS: WalletInfo[] = [
 const DEMO_SNAP = { wallets: DEMO_WALLETS, settled: true };
 const noSub = () => () => {};
 const demoSnap = () => DEMO_SNAP;
+/** Always offered, installed or not. */
+const OFFERED = GET_WALLETS.filter((g) => g.rdns !== "io.rabby");
 
 type Stage = "pick" | "approve" | "rejected";
-type View = Stage | "pending" | "failed" | "network" | "ready" | "none";
+type View = Stage | "pending" | "failed" | "network" | "ready";
 
-export function WalletPicker({ title = "Connect a wallet", lede }: { title?: string; lede?: string }) {
+/** `plain` drops the card, for a host that already frames it (the sign-in sheet). */
+export function WalletPicker({ title = "Connect a wallet", lede, eyebrow, plain }: { title?: string; lede?: string; eyebrow?: string; plain?: boolean }) {
   const w = useWallet();
   const found = useSyncExternalStore(isDemo ? noSub : subscribeWallets, isDemo ? demoSnap : walletsSnapshot, walletsServerSnapshot);
   const [stage, setStage] = useState<Stage>("pick");
@@ -50,58 +53,65 @@ export function WalletPicker({ title = "Connect a wallet", lede }: { title?: str
     : stage === "approve" && err?.kind === "rejected" ? "rejected"
     : stage === "approve" && err?.kind === "pending" ? "pending"
     : stage === "approve" && err ? "failed"
-    : stage === "pick" && found.settled && !found.wallets.length ? "none"
     : stage;
   const net = networkName(w.targetChainId);
-  const head = { ...HEAD, pick: title };
+  const installed = found.wallets;
+  const missing = OFFERED.filter((g) => !installed.some((i) => i.rdns === g.rdns));
+  const none = found.settled && !installed.length;
+  const heading = view === "pick" ? (none ? "Get a wallet to sign in" : title) : HEAD[view];
+  const sub = view === "pick" ? (none ? NONE_LEDE : lede ?? LEDE.pick(shown, net)) : LEDE[view](shown, net);
 
   return (
-    <section aria-labelledby="wallet-title" className="border border-rule bg-card">
-      <div key={view} className="animate-step-in flex max-w-xl flex-col gap-6 p-6 md:p-8">
+    <section aria-labelledby="wallet-title" className={cx(!plain && "border border-rule bg-card")}>
+      <div key={view} className={cx("animate-step-in flex flex-col gap-6", !plain && "max-w-xl p-6 md:p-8")}>
         <div className="flex items-start gap-3">
           {(view === "approve" || view === "rejected" || view === "pending" || view === "failed") && (
-            <button type="button" onClick={back} aria-label="Back to wallets" className="-ml-2 inline-flex size-9 shrink-0 items-center justify-center rounded-md text-subtle hover:bg-hover hover:text-ink">
+            <button type="button" onClick={back} aria-label="Back to wallets" className="-ml-2 mt-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-md text-subtle hover:bg-hover hover:text-ink">
               <ArrowLeft className="size-4" />
             </button>
           )}
           <div className="flex min-w-0 flex-col gap-2">
-            <h2 id="wallet-title" className="text-xl font-medium tracking-tight text-ink">{head[view]}</h2>
-            <p className="text-sm leading-relaxed text-muted">{view === "pick" && lede ? lede : sub(view, shown, net)}</p>
+            {eyebrow && <span className="font-mono text-xs uppercase tracking-wide text-mosaic">{eyebrow}</span>}
+            <h2 id="wallet-title" className={cx("text-balance font-medium tracking-tight text-ink", plain ? "text-2xl" : "text-xl")}>{heading}</h2>
+            <p className="max-w-md text-sm leading-relaxed text-muted">{sub}</p>
           </div>
         </div>
 
         {view === "pick" && (
           found.settled ? (
-            <ul className="flex flex-col gap-2" aria-label="Wallets in this browser">
-              {found.wallets.map((o, i) => (
-                <li key={o.id} className="animate-step-in" style={{ animationDelay: `${i * 60}ms` }}>
-                  <button
-                    type="button"
-                    onClick={() => pick(o)}
-                    className="group flex w-full items-center gap-4 border border-rule bg-raised px-4 py-3.5 text-left transition-colors duration-150 ease-out hover:border-rule-strong hover:bg-hover"
-                  >
-                    <WalletMark wallet={o} />
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="text-sm text-ink">{o.name}</span>
-                      <span className="text-sm text-subtle">{w.walletInfo?.rdns === o.rdns ? "Used last time" : "Installed"}</span>
-                    </span>
-                    <ArrowUpRight className="size-4 text-subtle transition-transform duration-150 ease-out group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-ink" aria-hidden />
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <div className="flex flex-col gap-5">
+              {installed.length > 0 && (
+                <ul className="flex flex-col gap-2" aria-label="Wallets in this browser">
+                  {installed.map((o, i) => (
+                    <li key={o.id} className="animate-step-in" style={{ animationDelay: `${i * 60}ms` }}>
+                      <Row onClick={() => pick(o)} mark={<WalletMark icon={o.icon} name={o.name} />} name={o.name}
+                        note={w.walletInfo?.rdns === o.rdns ? "Used last time" : "Installed"} noteTone="ok" />
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {missing.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  {installed.length > 0 && <span className="font-mono text-xs uppercase tracking-wide text-subtle">Other wallets</span>}
+                  <ul className="flex flex-col gap-2" aria-label="Wallets you can install">
+                    {missing.map((g, i) => (
+                      <li key={g.rdns} className="animate-step-in" style={{ animationDelay: `${(installed.length + i) * 60}ms` }}>
+                        <Row href={g.href} mark={<WalletMark icon={null} name={g.name} />} name={g.name} note="Not installed · get it" install />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {none && <PhoneHint />}
+            </div>
           ) : (
             <div className="flex items-center gap-3 py-2 text-sm text-subtle" role="status"><TileBusy /> Looking for wallets in this browser</div>
           )
         )}
 
-        {view === "none" && <GetAWallet />}
-
         {(view === "approve" || view === "pending") && (
           <div className="flex flex-col items-start gap-5">
-            <span className="inline-flex size-16 items-center justify-center rounded-xl bg-brand-ink text-mosaic">
-              {shown?.icon ? <img src={shown.icon} alt="" className="size-9" /> : <Wallet className="size-7" strokeWidth={1.5} aria-hidden />}
-            </span>
+            <WalletMark icon={shown?.icon ?? null} name={shown?.name ?? "Wallet"} large />
             <p className="flex items-center gap-3 text-sm text-subtle" role="status"><TileBusy /> {view === "pending" ? "Still waiting" : "Waiting"} for {shown?.name ?? "your wallet"}</p>
             {view === "pending" && <Button variant="ghost" onClick={() => shown && pick(shown)}>Ask again</Button>}
           </div>
@@ -132,11 +142,11 @@ export function WalletPicker({ title = "Connect a wallet", lede }: { title?: str
             <span className="hq-stamp inline-flex size-12 shrink-0 items-center justify-center rounded-xl bg-ink text-brand-ink">
               <Check className="size-6" aria-hidden />
             </span>
-            <p className={cx("break-all font-mono text-sm text-muted")}>{w.address}</p>
+            <p className="break-all font-mono text-sm text-muted">{w.address}</p>
           </div>
         )}
 
-        {view === "pick" && (
+        {view === "pick" && !plain && (
           <More label="New to wallets?">
             <p>A wallet holds the keys to your account. Tessera never sees them: every payment, stake or claim opens in the wallet and waits for you to approve it.</p>
             <p>This is a test network. Any wallet works, and the money on it is test money you can get for free.</p>
@@ -147,54 +157,67 @@ export function WalletPicker({ title = "Connect a wallet", lede }: { title?: str
   );
 }
 
-/** The wallet's own icon from its announcement, else a plain tile. */
-function WalletMark({ wallet }: { wallet: WalletInfo }) {
+/** One wallet row: a button for an installed wallet, a link out for one to install. */
+function Row({ onClick, href, mark, name, note, noteTone, install }: { onClick?: () => void; href?: string; mark: ReactNode; name: string; note: string; noteTone?: "ok"; install?: boolean }) {
+  const cls = cx(
+    "group flex w-full items-center gap-4 border px-4 py-3 text-left transition-colors duration-150 ease-out",
+    install ? "border-dashed border-rule hover:border-rule-strong hover:bg-hover" : "border-rule bg-raised hover:border-rule-strong hover:bg-hover",
+  );
+  const inner = (
+    <>
+      {mark}
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className={cx("text-sm", install ? "text-muted group-hover:text-ink" : "text-ink")}>{name}</span>
+        <span className={cx("text-xs", noteTone === "ok" ? "text-ok" : "text-subtle")}>{note}</span>
+      </span>
+      {install
+        ? <Download className="size-4 text-subtle transition-transform duration-150 ease-out group-hover:translate-y-0.5 group-hover:text-ink" aria-hidden />
+        : <ArrowUpRight className="size-4 text-subtle transition-transform duration-150 ease-out group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-ink" aria-hidden />}
+    </>
+  );
+  return href
+    ? <a href={href} target="_blank" rel="noreferrer" className={cls}>{inner}<span className="sr-only"> (opens the install page)</span></a>
+    : <button type="button" onClick={onClick} className={cls}>{inner}</button>;
+}
+
+/** The wallet's own icon from its announcement; otherwise a mono initial on a dark tile. */
+function WalletMark({ icon, name, large }: { icon: string | null; name: string; large?: boolean }) {
   return (
-    <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-md bg-brand-ink text-mosaic">
-      {wallet.icon ? <img src={wallet.icon} alt="" className="size-6" /> : <Wallet className="size-5" strokeWidth={1.5} aria-hidden />}
+    <span className={cx("inline-flex shrink-0 items-center justify-center bg-brand-ink text-mosaic", large ? "size-16 rounded-xl" : "size-10 rounded-md")}>
+      {icon
+        ? <img src={icon} alt="" className={large ? "size-9" : "size-6"} />
+        : name === "Wallet" ? <Wallet className="size-5" strokeWidth={1.5} aria-hidden />
+        : <span aria-hidden className={cx("font-mono font-medium", large ? "text-xl" : "text-sm")}>{name[0]}</span>}
     </span>
   );
 }
 
-/** No extension here. On a phone, a wallet app's own browser is the way in; on desktop, install one. */
-function GetAWallet() {
+/** Phones have no extensions: a wallet app's own browser is the way in. */
+function PhoneHint() {
   const [here, setHere] = useState("");
   useEffect(() => setHere(window.location.host + window.location.pathname + window.location.search), []);
   return (
-    <div className="flex flex-col gap-4">
-      <ul className="grid grid-cols-2 gap-2">
-        {GET_WALLETS.map((g) => (
-          <li key={g.rdns}>
-            <a href={g.href} target="_blank" rel="noreferrer" className="group flex items-center justify-between gap-2 border border-rule bg-raised px-3 py-3 text-sm text-ink transition-colors duration-150 ease-out hover:border-rule-strong hover:bg-hover">
-              {g.name}
-              <ArrowUpRight className="size-4 text-subtle transition-transform duration-150 ease-out group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-ink" aria-hidden />
-            </a>
-          </li>
-        ))}
-      </ul>
+    <div className="flex flex-col gap-2">
       <a href={`https://metamask.app.link/dapp/${here}`} className="inline-flex items-center gap-2 self-start text-sm text-muted underline decoration-subtle underline-offset-4 hover:text-ink">
         <Smartphone className="size-4" aria-hidden /> On a phone? Open this page in MetaMask
       </a>
-      <p className="text-sm text-subtle">After installing, reload this page and it will show up here.</p>
+      <p className="text-xs text-subtle">After installing a wallet, reload this page and it shows up at the top.</p>
     </div>
   );
 }
 
-const HEAD: Record<View, string> = {
-  pick: "Connect a wallet", none: "No wallet in this browser", approve: "Approve in your wallet", pending: "Finish in your wallet",
-  rejected: "The request was closed", failed: "The wallet didn't connect", network: "Switch network", ready: "Wallet connected",
+const HEAD: Record<Exclude<View, "pick">, string> = {
+  approve: "Approve in your wallet", pending: "Finish in your wallet", rejected: "The request was closed",
+  failed: "The wallet didn't connect", network: "Switch network", ready: "Wallet connected",
 };
+const NONE_LEDE = "Tessera works with any browser wallet. Install one, then come back. Your wallet is your login, so there's no account to make.";
 
-function sub(view: View, choice: WalletInfo | null, net: string) {
-  const name = choice?.name ?? "your wallet";
-  switch (view) {
-    case "pick": return "It pays, stakes and collects. Nothing moves without your approval.";
-    case "none": return "Tessera works with any browser wallet. Install one, then come back. Your wallet is your login, so there's no account to make.";
-    case "approve": return `Open ${name} and approve the request. Tessera sees your address and nothing else.`;
-    case "pending": return `${name} already has a request open for this site. Click its icon in your browser's toolbar to finish it.`;
-    case "rejected": return "Nothing was shared. Try again, or pick a different wallet.";
-    case "failed": return `${name} answered with an error. Trying again usually works; if it doesn't, unlock the wallet first.`;
-    case "network": return `Your wallet is on another network. Everything here runs on ${net}.`;
-    case "ready": return `You're on ${net}. Taking you to the next step.`;
-  }
-}
+const LEDE: Record<View, (choice: WalletInfo | null, net: string) => string> = {
+  pick: () => "It pays, stakes and collects. Nothing moves without your approval.",
+  approve: (c) => `Open ${c?.name ?? "your wallet"} and approve the request. Tessera sees your address and nothing else.`,
+  pending: (c) => `${c?.name ?? "Your wallet"} already has a request open for this site. Click its icon in your browser's toolbar to finish it.`,
+  rejected: () => "Nothing was shared. Try again, or pick a different wallet.",
+  failed: (c) => `${c?.name ?? "Your wallet"} answered with an error. Trying again usually works; if it doesn't, unlock the wallet first.`,
+  network: (_c, net) => `Your wallet is on another network. Everything here runs on ${net}.`,
+  ready: (_c, net) => `You're on ${net}. Taking you to the next step.`,
+};

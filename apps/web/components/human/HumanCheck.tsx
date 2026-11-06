@@ -58,7 +58,8 @@ const COPY: Record<Fail["kind"], { title: string; body: (d: string) => ReactNode
   failed: { title: "Something went wrong", body: (d) => `It didn't go through${d ? ` (${d})` : ""}. Try again.`, crack: true, retry: true, word: "FAILED" },
 };
 
-export function HumanCheck({ onVerified, intro }: { onVerified?: (v: Verified) => void; intro?: ReactNode }) {
+/** `split` lets a host place the art and the words itself (the sign-in sheet puts them in its two halves). */
+export function HumanCheck({ onVerified, intro, split }: { onVerified?: (v: Verified) => void; intro?: ReactNode; split?: (art: ReactNode, body: ReactNode) => ReactNode }) {
   const human = useHuman();
   const cfgQ = useIdentityConfig();
   const cfg: IdentityConfig = cfgQ.data ?? DEMO_CONFIG;
@@ -226,7 +227,7 @@ export function HumanCheck({ onVerified, intro }: { onVerified?: (v: Verified) =
     <div key={shownStage + (fail?.kind ?? "")} className="animate-step-in flex min-w-0 flex-col gap-6">
       <div className="flex flex-col gap-2">
         <span className="font-mono text-xs uppercase tracking-wide text-mosaic">World ID · {cfg.mode === "dev" ? "dev identity, local chain" : "checked once"}</span>
-        <h2 className="text-balance text-xl font-medium tracking-tight text-ink">{copy.title}</h2>
+        <h2 className={cx("text-balance font-medium tracking-tight text-ink", split ? "text-2xl" : "text-xl")}>{copy.title}</h2>
         <div className="max-w-md text-sm leading-relaxed text-muted">{copy.body}</div>
         {shownStage === "failed" && fail?.ref && <span className="font-mono text-xs text-subtle">Reference {fail.ref}</span>}
       </div>
@@ -254,6 +255,7 @@ export function HumanCheck({ onVerified, intro }: { onVerified?: (v: Verified) =
     </div>
   );
 
+  if (split) return <>{split(art, body)}</>;
   return (
     <section aria-label="Prove you're one person" className="grid overflow-hidden border border-rule bg-card md:grid-cols-2">
       <div className="relative aspect-square border-b border-rule bg-sunken md:aspect-auto md:min-h-120 md:border-b-0 md:border-r">{art}</div>
@@ -293,8 +295,8 @@ function StageArt({ stage, uri, crack, meta }: { stage: Stage; uri: string | nul
         </span>
       )}
       <>
-          <p aria-hidden className="pointer-events-none absolute left-5 top-4 select-none text-2xl font-medium leading-none tracking-tight text-field">One<br />person.</p>
-          <dl className="absolute bottom-4 left-5 flex flex-col font-mono text-xs uppercase leading-relaxed tracking-wide text-ink">
+          <p aria-hidden className="pointer-events-none absolute left-8 top-7 select-none text-2xl font-medium leading-none tracking-tight text-field">One<br />person.</p>
+          <dl className="absolute bottom-7 left-8 flex flex-col font-mono text-xs uppercase leading-relaxed tracking-wide text-ink">
             {meta.map((m, i) => (
               <dd key={`${i}-${m}`} className="animate-step-in" style={{ animationDelay: `${i * 70}ms` }}>
                 <span className={cx("px-1", i > 0 ? "bg-surface/60" : stage === "verified" ? "bg-bone text-brand-ink" : stage === "failed" && crack ? "bg-mosaic text-brand-ink" : "bg-surface")}>{m}</span>
