@@ -11,13 +11,15 @@ from api.draft import mlp
 from store import DiskStore
 from tod_core.blob import from_blob, k256, to_blob
 from tod_core.evidence import canonical
-from tod_core.ledger import ChainState, JobStatus, Kind, Phase, RoundStatus
+from tod_core.ledger import ChainState, Event, JobStatus, Kind, Phase, RoundStatus
 from tod_core.settle import settle
 from tod_datasets.canonical import split
+from tod_workloads import compute
 
 OPS = ["0x" + f"{i:02x}" * 20 for i in range(1, 5)]
 DATA = "0x" + "dd" * 32
-SPEC = {"workload": {"id": "mlp-exact/1"}, "train": {"lr": "0.05"}, "gate": {"relTol": "0.1", "absTol": "0.01"},
+SPEC = {"workload": {"id": "mlp-exact/1"}, "train": {"lr": "0.05", "H": 50, "B": 8},
+        "gate": {"relTol": "0.1", "absTol": "0.01"},
         "model": {"inputShape": [4], "outputs": 3, "hidden": 8, "task": "classification"},
         "data": {"shards": split(200, 3, "0.05", "0.1")["shards"], "valFrac": "0.05", "testFrac": "0.1"}}
 rng = np.random.default_rng(0)
@@ -41,7 +43,7 @@ class Market:
 @pytest.fixture
 def world(tmp_path, monkeypatch):
     for t in ("JOBS", "ROUNDS", "SPECS", "MODELS", "EVIDENCE", "SETTLEMENTS", "STATES", "CONTROL", "MISSED", "REARMED",
-              "SEATING", "STALLED", "PUBLIC"):
+              "PROVIDERS", "SEATING", "STALLED", "PUBLIC"):
         monkeypatch.setattr(tables, t, {})
     store = DiskStore(tmp_path)
     spec_bytes = canonical(SPEC)
@@ -94,6 +96,30 @@ def test_settles_like_a_verifier_and_publishes_what_it_needs(world):
     gate = json.loads(world.store.get(ev.aggregate.hash))["gate"]
     assert tables.STATES[1].model_dump() == {"job": 1, "rounds": [{"round": 1, "metric": gate["valAfter"], "seconds": 990}],
                                              "trust": "untrusted"}
+
+
+def credit(state, owner, job, rnd):
+    state.apply(Event("WorkCredited", {"owner": owner, "jobId": job, "roundId": rnd, "seconds_": 1, "total": 1},
+                      1, 0, "0x", None), None)
+
+
+def test_a_provider_total_counts_each_credited_round(world):
+    credit(world.s, OPS[0], 1, 1)
+    credit(world.s, OPS[0], 1, 2)
+    credit(world.s, OPS[1], 1, 1)
+    world.d.publish({(1, 1): Phase.FINALIZE})
+    one_round = compute.round_ops(SPEC)
+    p = tables.PROVIDERS[OPS[0].lower()]
+    assert (p.owner, p.rounds, p.ops) == (OPS[0], 2, 2 * one_round)
+    assert tables.PROVIDERS[OPS[1].lower()].ops == one_round
+
+
+def test_a_job_it_cannot_count_adds_nothing_and_stops_nothing(world):
+    credit(world.s, OPS[0], 1, 1)
+    credit(world.s, OPS[0], 99, 1)  # a job with no spec here
+    world.d.publish({(1, 1): Phase.FINALIZE})
+    p = tables.PROVIDERS[OPS[0].lower()]
+    assert (p.rounds, p.ops) == (2, compute.round_ops(SPEC))
 
 
 def test_finalizes_once_the_threshold_signed(world):

@@ -1,7 +1,8 @@
-# Whole local stack in one command: anvil, deploy, coordinator, a seeded MNIST job, two verifiers and three nodes.
+# Whole local stack in one command: anvil, deploy, coordinator, a seeded MNIST job, two verifiers and four nodes.
 # From the repo root (contracts/lib checked out): docker compose -f docker/compose.dev.yml up --build
 # Every service shares anvil's network, so 127.0.0.1:8545 and the coordinator at 127.0.0.1:8000 work the same inside
-# and outside. Each node's local API is on 127.0.0.1:7777-7779. node-0 runs fake:lazy, so a round shows a slash.
+# and outside. Each node's local API is on 127.0.0.1:7777-7780. node-0 runs fake:lazy, so a round shows a slash,
+# and the job needs only three nodes per round, so the other three can finish it.
 # Local chain only: every key is a public dev key.
 
 x-app: &app
@@ -35,7 +36,7 @@ services:
     volumes: [dev-data:/dev-data]
     # TOD_BIND=0.0.0.0 lets other PCs on the LAN reach the chain and the coordinator for a demo; every key here is
     # public, so only do that on a network you trust. The node APIs stay on this machine.
-    ports: ["${TOD_BIND:-127.0.0.1}:8545:8545", "${TOD_BIND:-127.0.0.1}:8000:8000", "127.0.0.1:7777-7779:7777-7779"]
+    ports: ["${TOD_BIND:-127.0.0.1}:8545:8545", "${TOD_BIND:-127.0.0.1}:8000:8000", "127.0.0.1:7777-7780:7777-7780"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen(u.Request('http://127.0.0.1:8545', data=b'{\"jsonrpc\":\"2.0\",\"method\":\"eth_chainId\",\"params\":[],\"id\":1}', headers={'content-type': 'application/json'}), timeout=2)"]
       interval: 2s
@@ -88,6 +89,10 @@ services:
   node-2:
     <<: *node
     environment: {<<: *env, TOD_DATA: /dev-data/node2, TOD_API_BIND: "0.0.0.0:7779"}
+
+  node-3:
+    <<: *node
+    environment: {<<: *env, TOD_DATA: /dev-data/node3, TOD_API_BIND: "0.0.0.0:7780"}
 
 volumes:
   dev-data:
