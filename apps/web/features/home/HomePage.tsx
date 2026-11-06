@@ -1,5 +1,6 @@
 "use client";
 // Home adapts to what you have, not to a role (REVAMP-3 section 6). Signed out it is the landing: hero, network strip, live rounds. Signed in it is your workspace in a fixed order: your training, balance, your node, the network. An empty section shrinks to one line instead of disappearing.
+import { calls } from "@/lib/chain";
 import { LiveSystem } from "@/components/mosaic/isoScenes";
 import { OfflineBanner } from "@/components/mosaic/OfflineBanner";
 import Link from "next/link";
@@ -218,7 +219,7 @@ function BalanceCard() {
       {spent === 0 && earned > 0 && <p className="text-sm text-muted">What your node earned can pay for a job, with no approve step.</p>}
       <div className="flex flex-wrap items-center gap-2">
         {w.claimable > 0 && <ButtonLink href="/jobs/new" variant="primary">Spend on a job</ButtonLink>}
-        <TxButton tx={claim} variant="secondary" label="Claim" disabled={w.claimable === 0} why="Nothing to claim yet" onRun={() => claim.run(() => setWallet((x) => ({ usdc: x.usdc + x.claimable, claimable: 0, claims: [...x.claims, { amount: x.claimable, at: Date.now() }] })))} />
+        <TxButton tx={claim} variant="secondary" label="Claim" disabled={w.claimable === 0} why="Nothing to claim yet" onRun={() => claim.send(calls.claim, () => setWallet((x) => ({ usdc: x.usdc + x.claimable, claimable: 0, claims: [...x.claims, { amount: x.claimable, at: Date.now() }] })))} />
       </div>
       <TxStatus tx={claim} />
     </Card>

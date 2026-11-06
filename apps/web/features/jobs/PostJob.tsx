@@ -1,5 +1,6 @@
 "use client";
-// Post a job one step at a time: data, model, budget, review and post. Advanced settings (stake, nodes per round, epochs) sit behind disclosures with valid defaults. Drafting goes through POST /v1/jobs/draft (live, or fixtures in demo), then approve and createJob.
+// Post a job one step at a time: data, model, price, review and post. The coordinator prices the job from its spec through POST /v1/jobs/draft (live, or fixtures in demo), so the form never asks for a budget, rounds or stake. Then approve and createJob.
+import { calls } from "@/lib/chain";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -93,7 +94,7 @@ export function PostJob() {
   const wl = WORKLOADS.find((x) => x.id === f.workload);
 
   const post = () =>
-    create.run(() => {
+    drafted && need !== null && rounds !== null && create.send(() => calls.createJob(drafted.createJobCalldata, fromBalance), () => {
       const id = 100 + w.postedJobs.length + 1;
       setWallet((x) => ({
         usdc: x.usdc - need,
@@ -210,11 +211,11 @@ export function PostJob() {
               },
               {
                 key: "fund", title: shortBy > 0 && !posted ? `Get ${formatToken(shortBy)} more TOD` : "Enough TOD", done: shortBy <= 0 || posted, note: <Money units={w.usdc} />,
-                body: <><p className="text-sm text-muted">You have {formatToken(w.usdc)} TOD. Test TOD is free on this network.</p><TxButton tx={mint} label="Get test TOD" onRun={() => mint.run(() => setWallet((x) => ({ usdc: x.usdc + 200 * TOD })))} /><TxStatus tx={mint} /></>,
+                body: <><p className="text-sm text-muted">You have {formatToken(w.usdc)} TOD. Test TOD is free on this network.</p><TxButton tx={mint} label="Get test TOD" onRun={() => mint.send(calls.faucet, () => setWallet((x) => ({ usdc: x.usdc + 200 * TOD })))} /><TxStatus tx={mint} /></>,
               },
               {
                 key: "approve", title: need === 0 ? "No approve needed" : `Allow ${formatToken(need)} TOD`, done: need === 0 || w.allowance >= need || posted, note: need === 0 ? "earnings cover the whole budget" : "exact amount only",
-                body: <><p className="text-sm text-muted">Your wallet asks once, for this amount exactly.</p><TxButton tx={approve} label="Approve" onRun={() => approve.run(() => setWallet({ allowance: need }))} /><TxStatus tx={approve} /></>,
+                body: <><p className="text-sm text-muted">Your wallet asks once, for this amount exactly.</p><TxButton tx={approve} label="Approve" onRun={() => approve.send(() => calls.approve("market", need), () => setWallet({ allowance: need }))} /><TxStatus tx={approve} /></>,
               },
               {
                 key: "post", title: posted ? "Posted" : "Lock the budget and post", done: posted, note: "taking you to your jobs",
