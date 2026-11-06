@@ -39,7 +39,8 @@ export const pool: Pool = { online: 6, idle: 3, busy: 3 };
 export const jobs: Job[] = [
   { id: 7, workload: "mlp-exact", status: "running", trust: "chain", budget: 120 * TOD, remaining: 78.4 * TOD, rounds: 20, currentRound: 8, modelSpecHash: hex("spec7"), requester: REQ[0], stakePerNode: 5 * TOD },
   { id: 6, workload: "cnn-torch", status: "running", trust: "hash-checked", budget: 300 * TOD, remaining: 261 * TOD, rounds: 12, currentRound: 2, modelSpecHash: hex("spec6"), requester: REQ[1], stakePerNode: 10 * TOD },
-  { id: 5, workload: "mlp-exact", status: "open", trust: "chain", budget: 40 * TOD, remaining: 40 * TOD, rounds: 8, currentRound: null, modelSpecHash: hex("spec5"), requester: REQ[2], stakePerNode: 2 * TOD },
+  { id: 5, workload: "mlp-exact", status: "open", trust: "chain", budget: 40 * TOD, remaining: 40 * TOD, rounds: 8, currentRound: null, modelSpecHash: hex("spec5"), requester: REQ[2], stakePerNode: 2 * TOD,
+    waiting: { since: Math.floor(Date.now() / 1000) - 40 * 60, eligible: 1, quorum: 3, blocked: { busy: 2, stake: 1, offline: 1 }, abandonAfter: Math.floor(Date.now() / 1000) - 60 } },
   { id: 4, workload: "mlp-exact", status: "completed", trust: "chain", budget: 60 * TOD, remaining: 0, rounds: 12, currentRound: 12, modelSpecHash: hex("spec4"), requester: REQ[0], stakePerNode: 5 * TOD,
     published: { round: 11, keccak: hex("agg4-11"), state: "indexed", arkivKey: hex("arkiv4"), arkivTx: hex("arkivtx4"), swarmRef: hex("swarm4").slice(2) } },
   { id: 3, workload: "cnn-torch", status: "abandoned", trust: "untrusted", budget: 90 * TOD, remaining: 61.2 * TOD, rounds: 10, currentRound: 3, modelSpecHash: hex("spec3"), requester: REQ[1], stakePerNode: 10 * TOD },
