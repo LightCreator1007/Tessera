@@ -1,6 +1,8 @@
 "use client";
-// The one transaction state machine: idle -> wallet (confirm in wallet) -> pending (hash) -> confirmed | rejected | reverted (decoded reason). Every write in the app goes through useTx; writeContract lives only here when the chain is wired.
+// The one transaction state machine: idle -> wallet (confirm in wallet) -> pending (hash) -> confirmed | rejected | reverted (decoded reason). Every write in the app goes through useTx. In live mode a write with a call goes to the chain through lib/chain; demo mode and writes with no contract yet are simulated.
 import { useCallback, useRef, useState } from "react";
+import { isDemo } from "@/lib/api/client";
+import { Refused, Rejected, send, type Call } from "@/lib/chain";
 
 export type TxPhase = "idle" | "wallet" | "pending" | "confirmed" | "rejected" | "reverted";
 export type TxState = { phase: TxPhase; hash: string | null; reason: string | null };
@@ -28,6 +30,10 @@ export const REVERT_COPY: Record<string, string> = {
   HostCannotEnter: "The host's World ID can't enter its own competition.",
   DeadlinePassed: "The deadline passed while you were signing. Entries are closed.",
   InsufficientBalance: "Your earnings balance is smaller than the amount used.",
+  TooEarly: "It's too early for this. The job's window hasn't closed yet.",
+  NotJoined: "This operator hasn't joined the network yet.",
+  CooldownActive: "The faucet sent you test TOD recently. Wait for its cooldown and try again.",
+  EmptyFaucet: "The faucet is out of test TOD. Ask the team to top it up.",
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -36,9 +42,15 @@ const fakeHash = () => "0x" + Array.from({ length: 64 }, (_, i) => "0123456789ab
 export function useTx({ revertAs = "BadInput" }: { revertAs?: keyof typeof REVERT_COPY } = {}) {
   const [s, setS] = useState<TxState>({ phase: "idle", hash: null, reason: null });
   const busy = useRef(false);
-  const run = useCallback(async (onConfirmed?: () => void) => {
+  const run = useCallback(async (onConfirmed?: () => void, call?: () => Promise<Call>) => {
     if (busy.current) return false;
     busy.current = true;
+    if (!isDemo && call) {
+      const ok = await live(call, setS);
+      busy.current = false;
+      if (ok) onConfirmed?.();
+      return ok;
+    }
     const outcome = demoOutcome();
     setS({ phase: "wallet", hash: null, reason: null });
     await sleep(900);
@@ -61,5 +73,21 @@ export function useTx({ revertAs = "BadInput" }: { revertAs?: keyof typeof REVER
     return true;
   }, [revertAs]);
   const reset = useCallback(() => setS({ phase: "idle", hash: null, reason: null }), []);
-  return { ...s, run, reset, busy: s.phase === "wallet" || s.phase === "pending" };
+  /** A chain write: sent for real in live mode, simulated in demo. */
+  const send = useCallback((call: () => Promise<Call>, onConfirmed?: () => void) => run(onConfirmed, call), [run]);
+  return { ...s, run, send, reset, busy: s.phase === "wallet" || s.phase === "pending" };
+}
+
+async function live(call: () => Promise<Call>, setS: (s: TxState) => void): Promise<boolean> {
+  setS({ phase: "wallet", hash: null, reason: null });
+  try {
+    const r = await send(call, (hash) => setS({ phase: "pending", hash, reason: null }));
+    setS(r);
+    return r.phase === "confirmed";
+  } catch (e) {
+    if (e instanceof Rejected) setS({ phase: "rejected", hash: null, reason: "You rejected the request in your wallet. Nothing was sent." });
+    else if (e instanceof Refused) setS({ phase: "reverted", hash: null, reason: e.errorName ? `${e.errorName}: ${REVERT_COPY[e.errorName] ?? e.message}` : e.message });
+    else setS({ phase: "reverted", hash: null, reason: e instanceof Error ? e.message.split("\n")[0] : "Something went wrong sending this." });
+    return false;
+  }
 }

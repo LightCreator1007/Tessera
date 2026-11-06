@@ -1,6 +1,8 @@
 "use client";
-// Wallet state behind one interface. Demo mode simulates an owner wallet (address, network, balances, node membership) in localStorage, so every flow and edge case can be walked without a chain. wagmi replaces the demo adapter when the chain is wired; screens do not change.
+// Wallet state behind one interface. Demo mode simulates an owner wallet (address, network, balances, node membership) in localStorage, so every flow and edge case can be walked without a chain. Live mode reads the injected wallet and the contracts through lib/chain; screens do not change.
 import { useSyncExternalStore } from "react";
+import { isDemo } from "@/lib/api/client";
+import * as chain from "@/lib/chain";
 
 export const CHAIN_ID = 84532;
 const TOD = 1_000_000;
@@ -61,23 +63,48 @@ export function resetWallet() {
 }
 
 export function useWallet() {
-  const w = useSyncExternalStore(
+  const d = useSyncExternalStore(
     (f) => { subs.add(f); return () => subs.delete(f); },
     () => { load(); return state; },
     () => INITIAL,
   );
+  const c = useSyncExternalStore(isDemo ? noSub : chain.subscribe, isDemo ? noChain : chain.snapshot, chain.serverSnapshot);
+  if (isDemo) {
+    return {
+      ...d,
+      allowanceTo: { market: d.allowance, registry: d.allowance },
+      chainError: null as string | null,
+      connecting: false,
+      connected: d.address !== null,
+      wrongNetwork: d.address !== null && d.chainId !== CHAIN_ID,
+      connect: () => setWallet({ address: "0x5e1f00d2c0ffee0000000000000000000000a11c" }),
+      disconnect: () => setWallet({ address: null }),
+      switchNetwork: () => setWallet({ chainId: CHAIN_ID }),
+    };
+  }
+  // Live: the chain owns address, network and money. The wallet counts as connected only once every read has landed, so no screen shows a zero that was never read.
+  const read = c.address !== null && !c.wrongNetwork && c.tod !== null && c.eth !== null && c.allowance !== null && c.claimable !== null;
+  const w: DemoWallet = read
+    ? { ...d, address: c.address, chainId: CHAIN_ID, usdc: c.tod as number, eth: c.eth as number, allowance: c.allowance!.market, claimable: c.claimable as number, node: d.node && { ...d.node, stake: c.stake === null ? d.node.stake : c.stake } }
+    : { ...d, address: null, usdc: 0, eth: 0, allowance: 0, claimable: 0 };
   return {
     ...w,
-    connected: w.address !== null,
-    wrongNetwork: w.address !== null && w.chainId !== CHAIN_ID,
-    connect: () => setWallet({ address: "0x5e1f00d2c0ffee0000000000000000000000a11c" }),
-    disconnect: () => setWallet({ address: null }),
-    switchNetwork: () => setWallet({ chainId: CHAIN_ID }),
+    allowanceTo: read ? c.allowance! : { market: 0, registry: 0 },
+    chainError: c.error,
+    connecting: c.address !== null && !read && !c.wrongNetwork && c.error === null,
+    connected: read || c.wrongNetwork,
+    wrongNetwork: c.wrongNetwork,
+    connect: () => { void chain.connect(); },
+    disconnect: () => chain.disconnect(),
+    switchNetwork: () => { void chain.switchNetwork(); },
   };
 }
 
-/** Demo: two fixture jobs stand in for jobs this wallet posted, so the owner panel and refunds can be walked without a chain. */
-export const DEMO_OWNED_JOBS = [4, 3];
+const noSub = () => () => {};
+const noChain = chain.serverSnapshot;
+
+/** Demo: fixture jobs that stand in for jobs this wallet posted, so the owner panel, refunds and a stalled job can be walked without a chain. */
+export const DEMO_OWNED_JOBS = [5, 4, 3];
 
 /** One rule for "yours" on every page: you posted it from this wallet (or, in demo, it is a stand-in fixture). */
 export function ownsJob(address: string | null, isDemo: boolean, job: { id: number; requester: string }) {

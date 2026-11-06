@@ -24,7 +24,7 @@ const STEPS = [
   {
     key: "post",
     title: "Lock the budget",
-    sub: <>One or two transactions: approve TOD for the part your wallet pays, then <Code>createJob</Code>. Nothing leaves the contract until a round is verified. There is no cancel.</>,
+    sub: <>One or two transactions: approve TOD for the part your wallet pays, then <Code>createJob</Code>. Nothing leaves the contract until a round is verified. There is no cancel, except for a job stuck waiting for nodes past its wait, which you can abandon.</>,
   },
   {
     key: "watch",

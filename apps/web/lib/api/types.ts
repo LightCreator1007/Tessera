@@ -33,9 +33,28 @@ export type Job = {
   status: JobStatus;
   trust: Trust;
   workload: string;
+  /** Why the job isn't opening rounds. Absent on coordinators that don't report it; null while rounds open normally. */
+  waiting?: Waiting | null;
   /** Where the final model is indexed on Arkiv. Absent on coordinators without Arkiv; null until the job completes. */
   published?: Published | null;
 };
+/** The coordinator's read on a stuck job: seats it can fill against seats it needs, what holds the other nodes back, and when anyone may abandon it. Times are unix seconds. */
+export type Waiting = { since: number; eligible: number; quorum: number; blocked: Partial<Record<BlockReason, number>>; abandonAfter: number };
+export type BlockReason = "notJoined" | "stake" | "offline" | "busy" | "selftest" | "benched" | "credential" | "sameOwner";
+/** GET /v1/owners/{owner}/history: chain events that moved an owner's money or standing, newest first. Amounts in token units, times in unix seconds. */
+export type OwnerEvent = {
+  kind: "joined" | "paid" | "claimed" | "leftover" | "forfeited" | "slashed" | "failure" | "noReveal" | "staked" | "unstaked" | "budget" | "refund";
+  job: number | null;
+  round: number | null;
+  op: string | null;
+  amount: number | null;
+  detail: Record<string, unknown> | null;
+  block: number;
+  logIndex: number;
+  tx: string;
+  at: number;
+};
+export type OwnerHistory = { owner: string; operators: string[]; events: OwnerEvent[]; next: string | null; indexedTo: number | null };
 export type Published = {
   round: number;
   keccak: string;
@@ -62,8 +81,8 @@ export type ModelRecord = {
   swarmRef: string | null;
 };
 export type Workload = { id: string; replayClass: "exact" | "tolerance"; defaults: Record<string, unknown>; tier: "core" | "stretch" };
-export type DraftRequest = { workload: string; datasetHash: string; budget: number; epochs: number; minQuorum?: number; maxPerRound?: number; overrides?: Record<string, unknown> };
-export type Draft = { spec: Record<string, unknown>; modelSpecHash: string; initialWeightsHash: string; windows: Record<string, number>; minStake: number; createJobCalldata: string };
+export type DraftRequest = { workload: string; datasetHash: string; /** Leave out: the draft prices the job from its spec. */ budget?: number; epochs: number; minQuorum?: number; maxPerRound?: number; overrides?: Record<string, unknown> };
+export type Draft = { spec: Record<string, unknown>; modelSpecHash: string; initialWeightsHash: string; windows: Record<string, number>; /** Token units createJobCalldata asks for; 1 TOD pays for at least 1 Gop. */ budget: number; /** Float ops the budget buys: rounds x minQuorum x ops per node per round. */ computeOps: number; minStake: number; createJobCalldata: string };
 /** The spec bytes as served, parsed, plus whether their keccak matches the job's on-chain modelSpecHash. */
 export type Spec = { spec: Record<string, unknown>; keccak: string; matches: boolean };
 export type RoundState = { round: number; metric: string | null; seconds: number | null };

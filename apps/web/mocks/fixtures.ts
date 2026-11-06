@@ -3,6 +3,8 @@ import type { Settlement, Draft, DraftRequest, ModelRecord, Workload,
   Config, Evidence, Health, Job, JobState, Node, NodeChain, Pool, Round, RoundStatus, RoundSummary, RoundVerdicts,
 } from "@/lib/api/types";
 import { toF64 } from "@/lib/api/metric";
+import { CREATE_JOB_ARGS } from "@/lib/api/draft";
+import { encodeAbiParameters } from "viem";
 
 function hex(seed: string, len = 64): string {
   let h = 2166136261;
@@ -37,7 +39,8 @@ export const pool: Pool = { online: 6, idle: 3, busy: 3 };
 export const jobs: Job[] = [
   { id: 7, workload: "mlp-exact", status: "running", trust: "chain", budget: 120 * TOD, remaining: 78.4 * TOD, rounds: 20, currentRound: 8, modelSpecHash: hex("spec7"), requester: REQ[0], stakePerNode: 5 * TOD },
   { id: 6, workload: "cnn-torch", status: "running", trust: "hash-checked", budget: 300 * TOD, remaining: 261 * TOD, rounds: 12, currentRound: 2, modelSpecHash: hex("spec6"), requester: REQ[1], stakePerNode: 10 * TOD },
-  { id: 5, workload: "mlp-exact", status: "open", trust: "chain", budget: 40 * TOD, remaining: 40 * TOD, rounds: 8, currentRound: null, modelSpecHash: hex("spec5"), requester: REQ[2], stakePerNode: 2 * TOD },
+  { id: 5, workload: "mlp-exact", status: "open", trust: "chain", budget: 40 * TOD, remaining: 40 * TOD, rounds: 8, currentRound: null, modelSpecHash: hex("spec5"), requester: REQ[2], stakePerNode: 2 * TOD,
+    waiting: { since: Math.floor(Date.now() / 1000) - 40 * 60, eligible: 1, quorum: 3, blocked: { busy: 2, stake: 1, offline: 1 }, abandonAfter: Math.floor(Date.now() / 1000) - 60 } },
   { id: 4, workload: "mlp-exact", status: "completed", trust: "chain", budget: 60 * TOD, remaining: 0, rounds: 12, currentRound: 12, modelSpecHash: hex("spec4"), requester: REQ[0], stakePerNode: 5 * TOD,
     published: { round: 11, keccak: hex("agg4-11"), state: "indexed", arkivKey: hex("arkiv4"), arkivTx: hex("arkivtx4"), swarmRef: hex("swarm4").slice(2) } },
   { id: 3, workload: "cnn-torch", status: "abandoned", trust: "untrusted", budget: 90 * TOD, remaining: 61.2 * TOD, rounds: 10, currentRound: 3, modelSpecHash: hex("spec3"), requester: REQ[1], stakePerNode: 10 * TOD },
@@ -242,13 +245,24 @@ export function specFor(job: Job): Record<string, unknown> {
 }
 
 export function draftFor(req: DraftRequest): Draft {
-  const spec = { workload: req.workload, dataset: req.datasetHash, epochs: req.epochs, minQuorum: req.minQuorum ?? 3, maxPerRound: req.maxPerRound ?? 6, ...req.overrides };
+  const quorum = req.minQuorum ?? 3;
+  const spec = { workload: req.workload, dataset: req.datasetHash, epochs: req.epochs, minQuorum: quorum, maxPerRound: req.maxPerRound ?? 6, ...req.overrides };
+  // Shaped like the coordinator's pricing: rounds grow with epochs and shrink with quorum, 1 TOD per Gop.
+  const rounds = Math.max(1, Math.ceil((req.epochs * 12) / quorum));
+  const computeOps = rounds * quorum * 1_650_000_000;
+  const budget = Math.ceil(computeOps / 1e9) * TOD;
+  const minStake = Math.max(5 * TOD, Math.ceil((2 * budget) / rounds / quorum));
+  const h = (i: number) => hex(`draft-${i}${JSON.stringify(spec)}`) as `0x${string}`;
+  const params = [BigInt(budget), BigInt(minStake), rounds, 8, quorum, req.maxPerRound ?? 6, 4, true, 0, 30, [600, 300, 600, 300, 3600],
+    h(0), h(1), h(2), h(3), h(4), h(5), h(6), ""] as const;
   return {
     spec,
     modelSpecHash: hex(`draft-spec${JSON.stringify(spec)}`),
     initialWeightsHash: hex(`draft-w${req.workload}`),
     windows: { commit: 600, reveal: 300, verify: 600 },
-    minStake: 5 * TOD,
-    createJobCalldata: hex(`calldata${req.budget}`, 200),
+    budget,
+    computeOps,
+    minStake,
+    createJobCalldata: "0x00000000" + encodeAbiParameters(CREATE_JOB_ARGS, [params, BigInt(0)]).slice(2),
   };
 }

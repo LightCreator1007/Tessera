@@ -1,5 +1,6 @@
 "use client";
 // Add a node, one step at a time (the CLI quickstart with the web steps inside it): install, connect, pair, prove personhood, stake, start. The position derives from wallet and chain state, so a reload resumes at the first unfinished step; finished steps stay reviewable from the progress bar. Demo chips walk the failure paths (expired code, wrong owner, used World ID, short balance).
+import { calls } from "@/lib/chain";
 import { JoinBuild } from "@/components/mosaic/isoScenes";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -322,17 +323,17 @@ export function JoinFlow() {
                     body: (
                       <>
                         <p className="text-sm text-muted">You have {formatToken(w.usdc)} TOD. Test TOD is free on this network.</p>
-                        <TxButton tx={mint} label="Get test TOD" onRun={() => mint.run(() => setWallet((x) => ({ usdc: x.usdc + 100 * TOD })))} />
+                        <TxButton tx={mint} label="Get test TOD" onRun={() => mint.send(calls.faucet, () => setWallet((x) => ({ usdc: x.usdc + 100 * TOD })))} />
                         <TxStatus tx={mint} />
                       </>
                     ),
                   },
                   {
-                    key: "approve", title: "Allow Tessera to move this TOD", done: w.allowance >= units || staked, note: "exact amount only",
+                    key: "approve", title: "Allow Tessera to move this TOD", done: w.allowanceTo.registry >= units || staked, note: "exact amount only",
                     body: (
                       <>
                         <p className="text-sm text-muted">Your wallet asks once. The allowance is for {formatToken(units)} TOD exactly, nothing more.</p>
-                        <TxButton tx={approve} label="Approve" onRun={() => approve.run(() => setWallet({ allowance: units }))} />
+                        <TxButton tx={approve} label="Approve" onRun={() => approve.send(() => calls.approve("registry", units), () => setWallet({ allowance: units }))} />
                         <TxStatus tx={approve} />
                       </>
                     ),
@@ -350,7 +351,7 @@ export function JoinFlow() {
                     key: "deposit", title: "Deposit the stake", done: staked,
                     body: (
                       <>
-                        <TxButton tx={stake} label={`Stake ${formatToken(units)} TOD`} onRun={() => stake.run(() => setWallet((x) => ({ usdc: x.usdc - units, allowance: 0, node: x.node && { ...x.node, stake: units } })))} />
+                        <TxButton tx={stake} label={`Stake ${formatToken(units)} TOD`} onRun={() => stake.send(() => calls.depositStake(node!.operator, units), () => setWallet((x) => ({ usdc: x.usdc - units, allowance: 0, node: x.node && { ...x.node, stake: units } })))} />
                         <TxStatus tx={stake} />
                       </>
                     ),
