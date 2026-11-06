@@ -3,6 +3,8 @@ import type { Settlement, Draft, DraftRequest, ModelRecord, Workload,
   Config, Evidence, Health, Job, JobState, Node, NodeChain, Pool, Round, RoundStatus, RoundSummary, RoundVerdicts,
 } from "@/lib/api/types";
 import { toF64 } from "@/lib/api/metric";
+import { CREATE_JOB_ARGS } from "@/lib/api/draft";
+import { encodeAbiParameters } from "viem";
 
 function hex(seed: string, len = 64): string {
   let h = 2166136261;
@@ -242,13 +244,24 @@ export function specFor(job: Job): Record<string, unknown> {
 }
 
 export function draftFor(req: DraftRequest): Draft {
-  const spec = { workload: req.workload, dataset: req.datasetHash, epochs: req.epochs, minQuorum: req.minQuorum ?? 3, maxPerRound: req.maxPerRound ?? 6, ...req.overrides };
+  const quorum = req.minQuorum ?? 3;
+  const spec = { workload: req.workload, dataset: req.datasetHash, epochs: req.epochs, minQuorum: quorum, maxPerRound: req.maxPerRound ?? 6, ...req.overrides };
+  // Shaped like the coordinator's pricing: rounds grow with epochs and shrink with quorum, 1 TOD per Gop.
+  const rounds = Math.max(1, Math.ceil((req.epochs * 12) / quorum));
+  const computeOps = rounds * quorum * 1_650_000_000;
+  const budget = Math.ceil(computeOps / 1e9) * TOD;
+  const minStake = Math.max(5 * TOD, Math.ceil((2 * budget) / rounds / quorum));
+  const h = (i: number) => hex(`draft-${i}${JSON.stringify(spec)}`) as `0x${string}`;
+  const params = [BigInt(budget), BigInt(minStake), rounds, 8, quorum, req.maxPerRound ?? 6, 4, true, 0, 30, [600, 300, 600, 300, 3600],
+    h(0), h(1), h(2), h(3), h(4), h(5), h(6), ""] as const;
   return {
     spec,
     modelSpecHash: hex(`draft-spec${JSON.stringify(spec)}`),
     initialWeightsHash: hex(`draft-w${req.workload}`),
     windows: { commit: 600, reveal: 300, verify: 600 },
-    minStake: 5 * TOD,
-    createJobCalldata: hex(`calldata${req.budget}`, 200),
+    budget,
+    computeOps,
+    minStake,
+    createJobCalldata: "0x00000000" + encodeAbiParameters(CREATE_JOB_ARGS, [params, BigInt(0)]).slice(2),
   };
 }
