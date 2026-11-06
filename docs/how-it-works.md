@@ -22,6 +22,8 @@ Inside a shard, batches come from a Fisher-Yates shuffle seeded from the job, th
 
 MNIST and CIFAR-10 have presets with a pinned sha256 for the download ([presets.py](../packages/datasets/tod_datasets/presets.py)).
 
+For a job, [shards.py](../packages/datasets/tod_datasets/shards.py) turns each training shard and the validation slice into files: a short header, then the raw rows, with at most 500 MB of rows per file so a big shard spans several. The same dataset and split always give the same bytes, so anyone can rebuild a job's shard files from the public dataset and check their keccaks. The coordinator uploads the files to Swarm and writes one `tod.shards` record per job on Arkiv. The record lists each piece's rows, keccak and Swarm reference, so a node can look up its job by id and download only its own shard from any Bee node or gateway. The download is checked against the keccak before training. This only runs when the coordinator has Arkiv and Swarm configured, and nodes don't use it yet.
+
 ## The judge
 
 During a round a node saves K checkpoints and commits their hashes. A verifier replays the whole round from the same start weights and the same batches, then hands the result to [judge.py](../packages/core/tod_core/judge.py).

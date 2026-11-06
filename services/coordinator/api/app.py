@@ -14,6 +14,7 @@ import driver
 import publish
 from identity import router as identity
 from publish import chain as publish_chain
+from publish import shards as publish_shards
 from tod_core import encodings
 from tod_core.finalize import message
 
@@ -36,6 +37,9 @@ async def lifespan(_):
         threading.Thread(target=publish.worker, args=(blobs.store, publish.client(), SPECS, stop),
                          name="arkiv-publish", daemon=True).start()
         threading.Thread(target=publish_chain.watch, args=(stop,), name="arkiv-chain-watch", daemon=True).start()
+    if publish_shards.enabled():
+        threading.Thread(target=publish_shards.worker, args=(publish.client(), publish.swarm_client(), SPECS, stop),
+                         name="arkiv-shards", daemon=True).start()
     yield
     stop.set()
 
