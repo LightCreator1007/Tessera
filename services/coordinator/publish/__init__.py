@@ -156,7 +156,7 @@ def step(job: int, store, client, specs: dict) -> str:
         _broadcast(job, raw, client)
         return "pending"
     except Exception as e:  # nothing was signed yet, so retrying is safe; settlement never waits on any of this
-        if rate_limited(e):
+        if transient(e):
             return _wait(job, f"{type(e).__name__}: {str(e)[:200]}")
         return _retry(job, attempts, f"{type(e).__name__}: {str(e)[:200]}")
 
@@ -214,9 +214,15 @@ def rate_limited(e: Exception) -> bool:
     return 429 in (getattr(e, "code", None), getattr(getattr(e, "response", None), "status_code", None))
 
 
+def transient(e: Exception) -> bool:
+    """A 429, or the network itself failing (DNS, a reset, a timeout, a 5xx through requests or urllib). On a busy
+    venue Wi-Fi these come in bursts, and counting them would mark finished work failed for good."""
+    return rate_limited(e) or isinstance(e, OSError)
+
+
 def _wait(job, error):
     _set(job, error=_scrub(error), next_try=time.time() + RATE_LIMIT_WAIT)
-    log.warning("publish job %s: rate limited, waiting %s s", job, RATE_LIMIT_WAIT)
+    log.warning("publish job %s: %s; waiting %s s", job, _scrub(error)[:120], RATE_LIMIT_WAIT)
     return "pending"
 
 

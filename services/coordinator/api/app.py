@@ -127,6 +127,7 @@ def provider_compute(owner: str):
 
 _models_cache: dict = {"at": 0.0, "rows": []}
 MODELS_TTL = 15  # s; every arkiv_query is billed against the access key's monthly quota
+MODELS_STALE_OK = 600  # s a last good list is still served when Arkiv doesn't answer
 
 
 @v1.get("/models", response_model=list[ModelRecord])
@@ -138,6 +139,9 @@ def models():
         try:
             rows = publish.client().list_models(publish.SCHEMA, config.JOB_MARKET)
         except Exception as e:
+            # One failed read (a 429, a dropped connection) shouldn't blank a list we read seconds ago.
+            if _models_cache["rows"] and time.time() - _models_cache["at"] < MODELS_STALE_OK:
+                return _models_cache["rows"]
             raise HTTPException(502, f"Arkiv read failed: {type(e).__name__}")
         _models_cache.update(at=time.time(), rows=[r for r in map(publish.from_arkiv, rows) if r])
     return _models_cache["rows"]

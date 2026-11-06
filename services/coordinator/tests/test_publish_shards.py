@@ -32,7 +32,7 @@ class FakeSwarm:
 
     def put(self, data, h):
         if self.fail_after is not None and self.uploads >= self.fail_after:
-            raise OSError("bee is down")
+            raise RuntimeError("Swarm did not read back")  # a real failure; a network error only waits
         self.uploads += 1
         ref = h[2:]  # any 64-hex reference will do here
         self.blobs[ref] = data
@@ -117,6 +117,16 @@ def test_a_rate_limited_upload_waits_without_using_up_a_try(on, monkeypatch):
     PS.enqueue(7, spec())
     assert PS.step(7, arkiv, swarm, datasets) == "pending"
     assert PS.db.execute("SELECT attempts FROM shard_sets WHERE job = 7").fetchone()[0] == 0
+
+
+def test_a_second_job_on_the_same_data_uploads_nothing(on):
+    swarm, arkiv, datasets = on
+    PS.enqueue(7, spec())
+    PS.step(7, arkiv, swarm, datasets)
+    assert swarm.uploads == 4
+    PS.enqueue(8, spec())
+    PS.step(8, arkiv, swarm, datasets)
+    assert swarm.uploads == 4 and json.loads(arkiv.sent[1]["payload"]) == json.loads(arkiv.sent[0]["payload"])
 
 
 def test_existing_record_is_reused(on):
