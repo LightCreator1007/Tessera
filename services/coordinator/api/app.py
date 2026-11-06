@@ -24,7 +24,7 @@ from tod_core.finalize import message
 
 from . import admin, auth, blobs, config, nodes, persist
 from .draft import build as build_draft
-from .models import (OwnerHistory, Collected, Config, Dispute, DisputeIn, Draft, DraftRequest, Evidence, Health, Job, JobState,
+from .models import (OwnerHistory, OwnerRecord, Collected, Config, Dispute, DisputeIn, Draft, DraftRequest, Evidence, Health, Job, JobState,
                      ModelRecord, Payout, ProviderCompute, Published, Round, RoundSummary, Selftest, SettlementOut,
                      SignatureIn, Workload)
 from .tables import DISPUTES, EVIDENCE, JOBS, MODELS, PROVIDERS, ROUNDS, SELFTESTS, SETTLEMENTS, SPECS, STATES, WORKLOADS
@@ -115,8 +115,10 @@ def _with_published(j: Job) -> Job:
 
 
 @v1.get("/jobs", response_model=list[Job])
-def jobs():
-    return [_with_published(j) for j in JOBS.values()]
+def jobs(requester: str | None = None):
+    """Every job, or only the ones one address posted."""
+    found = JOBS.values() if requester is None else [j for j in JOBS.values() if j.requester.lower() == requester.lower()]
+    return [_with_published(j) for j in found]
 
 
 @v1.get("/jobs/{job}", response_model=Job)
@@ -227,6 +229,18 @@ def rounds(job: int):
 @v1.get("/jobs/{job}/rounds/{r}", response_model=Round)
 def round_(job: int, r: int):
     return _round(job, r)
+
+
+@v1.get("/owners/{owner}", response_model=OwnerRecord)
+def owner_record(owner: str):
+    """What a profile page needs about any address, in one public read. Identity and exclusion stay on /identity/owners."""
+    if not re.fullmatch(r"0x[0-9a-fA-F]{40}", owner):
+        raise HTTPException(400, "owner must be 0x + 40 hex")
+    done = PROVIDERS.get(owner.lower())
+    t = history.tally(owner)
+    return OwnerRecord(owner=owner.lower(), operators=history.operators(owner), rounds=done.rounds if done else 0,
+                       ops=done.ops if done else 0, jobs=sorted(j.id for j in JOBS.values() if j.requester.lower() == owner.lower()),
+                       kinds=t["kinds"], firstAt=t["firstAt"], indexedTo=history.indexed_to())
 
 
 @v1.get("/owners/{owner}/history", response_model=OwnerHistory)
