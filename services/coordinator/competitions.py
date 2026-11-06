@@ -164,11 +164,11 @@ def build(ledger) -> list[dict]:
     return rows
 
 
-def listing() -> list[dict]:
+def listing(max_age: float = TTL) -> list[dict]:
     """Every competition, newest first. Raises if the chain can't be read and nothing is cached."""
     global _ledger
     with _lock:
-        if time.time() - _cache["at"] < TTL:
+        if time.time() - _cache["at"] < max_age:
             return _cache["rows"]
         from publish.chain import open_ledger
 

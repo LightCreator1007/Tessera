@@ -28,7 +28,15 @@ With `docker/compose.worldid.yml` the coordinator signs a pass only after a real
 
 ## Reading them
 
-`GET /v1/competitions` and `GET /v1/competitions/{id}` read the contract's views and events and add a status (`open`, `awaiting-labels`, `scoring`, `ready-to-settle`, `settled`, `labels-hidden`, `refundable`) and a leaderboard. The web app's Competitions pages show them, with scores counted onchain.
+`GET /v1/competitions` and `GET /v1/competitions/{id}` read the contract's views and events and add a status (`open`, `awaiting-labels`, `scoring`, `ready-to-settle`, `settled`, `labels-hidden`, `refundable`) and a leaderboard. The web app's Competitions pages show them, with scores counted onchain. Each competition's `standings` lists every entrant, scored or not, and ties rank the way the contract breaks them: the earlier last commit wins.
+
+`GET /v1/competitions/{id}/entries/{address}` is one entrant's standing. Once the entry is scored it also has the predictions it was scored on, read from the `revealEntry` call, with per-class accuracy and a confusion matrix (up to 20 classes). `GET /v1/owners/{owner}/competitions` lists what an address hosted and entered, with ranks, prizes won and shares claimed.
+
+## Notebooks
+
+An entrant can attach a notebook (`.ipynb`, `.md` or `.py`, up to 2 MB) that explains their entry. They post it to `POST /v1/competitions/{id}/notebooks` with an EIP-191 signature from their wallet over the competition, the wallet, the file name, its sha256 and the time, so the coordinator can't swap the file and nobody else can attach one for them. It can be replaced until the deadline.
+
+Until the deadline, `GET /v1/competitions/{id}/notebooks` says only how many there are, so nobody reads the leader's approach while entries are open. After it, the list and each notebook (`GET .../notebooks/{address}`) are public, with the signed message, so anyone can check who wrote it. Notebooks live on the coordinator, not onchain, and play no part in scoring.
 
 ## Try it on the local stack
 
