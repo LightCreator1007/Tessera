@@ -32,7 +32,7 @@ Uploads go through Swarm's public gateway, `https://api.gateway.ethswarm.org`, w
 
 ## Run one upload and one read
 
-With the stack and the Arkiv override up (see `compose.arkiv.yml`), post a job and let it finish:
+With the stack and the Arkiv override up (see `docker/compose.arkiv.yml`), post a job and let it finish:
 
 ```sh
 docker compose -f docker/compose.dev.yml exec coordinator python docker/dev/post_job.py --quorum 2
