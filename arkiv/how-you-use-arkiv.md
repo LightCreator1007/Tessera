@@ -9,10 +9,13 @@ The coordinator writes over plain JSON-RPC from Python, with no SDK: `services/c
 
 Both follow the same safety rules. The signed transaction's hash is saved before anything is sent, so a crash is settled from its receipt and never re-signed. A record from an earlier run is found by query before creating a new one. A 429 waits without counting as a failure.
 
+- **Competitions** (`publish/listings.py`): each competition on the `Competitions` contract gets a `tod.competition` listing that expires a month after its last reveal window, and a `tod.competition.result` once it settles. An open competition is an expiring listing, which is what Arkiv's expiry is for.
+
 ## Reading
 
 - **The web app's Models page** (`apps/web/features/models/ModelsPage.tsx`) reads `GET /v1/models`, which queries Arkiv for every `tod.model` entity on this JobMarket, newest first, and does not read the coordinator's own tables. Each row shows the dataset, workload, keccak, size, the Swarm link and how long the record has left.
 - **Public model downloads** (`GET /v1/models/{keccak}`) serve only models that were published. When the coordinator has lost its copy, it fetches the Swarm copy and serves it only if the bytes still hash to the published keccak.
+- **Competition listings** (`GET /v1/competitions/listed`) read every `tod.competition` entity for our contract straight from Arkiv. Each competition in `GET /v1/competitions` carries its listing and result keys, and the web app's competition page shows them.
 - **Shard lookup** (`tod_datasets.shards.lookup` and `fetch`) reads a job's `tod.shards` entity and downloads one shard from any Bee node, checking each file's keccak. The node's trainer doesn't call it yet. Nodes still download the full public dataset, so today this read path is a library, not something a user sees.
 
 ## Arkiv features and what each one changes

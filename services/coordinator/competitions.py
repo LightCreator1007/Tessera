@@ -71,7 +71,8 @@ def build(ledger) -> list[dict]:
         s = settled.get(cid)
         rows.append({
             "id": cid, "host": c["host"], "title": str(meta.get("title") or f"Competition {cid}")[:120],
-            "task": str(meta.get("task") or "")[:2000], "prize": c["prize"], "deadline": c["deadline"],
+            "task": str(meta.get("task") or "")[:2000], "dataset": str(meta.get("dataset") or "")[:40],
+            "prize": c["prize"], "deadline": c["deadline"],
             "revealWindow": c["revealWindow"], "items": c["items"], "labelsHash": "0x" + bytes(c["labelsHash"]).hex(),
             "status": status(c, now), "entries": c["entries"], "entrants": order, "scored": c["scored"],
             "labelsRevealedAt": c["labelsRevealedAt"] or None,

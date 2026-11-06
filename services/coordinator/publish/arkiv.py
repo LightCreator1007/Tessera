@@ -25,7 +25,10 @@ MAX_BYTES = 128 * 1024
 TYPES = {"chainId": U64 | INDEXED, "job": U64 | INDEXED, "round": U64 | INDEXED, "size": U64,
          "jobMarket": ADDR | INDEXED, "payload": BYTES, "arkiv.schema": STR | INDEXED, "keccak": STR | INDEXED,
          "datasetHash": STR | INDEXED, "workload": STR | INDEXED, "visibility": STR | INDEXED,
-         "swarmRef": STR | INDEXED}
+         "swarmRef": STR | INDEXED,
+         # competition listings and results
+         "competitions": ADDR | INDEXED, "competition": U64 | INDEXED, "deadline": U64 | INDEXED,
+         "host": ADDR | INDEXED, "winner": ADDR | INDEXED, "prize": U64, "items": U64, "score": U64, "labelsHash": STR | INDEXED}
 
 
 def _word(n: int) -> bytes:

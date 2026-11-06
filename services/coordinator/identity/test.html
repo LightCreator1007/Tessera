@@ -1,10 +1,10 @@
 <!doctype html>
-<!-- Developer test page for pool join with World ID (served at /v1/identity/test); the real join page is Ashutosh's (U5). -->
+<!-- Developer test page for World ID (served at /v1/identity/test): a pool join, or an entry pass for competitions. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ToD join test</title>
+<title>ToD World ID test</title>
 <style>
   :root { --bg: #fff; --fg: #111; --muted: #666; --line: #ddd; }
   @media (prefers-color-scheme: dark) { :root { --bg: #111; --fg: #eee; --muted: #999; --line: #333; } }
@@ -14,23 +14,28 @@
   button { margin-top: 1rem; cursor: pointer; }
   pre { white-space: pre-wrap; word-break: break-all; border: 1px solid var(--line); padding: .75rem; }
   a { color: inherit; }
+  [hidden] { display: none !important; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@worldcoin/idkit-core@4.5.0/dist/idkit.global.js"
         integrity="sha384-ir9v6YCEnIkW9GsxFgIthFkN4PRrBKWIRoEyHmTiQ/Q8h7zZaawYndqS8l88ZQmd" crossorigin="anonymous"></script>
 </head>
 <body>
-<h1>Join the pool (test)</h1>
-<p>Run <code>tod-node pair --owner &lt;wallet&gt; --chain-id &lt;id&gt; --registry &lt;NodeRegistry&gt;</code>, paste the code, then verify with World ID. In staging, open the link in the <a href="https://simulator.worldcoin.org" target="_blank" rel="noopener">World ID simulator</a>.</p>
+<h1>World ID (test)</h1>
+<p>To join the pool, run <code>tod-node pair --owner &lt;wallet&gt; --chain-id &lt;id&gt; --registry &lt;NodeRegistry&gt;</code> and paste the code. For a competition entry pass, the wallet is enough. Then verify with World ID. In staging, open the link in the <a href="https://simulator.worldcoin.org" target="_blank" rel="noopener">World ID simulator</a>.</p>
+<label>For
+  <select id="what"><option value="join">Joining the pool with a node</option>
+                    <option value="pass">Entering and hosting competitions</option></select></label>
 <label>Owner wallet <input id="owner" placeholder="0x…"></label>
-<label>Pairing code <input id="code" placeholder="tod-pair:…"></label>
+<label id="code-row">Pairing code <input id="code" placeholder="tod-pair:…"></label>
 <label>Credential
   <select id="cred"><option value="selfie">Selfie Check (jobs under the Proof of Human threshold)</option>
                     <option value="orb">Proof of Human (Orb)</option></select></label>
-<button id="go">Verify and get invite</button>
+<button id="go">Verify with World ID</button>
 <pre id="out">Ready.</pre>
 <script>
 const $ = (id) => document.getElementById(id);
 const say = (msg) => { $("out").textContent = msg; };
+$("what").onchange = () => { $("code-row").hidden = $("what").value === "pass"; };
 const post = (path, body) => fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
 $("go").onclick = async () => {
@@ -55,10 +60,13 @@ $("go").onclick = async () => {
       if (!done.success) return say("World ID did not complete: " + done.error);
       proof = done.result;
     }
-    const res = await post("/v1/identity/join", { owner, pairingCode: code, proof });
+    const pass = $("what").value === "pass";
+    const res = pass ? await post("/v1/identity/entry-pass", { owner, proof })
+                     : await post("/v1/identity/join", { owner, pairingCode: code, proof });
     const body = await res.json();
-    say(res.ok ? "Invite ready. Call NodeRegistry.join with:\n\n" + JSON.stringify(body, null, 2)
-               : "Refused (" + res.status + "): " + body.detail);
+    say(!res.ok ? "Refused (" + res.status + "): " + body.detail
+        : pass ? "Entry pass ready (" + body.credential + "). Pass it to Competitions.create or enter:\n\n" + JSON.stringify(body)
+        : "Invite ready. Call NodeRegistry.join with:\n\n" + JSON.stringify(body, null, 2));
   } catch (e) {
     say("Error: " + e);
   }

@@ -24,6 +24,8 @@ Anyone can host a prediction competition, and anyone verified as one person can 
 
 Entering, and hosting, needs an `EntryPass`: the admitter's EIP-712 signature that this wallet belongs to the person behind a World ID nullifier. The coordinator signs one at `POST /v1/identity/entry-pass`, after the same World ID check as joining the pool, and keeps one person to one wallet. The contract allows one wallet per nullifier per competition, and refuses an entrant with the host's wallet or nullifier, so a host can't enter their own competition with a second wallet.
 
+With `docker/compose.worldid.yml` the coordinator signs a pass only after a real World ID check. Get one on the coordinator's `/v1/identity/test` page ("Entering and hosting competitions"), then pass its JSON to `competition.py host` or `enter` with `--pass`. `competition.py address --name NAME` prints the wallet to verify.
+
 ## Reading them
 
 `GET /v1/competitions` and `GET /v1/competitions/{id}` read the contract's views and events and add a status (`open`, `awaiting-labels`, `scoring`, `ready-to-settle`, `settled`, `labels-hidden`, `refundable`) and a leaderboard. The web app's Competitions pages show them, with scores counted onchain.
@@ -41,6 +43,8 @@ $C reveal 1                                      # waits for the deadline, then 
 $C settle 1                                      # waits for the window, then pays the winner
 $C status 1
 ```
+
+Hosts can use their own labels instead of MNIST (`--labels FILE`, one byte per item, with `--task` to say what's predicted), and entrants their own predictions (`--predictions FILE`, one byte per item). If a host misses the labels window, each entrant runs `$C claim-share ID --name NAME` for an equal part of the prize. A live competition's page says who acts next and shows the command.
 
 ## Limits
 
