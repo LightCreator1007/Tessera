@@ -454,6 +454,21 @@ def test_rebuild_follows_void_and_job_close(chain):
     assert_rebuild_matches_views(l)
 
 
+def test_events_by_name_are_the_same_events_filtered_by_the_node(chain):
+    l, coordinator, verifiers, pairs, ops, job, _ = round_setup(chain, rounds=1)
+    commit_reveal(l, job, 1, ops, reveal={0})
+    past_reveal_deadline(l)
+    coordinator.l.market.voidRound(job, 1)
+    everything = list(l.events())
+    closed = list(l.events(names=["JobClosed"]))
+    assert closed and closed == [e for e in everything if e.name == "JobClosed"]
+    assert closed[-1].args["jobId"] == job and closed[-1].args["status"] == JobStatus.COMPLETED
+    mixed = list(l.events(names=["JobClosed", "NodeFreed"]))  # one from each contract
+    assert mixed == [e for e in everything if e.name in ("JobClosed", "NodeFreed")]
+    with pytest.raises(ValueError):
+        list(l.events(names=["NoSuchEvent"]))
+
+
 def test_tail_equals_full_rebuild(chain):
     l, coordinator, verifiers, pairs, ops, job, _ = round_setup(chain)
     state = l.rebuild()

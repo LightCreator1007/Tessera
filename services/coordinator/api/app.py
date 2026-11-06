@@ -13,6 +13,7 @@ from fastapi.responses import RedirectResponse, Response
 import driver
 import publish
 from identity import router as identity
+from publish import chain as publish_chain
 from tod_core import encodings
 from tod_core.finalize import message
 
@@ -34,6 +35,7 @@ async def lifespan(_):
     if config.ARKIV_ENABLED:
         threading.Thread(target=publish.worker, args=(blobs.store, publish.client(), SPECS, stop),
                          name="arkiv-publish", daemon=True).start()
+        threading.Thread(target=publish_chain.watch, args=(stop,), name="arkiv-chain-watch", daemon=True).start()
     yield
     stop.set()
 

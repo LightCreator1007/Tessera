@@ -41,3 +41,7 @@ SWARM_API_URL = os.environ.get("SWARM_API_URL", "").rstrip("/")
 SWARM_BATCH_ID = os.environ.get("SWARM_BATCH_ID", "")
 SWARM_ENABLED = bool(SWARM_API_URL)
 PUBLIC_URL = os.environ.get("PUBLIC_URL", "").rstrip("/")  # the coordinator's public base URL, put in each record
+# The chain watched for finished jobs, a networks/*.toml name. Unset off the local chain means only the admin route
+# queues models. Blocks this far behind the head are treated as final, so a reorg cannot publish a job twice.
+TOD_NETWORK = os.environ.get("TOD_NETWORK") or ("anvil" if CHAIN_ID == LOCAL_CHAIN_ID else "")
+CHAIN_CONFIRMATIONS = int(os.environ.get("CHAIN_CONFIRMATIONS", "0" if CHAIN_ID == LOCAL_CHAIN_ID else "10"))

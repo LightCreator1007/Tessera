@@ -43,7 +43,8 @@ def rearm(op: str):
 def publish_model(job: int):
     """Queue the job's latest aggregate for Arkiv by hand, or put a failed one back in the queue.
 
-    The round driver does the same through publish.enqueue once a job's last round is final.
+    publish/chain.py does the same on its own once JobMarket says the job completed, and is the way to use
+    normally. This route covers a cancelled job, or a coordinator running without TOD_NETWORK.
     """
     if not config.ARKIV_ENABLED:
         raise HTTPException(503, "Arkiv publishing is off on this coordinator")

@@ -31,8 +31,8 @@ HASH = re.compile(r"0x[0-9a-f]{64}")
 
 
 def enqueue(job: int, round_: int, aggregate_hash: str):
-    """The round driver calls this once a job's last round is final. A repeat with the same hash is a no-op; a new
-    hash starts over. With Arkiv off it does nothing, so the driver can call it unconditionally."""
+    """publish/chain.py calls this once JobMarket says a job completed. A repeat with the same hash is a no-op; a new
+    hash starts over. With Arkiv off it does nothing, so callers need not check."""
     if not config.ARKIV_ENABLED:
         return
     h = aggregate_hash.lower()
