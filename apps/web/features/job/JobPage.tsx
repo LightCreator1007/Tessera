@@ -12,6 +12,7 @@ import { formatToken } from "@/lib/money";
 import { TxButton, TxStatus } from "@/components/flow";
 import { f64 } from "@/lib/api/metric";
 import { Problem, errorKind } from "@/components/problem";
+import { ModelPanel } from "./ModelPanel";
 import { useConfig, useJob, useJobState, useNodes, useRound, useRounds, useSpec, useVerdicts } from "@/lib/api/hooks";
 import type { Job, Round, RoundSummary } from "@/lib/api/types";
 import { LossChart, toPoints } from "@/components/charts";
@@ -92,7 +93,7 @@ export function JobPage({ id, tab: rawTab }: { id: number; tab?: string }) {
           {tab === "overview" && <Overview job={j} />}
           {tab === "rounds" && <RoundsTab job={j} />}
           {tab === "contributors" && <Contributors job={j} />}
-          {tab === "model" && <ModelTab job={j} />}
+          {tab === "model" && <ModelPanel job={j} />}
           {tab === "spec" && <SpecTab job={j} />}
         </div>
         <Properties job={j} />
@@ -393,44 +394,6 @@ function Contributors({ job }: { job: Job }) {
         </tbody>
       </table>
     </div>
-  );
-}
-
-type DL = { kind: "idle" } | { kind: "fetching" } | { kind: "hashing" } | { kind: "ok" } | { kind: "mismatch"; got: string; want: string };
-function ModelTab({ job }: { job: Job }) {
-  const rounds = useRounds(job.id);
-  const lastFinal = rounds.data?.data.find((r) => r.aggregateHash);
-  const [dl, setDl] = useState<DL>({ kind: "idle" });
-  if (rounds.isPending) return <Skeleton className="h-32 w-full" />;
-  if (!lastFinal) return <EmptyState icon={Box} title="No model yet">The first weights are published when round 1 finalizes.</EmptyState>;
-  const want = lastFinal.aggregateHash!;
-  const run = async () => {
-    // Demo: the fixture blob store has no bytes, so this walks the same states the real hash check will.
-    setDl({ kind: "fetching" });
-    await new Promise((r) => setTimeout(r, 700));
-    setDl({ kind: "hashing" });
-    await new Promise((r) => setTimeout(r, 500));
-    setDl(job.trust === "untrusted" ? { kind: "mismatch", got: want.replace(/.{6}$/, "c0ffee"), want } : { kind: "ok" });
-  };
-  return (
-    <Card className="flex max-w-2xl flex-col gap-5 p-6">
-      <SectionTitle title={`Weights after round ${lastFinal.round}`} sub="checked against the aggregate hash on chain before saving" />
-      <dl className="flex flex-col">
-        <PropRow label="Expected hash"><HashChip value={want} label="aggregate hash" /></PropRow>
-        <PropRow label="Format"><span className="font-mono text-sm">safetensors</span></PropRow>
-      </dl>
-      <div className="flex flex-wrap items-center gap-3">
-        <Button variant="primary" icon={Download} onClick={run} disabled={dl.kind === "fetching" || dl.kind === "hashing"}>
-          {dl.kind === "fetching" ? "Downloading…" : dl.kind === "hashing" ? "Checking hash…" : "Download weights"}
-        </Button>
-        {dl.kind === "ok" && <span className="text-sm text-ok">Hash matches. Saved model-r{lastFinal.round}.safetensors</span>}
-      </div>
-      {dl.kind === "mismatch" && (
-        <Banner tone="danger" title="Hash mismatch, file discarded">
-          The coordinator served bytes hashing to {dl.got.slice(0, 12)}…, but the chain says {dl.want.slice(0, 12)}…. Nothing was saved.
-        </Banner>
-      )}
-    </Card>
   );
 }
 

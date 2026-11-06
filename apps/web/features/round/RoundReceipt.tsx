@@ -10,7 +10,8 @@ import type { Round, RoundVerdicts } from "@/lib/api/types";
 import { Drawer } from "@/components/drawer";
 import { NodeVerdict, type NodeResult } from "@/features/verify/NodeVerdict";
 import { ReVerify, type Progress } from "@/features/verify/ReVerify";
-import { sha256 } from "@/lib/learn/replay";
+import { keccak256 } from "viem";
+import { blobFetchUrl } from "@/lib/api/client";
 import { ReceiptHero } from "@/components/mosaic/ReceiptHero";
 import { formatToken } from "@/lib/money";
 import {
@@ -361,7 +362,9 @@ function MyVerdict({ id, r, rd, verdicts, op, replayHref }: { id: number; r: num
 }
 
 async function fetchAndHash(url: string, on: (p: Progress) => void) {
-  const res = await fetch(url);
+  const res = await fetch(blobFetchUrl(url));
+  // Evidence blobs need a signed BlobAccess request today, so an anonymous browser is refused.
+  if (res.status === 401 || res.status === 403) throw new Error("The coordinator only serves evidence blobs to signed requests, so a browser can't fetch this one yet. The hash above is still the one on chain.");
   if (!res.ok || !res.body) throw new Error(`The evidence blob didn't download (HTTP ${res.status}).`);
   const total = Number(res.headers.get("content-length")) || null;
   const reader = res.body.getReader();
@@ -377,5 +380,6 @@ async function fetchAndHash(url: string, on: (p: Progress) => void) {
   const all = new Uint8Array(bytes);
   let o = 0;
   for (const p of parts) { all.set(p, o); o += p.byteLength; }
-  return sha256(all);
+  // Blobs are addressed by keccak256 of their bytes, the same hash the contracts store.
+  return keccak256(all);
 }
