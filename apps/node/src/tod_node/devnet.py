@@ -6,6 +6,7 @@ import subprocess
 import sys
 import threading
 import time
+from decimal import Decimal
 
 from web3 import Web3
 
@@ -50,10 +51,11 @@ def deploy(rpc: str, workdir) -> tuple[Ledger, str]:
 class Actor:
     """One dev key with its own transaction queue, funded with gas and optionally test tokens."""
 
-    def __init__(self, ledger: Ledger, net_file: str, workdir, label: str, usdc: float = 0):
+    def __init__(self, ledger: Ledger, net_file: str, workdir, label: str, units: int = 0):
         self.key = dev_key(label)
         self.address = LocalSigner(self.key).address
-        script("fund.py", self.address, "--usdc", str(usdc), "--journal-dir", str(workdir / "faucet"),
+        # fund.py takes TOD with six decimals and defaults to 1000, so always pass the exact amount.
+        script("fund.py", self.address, "--tokens", str(Decimal(units).scaleb(-6)), "--journal-dir", str(workdir / "faucet"),
                rpc=ledger.net.rpc, net=net_file)
         self.l = ledger.using(TxManager(ledger.w3, LocalSigner(self.key), workdir / "actors", poll_seconds=0.02))
 
@@ -65,7 +67,7 @@ def open_round(ledger: Ledger, net_file: str, workdir, tag: str, nodes: int = 3,
     stake = l.market.minStake(budget, rounds, 3)
     ops = []
     for i in range(nodes):
-        owner = Actor(l, net_file, workdir, f"owner/{tag}/{i}", usdc=stake / 1e6)
+        owner = Actor(l, net_file, workdir, f"owner/{tag}/{i}", units=stake)
         op = Actor(l, net_file, workdir, f"op/{tag}/{i}")
         deadline = l.head()[1] + 1800
         nullifier = h(f"human/{tag}/{i}")
@@ -77,7 +79,7 @@ def open_round(ledger: Ledger, net_file: str, workdir, tag: str, nodes: int = 3,
         owner.l.token.approve(l.net.registry, stake)
         owner.l.registry.depositStake(op.address, stake)
         ops.append(op)
-    requester = Actor(l, net_file, workdir, f"requester/{tag}", usdc=budget / 1e6)
+    requester = Actor(l, net_file, workdir, f"requester/{tag}", units=budget)
     requester.l.token.approve(l.net.market, budget)
     requester.l.market.createJob({
         "budget": budget, "stakePerNode": stake, "rounds": rounds, "segments": segments, "minQuorum": 3,
