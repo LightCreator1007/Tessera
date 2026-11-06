@@ -108,3 +108,13 @@ def test_attributes_encode_as_arkiv_calldata(on):
     data = arkiv.create_calldata(L.attributes(L.record(L.LISTING, comp())), 100, 7)
     (ops,) = decode(["(uint8,bytes)[]"], data[4:])
     assert ops[0][0] == arkiv.CREATE_OP
+
+
+def test_a_rate_limited_lookup_does_not_stall_the_listing(on):
+    import requests
+
+    ark = on
+    too_many = requests.Response()
+    too_many.status_code = 429
+    ark.fail = requests.HTTPError("429 Client Error: Too Many Requests", response=too_many)
+    assert run(comp(), ark) == "pending" and len(ark.sent) == 1  # created without the lookup

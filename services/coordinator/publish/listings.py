@@ -120,7 +120,14 @@ def step(cid: int, kind: str, c: dict, client, now=time.time) -> str:
             _set(cid, kind, tx_checks=tx_checks + 1, next_try=now() + 5)
             return "pending"
         rec = record(kind, c)
-        key = find(client, rec)
+        try:
+            key = find(client, rec)
+        except Exception as e:
+            # The keyless RPC rations arkiv_query far below writes. The lookup only catches a create whose key a lost
+            # database forgot (a sent tx is always saved first), so go on without it rather than stall the listing.
+            if not rate_limited(e):
+                raise
+            key = None
         if key:
             _set(cid, kind, state="indexed", arkiv_key=key, error=None)
             return "indexed"
