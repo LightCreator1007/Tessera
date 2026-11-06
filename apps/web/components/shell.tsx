@@ -17,7 +17,7 @@ import { isDemo } from "@/lib/api/client";
 import { formatToken, TOKEN_SYMBOL } from "@/lib/money";
 import { Button, Count, Identicon, MenuItem, Money, Popover, cx, short } from "./primitives";
 import { Flap, useGain } from "./mosaic/Flap";
-import { BrandMark } from "./pixel";
+import { BrandMark } from "./brand";
 
 export function Providers({ children }: { children: ReactNode }) {
   const [qc] = useState(() => new QueryClient({ defaultOptions: { queries: { staleTime: 4_000, refetchOnWindowFocus: false } } }));
