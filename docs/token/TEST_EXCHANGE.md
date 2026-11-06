@@ -60,4 +60,4 @@ The exchange has no mutable price, privileged withdrawal or issuance path. Asset
 
 Slither's new-contract finding is the expected low-severity timestamp comparison for expiry. The deadline limits transaction lifetime; timestamps are not used for pricing or randomness. Existing whole-project findings and transient-guard modelling limitations remain separate from this test-only change. Public deployment is not approved by these local checks.
 
-Public verification status for this implementation: no Alchemy RPC or repository RPC secret was configured in the development session, so the Circle fork test was not executed. Local fixture tests do not establish compatibility with the deployed Circle token. Keep public deployment gated on the successful pinned-fork check.
+The Circle round-trip fork check passed through Alchemy at Base Sepolia block `55081277` on 6 November 2026. This used local fork balances and sent no public transaction. Keep the pinned block, result and tested source revision together, and rerun after exchange changes. See the [deployment runbook](BASE_SEPOLIA_RUNBOOK.md) for public funding, deployment and receipt requirements.

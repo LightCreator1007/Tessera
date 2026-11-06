@@ -3,6 +3,7 @@ name = "base-sepolia"
 chainId = 84532
 rpc = ""
 rpcEnv = "BASE_SEPOLIA_RPC_URL"
+verifierUrl = "https://base-sepolia.blockscout.com/api/"
 logSpan = 200
 probationSeconds = 300
 threshold = 2
@@ -11,6 +12,8 @@ threshold = 2
 cap = 1000000000000
 
 [roles]
+# Optional: set funding to the funded gas wallet and supply FUNDING_PRIVATE_KEY.
+# funding = ""
 tokenAdmin = ""
 deployer = ""
 coordinator = ""
@@ -22,3 +25,4 @@ verifiers = ["", ""]
 deployer = 0.0
 coordinator = 0.0
 verifier = 0.0
+faucet = 0.0

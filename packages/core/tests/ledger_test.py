@@ -775,10 +775,81 @@ def test_public_deploy_funds_deploys_and_wires(public):
     assert l.market.verifiers() == roles["verifiers"]
     assert l.token.decimals() == 6
     spent = w3.eth.get_transaction_count(roles["faucet"])
-    r = run("--yes")
+    deployer_nonce = w3.eth.get_transaction_count(roles["deployer"])
+    original_bundle = (tmp / "out.toml").read_bytes()
+    blocked = run("--yes")
+    assert blocked.returncode != 0 and "earlier deployment" in blocked.stderr
+    assert w3.eth.get_transaction_count(roles["deployer"]) == deployer_nonce
+    assert w3.eth.get_transaction_count(roles["faucet"]) == spent
+    r = run("--yes", "--out", str(tmp / "fresh-bundle.toml"))
     assert r.returncode == 0, r.stderr
+    assert (tmp / "out.toml").read_bytes() == original_bundle
     assert w3.eth.get_balance(roles["coordinator"]) == 5 * 10**17, "a second run only tops up what is missing"
     assert w3.eth.get_transaction_count(roles["faucet"]) - spent == 1, "just the deployer, which spent gas"
+
+
+def test_public_dry_run_never_funds_creates_or_writes_a_journal(public):
+    w3, run, roles, _, tmp = public
+    result = run("--dry-run", "--yes")
+    assert result.returncode == 0, result.stderr
+    assert '"dryRun": true' in result.stdout and '"fundingFunded": false' in result.stdout
+    assert "create ToDToken" in result.stdout and "Nothing was sent" in result.stdout
+    for address in [roles["deployer"], roles["faucet"], roles["coordinator"], *roles["verifiers"]]:
+        assert w3.eth.get_transaction_count(address) == 0
+        assert w3.eth.get_balance(address) == 0
+    assert not (tmp / "out.toml").exists()
+    assert not (tmp / "out.toml.receipts.json").exists()
+    assert not (tmp / "j").exists()
+
+
+def use_deployer_for_role_funding(public):
+    _, _, roles, env, tmp = public
+    source = tmp / "public.toml"
+    text = source.read_text().replace('[roles]\n', f'[roles]\nfunding = "{roles["deployer"]}"\n')
+    source.write_text(text.replace('[funding]\n', '[funding]\nfaucet = 0.01\n'))
+    env["FUNDING_PRIVATE_KEY"] = env["DEPLOYER_PRIVATE_KEY"]
+    del env["FAUCET_PRIVATE_KEY"]
+
+
+def test_one_funded_deployer_can_prepare_all_fresh_role_wallets(public):
+    use_deployer_for_role_funding(public)
+    w3, run, roles, _, tmp = public
+    w3.provider.make_request("anvil_setBalance", [roles["deployer"], hex(3 * 10**18)])
+    result = run("--yes")
+    assert result.returncode == 0, result.stderr
+    assert w3.eth.get_balance(roles["faucet"]) == 10**16
+    assert w3.eth.get_balance(roles["coordinator"]) == 5 * 10**17
+    assert all(w3.eth.get_balance(v) == 25 * 10**16 for v in roles["verifiers"])
+    record = json.loads((tmp / "out.toml.receipts.json").read_text())
+    assert record["status"] == "complete" and len(record["funding"]) == 4
+    assert set(record["contracts"]) == {"ToDToken", "NodeRegistry", "JobMarket"}
+    assert all(item["to"] != roles["deployer"] for item in record["funding"])
+    for tx in [*record["funding"], *record["contracts"].values()]:
+        assert w3.eth.get_transaction_receipt(tx["txHash"])["status"] == 1
+    assert w3.eth.get_transaction_receipt(record["setMarketTxHash"])["status"] == 1
+    assert w3.eth.get_transaction_count(roles["deployer"]) == 8
+
+
+def test_deployer_funding_cannot_spend_its_own_deployment_reserve(public):
+    use_deployer_for_role_funding(public)
+    w3, run, roles, _, tmp = public
+    w3.provider.make_request("anvil_setBalance", [roles["deployer"], hex(1011 * 10**15)])
+    result = run("--yes")
+    assert result.returncode != 0 and "DEPLOYER would hold" in result.stderr
+    assert w3.eth.get_transaction_count(roles["deployer"]) == 0
+    assert all(w3.eth.get_balance(a) == 0 for a in [roles["faucet"], roles["coordinator"], *roles["verifiers"]])
+    assert not (tmp / "out.toml.receipts.json").exists()
+
+
+def test_partial_deployment_record_blocks_blind_retry(public):
+    w3, run, roles, _, tmp = public
+    progress = tmp / "out.toml.receipts.json"
+    progress.write_text('{"status":"in_progress","contracts":{}}')
+    result = run("--yes")
+    assert result.returncode != 0 and "receipt record exists" in result.stderr
+    assert w3.eth.get_transaction_count(roles["deployer"]) == 0
+    assert w3.eth.get_transaction_count(roles["faucet"]) == 0
+    assert json.loads(progress.read_text())["status"] == "in_progress"
 
 
 def test_fund_on_a_public_chain_stops_for_a_human(public):
