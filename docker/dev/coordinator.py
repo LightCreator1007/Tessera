@@ -16,6 +16,6 @@ if key.address != net["roles"]["coordinator"]:
 c = net["contracts"]
 os.environ.update(CHAIN_ID=str(net["chainId"]), JOB_MARKET=c["market"], NODE_REGISTRY=c["registry"], TOKEN=c["token"],
                   VERIFIERS=",".join(net["roles"]["verifiers"]), COORDINATOR_PRIVATE_KEY="0x" + bytes(key.key).hex())
-# ponytail: API only. Rounds open once the coordinator's round driver lands; then this execs its entrypoint instead.
+# The round driver runs inside the API process whenever TOD_NETWORK is set, which compose.dev.yml does.
 os.execvp("uvicorn", ["uvicorn", "api.app:app", "--app-dir", "/app/services/coordinator", "--host", "0.0.0.0",
                       "--port", "8000"])
