@@ -10,15 +10,15 @@ from pathlib import Path
 from eth_account import Account
 from eth_account.messages import encode_defunct
 from eth_utils import is_address, to_checksum_address
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from tod_core import encodings as enc
 from tod_core.hashing import k256
 
-from api import config
+from api import auth, config
 
-from . import agentpass, worldid
+from . import agentpass, topup, worldid
 
 PAIR_PREFIX = "tod-pair:"
 INVITE_TTL = 30 * 60  # s; same lifetime as the operator's consent
@@ -40,6 +40,7 @@ db.execute("CREATE TABLE IF NOT EXISTS agent_links (owner TEXT PRIMARY KEY, iss 
 db.execute("CREATE TABLE IF NOT EXISTS agent_pending (id TEXT PRIMARY KEY, kind TEXT, owner TEXT, operator TEXT,"
            " consent TEXT, device_code TEXT, created INTEGER, expires INTEGER, state TEXT)")
 LINK_SIG_TTL = 300  # s; the owner's link signature is short-lived
+topups = topup.Topups(db, topup.Chain())
 
 
 class JoinRequest(BaseModel):
@@ -299,3 +300,18 @@ def agent_poll(pid: str):
     nullifier, credential = _joined(owner)
     consent_fields = {k: c[k] for k in ("owner", "operator", "consentDeadline")}
     return signed_invite(operator, owner, nullifier, consent_fields, bytes.fromhex(c["sig"][2:]), credential)
+
+
+class TopupResponse(BaseModel):
+    sent: int  # wei
+    balance: int  # wei, the operator's balance after this top-up
+    tx: str | None = None
+
+
+@router.post("/topup", response_model=TopupResponse)
+def gas_topup(operator: str = Depends(auth.node)):
+    """Sends a joined operator of a World ID-verified owner enough gas for its rounds, within a per-human cap."""
+    try:
+        return topups.grant(operator)
+    except topup.Refused as e:
+        raise HTTPException(e.status, str(e))
