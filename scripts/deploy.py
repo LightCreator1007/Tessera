@@ -1,4 +1,4 @@
-"""Funds the roles, deploys ToDToken, NodeRegistry and JobMarket, wires and verifies them, writes networks/<name>.toml."""
+"""Funds the roles, deploys and wires the ToD contracts, verifies them, and writes networks/<name>.toml."""
 import argparse
 import json
 import os
@@ -96,6 +96,7 @@ def plan_deploy(w3: Web3, sender: str, roles: dict, cfg: dict) -> tuple[list[str
         ("NodeRegistry", creation(w3, "NodeRegistry", stand_in, roles["admitter"], cfg["probationSeconds"])[0]),
         ("JobMarket", creation(w3, "JobMarket", stand_in, stand_in, roles["coordinator"], roles["verifiers"],
                                cfg["threshold"])[0]),
+        ("Competitions", creation(w3, "Competitions", stand_in, roles["admitter"])[0]),
     ]
     lines, spend, hold = [], 0, 0
     for name, data in items:
@@ -289,6 +290,8 @@ def main() -> None:
     market = create("JobMarket", token, registry, roles["coordinator"], roles["verifiers"], cfg["threshold"])["contractAddress"]
     reg = w3.eth.contract(address=registry, abi=json.loads((REPO / "packages/abi/json/INodeRegistry.json").read_text()))
     wire = tm.transact(registry, reg.encode_abi("setMarket", args=[market]), timeout=300)
+    # Last, so the earlier contracts keep the addresses they have on a fresh Anvil.
+    competitions = create("Competitions", token, roles["admitter"])["contractAddress"]
     if not dev:
         record.update(status="deployed", setMarketTxHash=Web3.to_hex(wire["transactionHash"]))
         save_progress(progress, record)
@@ -296,7 +299,7 @@ def main() -> None:
     # [contracts] is always the file's last section, so everything above it survives a redeploy.
     head = text.split("[contracts]")[0].rstrip()
     out.write_text(f'{head}\n\n[contracts]\ntoken = "{token}"\nregistry = "{registry}"\nmarket = "{market}"\n'
-                   f'deployBlock = {token_receipt["blockNumber"]}\n')
+                   f'competitions = "{competitions}"\ndeployBlock = {token_receipt["blockNumber"]}\n')
 
     verified = None
     if not dev and not args.no_verify:
@@ -304,7 +307,8 @@ def main() -> None:
     if not dev:
         record.update(status="complete", verification=verified)
         save_progress(progress, record)
-    print(json.dumps({"token": token, "registry": registry, "market": market, "out": str(out), "verified": verified}))
+    print(json.dumps({"token": token, "registry": registry, "market": market, "competitions": competitions, "out": str(out),
+                      "verified": verified}))
 
 
 if __name__ == "__main__":

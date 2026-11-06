@@ -67,6 +67,10 @@ Every finished model gets a public `tod.model` entity on Arkiv (Rabdi testnet), 
 
 One human, one node: a laptop joins the pool only after its owner proves they're human with World ID, verified on the coordinator's server and bound to the owner's wallet, and the contract refuses a second node for the same person. Small jobs accept Selfie Check, and jobs of 500 TOD or more need Proof of Human. [docs/world-id.md](docs/world-id.md) explains the choice, every path and our integration debrief.
 
+## Competitions
+
+Anyone can host a prediction competition: lock a prize in TOD and a hash of the answer labels, and the `Competitions` contract scores every entry itself once the labels are revealed, then pays the best one. Entry needs World ID, one person per competition, and the host can't enter their own. A model trained on ToD can enter. [docs/competitions.md](docs/competitions.md) has the rules and the commands.
+
 ## What's in the repo
 
 | Path | What it is |

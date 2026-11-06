@@ -11,6 +11,7 @@ from eth_utils import keccak
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.responses import RedirectResponse, Response
 
+import competitions
 import driver
 import history
 import publish
@@ -128,6 +129,25 @@ def provider_compute(owner: str):
 _models_cache: dict = {"at": 0.0, "rows": []}
 MODELS_TTL = 15  # s; every arkiv_query is billed against the access key's monthly quota
 MODELS_STALE_OK = 600  # s a last good list is still served when Arkiv doesn't answer
+
+
+@v1.get("/competitions")
+def competition_list():
+    """Every competition on the Competitions contract, newest first, with its status and leaderboard."""
+    if not competitions.enabled():
+        raise HTTPException(503, "this network has no Competitions contract")
+    try:
+        return competitions.listing()
+    except Exception as e:
+        raise HTTPException(502, f"chain read failed: {type(e).__name__}")
+
+
+@v1.get("/competitions/{cid}")
+def competition_one(cid: int):
+    found = [c for c in competition_list() if c["id"] == cid]
+    if not found:
+        raise HTTPException(404, "no such competition")
+    return found[0]
 
 
 @v1.get("/models", response_model=list[ModelRecord])

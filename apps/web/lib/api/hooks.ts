@@ -11,6 +11,7 @@ export const retry = (n: number, e: unknown) => n < 2 && e instanceof ApiError &
 
 export const useConfig = () => useQuery({ queryKey: ["config"], queryFn: api.config, staleTime: Infinity });
 export const useHealth = () => useQuery({ queryKey: ["health"], queryFn: api.health, refetchInterval: 15_000, retry: 0 });
+export const useLiveCompetitions = () => useQuery({ queryKey: ["competitions"], queryFn: api.competitions, refetchInterval: LIVE, retry });
 export const usePool = () => useQuery({ queryKey: ["pool"], queryFn: api.pool, refetchInterval: SLOW , retry });
 export const useJobs = () => useQuery({ queryKey: ["jobs"], queryFn: api.jobs, refetchInterval: SLOW , retry });
 export const useJob = (id: number) => useQuery({ queryKey: ["job", id], queryFn: () => api.job(id), refetchInterval: LIVE , retry });

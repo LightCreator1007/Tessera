@@ -27,6 +27,7 @@ from .exclusions import Exclusions
 
 PAIR_PREFIX = "tod-pair:"
 INVITE_TTL = 30 * 60  # s; same lifetime as the operator's consent
+PASS_TTL = 24 * 3600  # s; an EntryPass is reused for every competition the wallet enters that day
 DEV_CHAIN = 31337
 
 MODE = os.environ.get("IDENTITY_MODE", "dev")
@@ -117,6 +118,20 @@ class IdentityConfig(BaseModel):
     rpId: str
     action: str
     environment: str
+
+
+class EntryPassRequest(BaseModel):
+    owner: str
+    proof: dict = {}  # the IDKit result, forwarded unchanged; ignored in dev mode
+
+
+class EntryPassResponse(BaseModel):
+    """Exactly the pass arguments of Competitions.create and Competitions.enter."""
+    wallet: str
+    nullifier: str
+    deadline: int
+    signature: str
+    credential: str
 
 
 class JoinResponse(BaseModel):
@@ -225,6 +240,29 @@ def checked_owner(owner: str) -> str:
     if not is_address(owner):
         raise HTTPException(400, "owner must be a 0x address")
     return to_checksum_address(owner)
+
+
+@router.post("/entry-pass", response_model=EntryPassResponse)
+def entry_pass(req: EntryPassRequest):
+    """One person, one wallet, one entry per competition: the admitter vouches for this wallet's human after World ID.
+    Hosts need one too, which is how the contract stops a host entering their own competition."""
+    if not config.COMPETITIONS:
+        raise HTTPException(503, "this network has no Competitions contract")
+    owner = checked_owner(req.owner)
+    exclusions.refuse(owner)
+    nullifier, credential = verify_human(owner, req.proof)
+    exclusions.refuse(owner, nullifier)
+    row = db.execute("SELECT owner FROM humans WHERE nullifier = ?", (nullifier,)).fetchone()
+    if row and row[0] != owner:
+        raise HTTPException(409, "this World ID already uses another wallet")
+    if not row:
+        db.execute("INSERT INTO humans VALUES (?, ?, ?, ?)", (nullifier, owner, credential, int(time.time())))
+        db.commit()
+    deadline = int(time.time()) + PASS_TTL
+    sig = enc.sign(ADMITTER.key, "EntryPass", config.CHAIN_ID, config.COMPETITIONS,
+                   {"wallet": owner, "nullifier": bytes.fromhex(nullifier[2:]), "deadline": deadline})
+    return EntryPassResponse(wallet=owner, nullifier=nullifier, deadline=deadline, signature="0x" + sig.hex(),
+                             credential=credential)
 
 
 @router.post("/join", response_model=JoinResponse)

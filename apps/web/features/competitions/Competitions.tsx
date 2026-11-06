@@ -1,5 +1,5 @@
 "use client";
-// Competition list and detail. Example fixtures plus the competitions this wallet hosts; hosting and entering run on the demo wallet until a competition contract exists, and stay disabled with the reason shown against a live coordinator.
+// Competition list and detail. Against a coordinator, the Competitions contract's competitions with onchain scores; in demo mode, examples plus this wallet's.
 import Link from "next/link";
 import { Fragment, useEffect, useState } from "react";
 import { ChevronDown, Lock, Plus, Trophy } from "lucide-react";
@@ -15,11 +15,11 @@ import { entryGate, relationOf, useCompetition, useCompetitions } from "./model"
 import { sha256 } from "@/lib/learn/replay";
 
 type Status = Competition["status"];
-const LABEL: Record<Status, string> = { open: "Open", finished: "Finished", unrevealed: "Labels not revealed" };
-const TONE: Record<Status, Tone> = { open: "ok", finished: "neutral", unrevealed: "danger" };
+const LABEL: Record<Status, string> = { open: "Open", closed: "Closed", finished: "Finished", unrevealed: "Labels not revealed" };
+const TONE: Record<Status, Tone> = { open: "ok", closed: "neutral", finished: "neutral", unrevealed: "danger" };
 const NOT_LIVE = isDemo
   ? "Competitions aren't on chain yet. Hosting and entering run on the test wallet in this browser."
-  : "Competitions aren't on chain yet. Entering and hosting open when the competition contract ships.";
+  : "These are read from the Competitions contract. Until the web wallet signs transactions, host and enter with docker/dev/competition.py.";
 const REL = { host: "Hosting", entered: "Entered" } as const;
 
 const date = (iso: string) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(iso));
@@ -40,7 +40,7 @@ function Disabled({ children, icon }: { children: string; icon: typeof Plus }) {
 export function CompetitionList() {
   const { list, w } = useCompetitions();
   const [seg, setSeg] = useState<"all" | Status>("all");
-  const counts = { all: list.length, open: 0, finished: 0, unrevealed: 0 };
+  const counts = { all: list.length, open: 0, closed: 0, finished: 0, unrevealed: 0 };
   list.forEach((c) => counts[c.status]++);
   const shown = list.filter((c) => seg === "all" || c.status === seg);
   return (
@@ -49,9 +49,9 @@ export function CompetitionList() {
         {isDemo ? <ButtonLink href="/competitions/new" variant="primary" icon={Plus}>Host a competition</ButtonLink> : <Disabled icon={Plus}>Host a competition</Disabled>}
       </PageHeader>
       <div className="flex flex-col gap-3 px-4 pt-4 md:px-6">
-        <ExampleBanner />
+        {isDemo && <ExampleBanner />}
         <p id="not-live" className="text-xs text-muted">{NOT_LIVE}</p>
-        <Segmented label="Status" value={seg} onChange={setSeg} counts={counts} items={[{ key: "all", label: "All" }, { key: "open", label: "Open" }, { key: "finished", label: "Finished" }, { key: "unrevealed", label: "Not revealed" }]} />
+        <Segmented label="Status" value={seg} onChange={setSeg} counts={counts} items={[{ key: "all", label: "All" }, { key: "open", label: "Open" }, { key: "closed", label: "Closed" }, { key: "finished", label: "Finished" }, { key: "unrevealed", label: "Not revealed" }]} />
       </div>
       <div className="mt-3 flex-1">
         {shown.length > 0 && (
@@ -68,7 +68,7 @@ export function CompetitionList() {
                   cover={coverFor(c.id)}
                   live={c.status === "open"}
                   tag={rel ? <Pill tone="brand">{REL[rel as keyof typeof REL]}</Pill> : <Pill tone={TONE[c.status]}>{LABEL[c.status]}</Pill>}
-                  note={`${prize === null ? "prize not reported" : `${prize} usdc prize`} · ${c.entries.length} ${c.entries.length === 1 ? "entry" : "entries"} · closes ${date(c.deadline)}`}
+                  note={`${prize === null ? "prize not reported" : `${prize} TOD prize`} · ${c.entries.length} ${c.entries.length === 1 ? "entry" : "entries"} · closes ${date(c.deadline)}`}
                 />
               );
             })}
@@ -92,11 +92,25 @@ export const RULES = [
   ["Who can enter", "One entry per verified person. The host's own identity is blocked from entering."],
 ] as const;
 
-function Rules() {
-  const rows = RULES;
+// An unknown window says so rather than "0 seconds".
+const span = (s?: number) =>
+  s === undefined ? "the reveal window" : s % 3600 === 0 ? `${s / 3600} hours` : s % 60 === 0 ? `${s / 60} minutes` : `${s} seconds`;
+
+/** A live competition's rules carry its own size and windows, as the contract enforces them. */
+function rulesFor(c: Competition) {
+  if (!c.live) return RULES;
+  const w = span(c.revealWindow);
+  return RULES.map(([k, v]): readonly [string, string] =>
+    k === "Scoring" ? [k, `Accuracy on ${(c.items ?? ITEMS).toLocaleString()} hidden labels, counted by the contract when each entry is revealed.`]
+      : k === "Labels not revealed" ? [k, `If the host doesn't reveal labels that match the commitment within ${w} of the deadline, the prize is split evenly between entrants.`]
+        : [k, v]);
+}
+
+function Rules({ c }: { c: Competition }) {
+  const rows = rulesFor(c);
   return (
     <section aria-label="Rules" className="flex flex-col gap-3">
-      <div className="flex items-center gap-2"><Eyebrow>Rules</Eyebrow><Pill tone="pending">Proposed</Pill></div>
+      <div className="flex items-center gap-2"><Eyebrow>Rules</Eyebrow>{c.live ? <Pill tone="ok">Enforced onchain</Pill> : <Pill tone="pending">Proposed</Pill>}</div>
       <dl className="flex flex-col">
         {rows.map(([k, v]) => (
           <div key={k} className="grid gap-1 border-t border-rule py-2.5 sm:grid-cols-4 sm:gap-4">
@@ -132,7 +146,8 @@ function Commitment({ c }: { c: Competition }) {
 
 function Leaderboard({ c }: { c: Competition }) {
   const [open, setOpen] = useState<string | null>(null);
-  const ranked = c.entries.map((e) => ({ e, s: scoreOf(c, e) })).sort((a, b) => b.s - a.s);
+  // A live entry nobody revealed has no score; it isn't ranked.
+  const ranked = c.entries.filter((e) => !c.live || e.score !== undefined).map((e) => ({ e, s: scoreOf(c, e) })).sort((a, b) => b.s - a.s);
   return (
     <section aria-label="Leaderboard" className="flex flex-col gap-3">
       <Eyebrow>Leaderboard</Eyebrow>
@@ -154,9 +169,9 @@ function Leaderboard({ c }: { c: Competition }) {
                     <TD><AddressChip value={e.op} href={`/nodes/${e.op}`} /></TD>
                     <TD className="text-right font-mono tabular text-ink">{pct(s)}</TD>
                     <TD className="text-right">
-                      <button type="button" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : e.op)} className="inline-flex items-center gap-1 text-xs text-muted hover:text-ink">
+                      {c.live ? <span className="text-xs text-muted">Scored onchain</span> : <button type="button" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : e.op)} className="inline-flex items-center gap-1 text-xs text-muted hover:text-ink">
                         Re-check this score <ChevronDown className={cx("size-3.5 transition-transform duration-150 ease-out", isOpen && "rotate-180")} aria-hidden />
-                      </button>
+                      </button>}
                     </TD>
                   </tr>
                   {isOpen && (
@@ -206,7 +221,7 @@ export function CompetitionDetail({ id }: { id: string }) {
       </PageHeader>
       <div className="flex flex-col gap-8 px-4 py-6 md:px-6 lg:flex-row">
         <div className="flex min-w-0 flex-1 flex-col gap-8">
-          {rel !== "host" && <ExampleBanner />}
+          {rel !== "host" && !c.live && <ExampleBanner />}
           <header className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center gap-2">
               <Pill tone={TONE[c.status]}>{LABEL[c.status]}</Pill>
@@ -219,7 +234,7 @@ export function CompetitionDetail({ id }: { id: string }) {
           </header>
           {rel === "host" && isOpen && (
             <Banner tone="pending" title="You host this competition.">
-              Keep the labels file you committed. After the deadline you have 48 hours to reveal it; if it doesn&apos;t hash to the commitment, the prize is split between entrants.
+              Keep the labels file you committed. After the deadline you have {c.live ? span(c.revealWindow) : "48 hours"} to reveal it; if it doesn&apos;t hash to the commitment, the prize is split between entrants.
             </Banner>
           )}
           {mine && (
@@ -240,10 +255,10 @@ export function CompetitionDetail({ id }: { id: string }) {
           )}
           {c.status === "unrevealed" && (
             <Banner tone="danger" title="The host didn't reveal the labels.">
-              The 48-hour reveal window closed without labels matching the commitment, so no score can be trusted. Under the rules the prize is split between the {c.entries.length} entrants.
+              The {c.live ? span(c.revealWindow) : "48-hour"} reveal window closed without labels matching the commitment, so no score can be trusted. Under the rules the prize is split between the {c.entries.length} entrants.
             </Banner>
           )}
-          <Rules />
+          <Rules c={c} />
         </div>
         <aside className="flex shrink-0 flex-col gap-4 lg:w-80">
           <Commitment c={c} />
