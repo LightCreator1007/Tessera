@@ -62,8 +62,8 @@ export type ModelRecord = {
   swarmRef: string | null;
 };
 export type Workload = { id: string; replayClass: "exact" | "tolerance"; defaults: Record<string, unknown>; tier: "core" | "stretch" };
-export type DraftRequest = { workload: string; datasetHash: string; budget: number; epochs: number; minQuorum?: number; maxPerRound?: number; overrides?: Record<string, unknown> };
-export type Draft = { spec: Record<string, unknown>; modelSpecHash: string; initialWeightsHash: string; windows: Record<string, number>; minStake: number; createJobCalldata: string };
+export type DraftRequest = { workload: string; datasetHash: string; /** Leave out: the draft prices the job from its spec. */ budget?: number; epochs: number; minQuorum?: number; maxPerRound?: number; overrides?: Record<string, unknown> };
+export type Draft = { spec: Record<string, unknown>; modelSpecHash: string; initialWeightsHash: string; windows: Record<string, number>; /** Token units createJobCalldata asks for; 1 TOD pays for at least 1 Gop. */ budget: number; /** Float ops the budget buys: rounds x minQuorum x ops per node per round. */ computeOps: number; minStake: number; createJobCalldata: string };
 /** The spec bytes as served, parsed, plus whether their keccak matches the job's on-chain modelSpecHash. */
 export type Spec = { spec: Record<string, unknown>; keccak: string; matches: boolean };
 export type RoundState = { round: number; metric: string | null; seconds: number | null };
