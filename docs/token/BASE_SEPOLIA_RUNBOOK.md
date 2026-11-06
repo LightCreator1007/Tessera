@@ -1,5 +1,7 @@
 # Base Sepolia deployment and redemption
 
+The [confirmed demo bundle](BASE_SEPOLIA_DEPLOYMENT.md) records the public addresses, source-verification results and successful faucet/redemption receipts. Use its network profile for this deployment; the steps below also apply to a deliberate fresh bundle.
+
 The five contracts are ToDToken, NodeRegistry, JobMarket, ToDFaucet and ToDTestExchange. Source code and Anvil deployments do not give them a public address. A public deployment bundle exists only after real receipts record their Base Sepolia addresses and deployment blocks. The funding wallet is an EOA that pays for deployment and reserve seeding; it is not the token contract.
 
 Use Base Sepolia, chain 84532, through a private Alchemy RPC. Preserve the agreed six-decimal TOD and existing stake, probation, slashing and settlement rules. The demo token cap is one million TOD; it does not set a market price. No production-money conversion is included.
