@@ -4,7 +4,7 @@ import { keccak256 } from "viem";
 import * as fx from "@/mocks/fixtures";
 import type {
   Draft, DraftRequest, ModelRecord, NodeEvent, NodeHealth, NodeStatus, Spec, Workload,
-  Config, Evidence, Health, Job, JobState, Node, NodeChain, Pool, Round, RoundSummary, RoundVerdicts, Settlement, Sourced, OwnerHistory } from "./types";
+  Config, Evidence, Health, Job, JobState, Node, NodeChain, Pool, Round, RoundSummary, RoundVerdicts, Settlement, Sourced, OwnerHistory, OwnerIdentity } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_COORDINATOR_URL ? "/api/coord" : undefined;
 export const isDemo = !BASE;
@@ -111,6 +111,8 @@ export const api = {
   draft: (req: DraftRequest) => (BASE ? post<Draft>("/v1/jobs/draft", req) : demo(() => fx.draftFor(req), "draft")),
   nodes: () => (BASE ? get<Node[]>("/v1/nodes") : demo(() => fx.nodes, "nodes")),
   /** Live only: demo keeps its own fixture ledger. Coordinators without the history route answer 404. */
+  // Demo owners are never excluded; the exclusion list lives only on a live coordinator.
+  identity: (owner: string) => (BASE ? get<OwnerIdentity>(`/v1/identity/owners/${owner}`) : demo(() => ({ owner, joined: true, credential: null, excluded: null }), "identity")),
   history: (owner: string) => get<OwnerHistory>(`/v1/owners/${owner}/history?limit=200`),
   // Per-verifier verdicts have no coordinator route. Live, they are derived from the round itself: its status, the
   // threshold, and confirmed cheats. Demo uses fixtures. Either way the receipt labels them as derived, not signed.

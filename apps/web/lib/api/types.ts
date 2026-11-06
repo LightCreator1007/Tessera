@@ -54,6 +54,13 @@ export type OwnerEvent = {
   tx: string;
   at: number;
 };
+/** GET /v1/identity/owners/{owner}: whether the owner joined with World ID, and any team exclusion with the confirmed failures behind it. */
+export type OwnerIdentity = {
+  owner: string;
+  joined: boolean;
+  credential: string | null;
+  excluded: { reason: string; evidence: { job: number; round: number; operator: string; kind: string }[]; at: number } | null;
+};
 export type OwnerHistory = { owner: string; operators: string[]; events: OwnerEvent[]; next: string | null; indexedTo: number | null };
 export type Published = {
   round: number;
@@ -162,7 +169,11 @@ export type NodeStatus = {
   operator: string | null;
   daemon: { state: "running" | "stopped"; pid: number | null };
   lastEvent: NodeEvent | null;
+  /** Reveals the running daemon owes right now. Null from a node that can't tell (CLI status, older builds). */
+  owed?: OwedReveal[] | null;
 };
+/** A committed round whose reveal hasn't landed: stopping before it does costs `penalty` token units of stake. */
+export type OwedReveal = { job: number; round: number; commitDeadline: number | null; revealDeadline: number | null; missed: number; penalty: number | null };
 export type NodeHealth = { ok: boolean; loopAgeSeconds: number | null };
 
 export type Source = "live" | "demo";

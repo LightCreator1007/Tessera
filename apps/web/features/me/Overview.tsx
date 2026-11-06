@@ -14,6 +14,7 @@ import { setWallet, useWallet } from "@/lib/wallet";
 import { useTx } from "@/lib/tx";
 import { formatToken } from "@/lib/money";
 import { openConnect } from "@/components/connect";
+import { ExcludedNotice } from "@/features/node/Excluded";
 import {
   Button, ButtonLink, Card, EmptyState, Eyebrow, KpiCard, Money, Null, PageHeader, Pill, ROW, SectionTitle, TD, TH, THead, TextTabs, cx, relTime, short,
 } from "@/components/primitives";
@@ -115,6 +116,7 @@ export function Overview() {
       </PageHeader>
 
       <div className="flex flex-col gap-4 px-4 py-5 md:px-6">
+        <ExcludedNotice owner={w.address} on="balance" />
         <Card className="flex flex-col gap-5 p-4 md:p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex flex-col gap-1">

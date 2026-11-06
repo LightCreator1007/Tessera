@@ -20,6 +20,7 @@ export const useRound = (id: number, r: number | null) => useQuery({ queryKey: [
 export const useEvidence = (id: number, r: number) => useQuery({ queryKey: ["job", id, "round", r, "evidence"], queryFn: () => api.evidence(id, r) , retry });
 // The settlement only exists once the round is being settled, so a 404 or 409 before then is expected and not retried.
 export const useSettlement = (id: number, r: number) => useQuery({ queryKey: ["job", id, "round", r, "settlement"], queryFn: () => api.settlement(id, r), refetchInterval: LIVE, retry: 0 });
+export const useOwnerIdentity = (owner: string | null) => useQuery({ queryKey: ["owner", owner, "identity"], queryFn: () => api.identity(owner!), enabled: owner !== null, refetchInterval: 60_000, retry: false });
 export const useOwnerHistory = (owner: string | null, enabled: boolean) => useQuery({ queryKey: ["owner", owner, "history"], queryFn: () => api.history(owner!), enabled: enabled && owner !== null, refetchInterval: 15_000, retry: false });
 export const useVerdicts = (id: number, r: number | null) => useQuery({ queryKey: ["job", id, "round", r, "verdicts"], queryFn: () => api.verdicts(id, r!), enabled: r !== null });
 export const useSpec = (id: number, want: string) => useQuery({ queryKey: ["job", id, "spec", want], queryFn: () => api.spec(id, want), staleTime: Infinity, retry });
