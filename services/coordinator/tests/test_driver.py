@@ -1,4 +1,5 @@
 """The round driver against a fake market: report no-reveals, void, settle and publish, finalize, open rounds."""
+import json
 from types import SimpleNamespace as NS
 
 import numpy as np
@@ -39,7 +40,7 @@ class Market:
 
 @pytest.fixture
 def world(tmp_path, monkeypatch):
-    for t in ("JOBS", "ROUNDS", "SPECS", "MODELS", "EVIDENCE", "SETTLEMENTS", "CONTROL", "MISSED", "REARMED"):
+    for t in ("JOBS", "ROUNDS", "SPECS", "MODELS", "EVIDENCE", "SETTLEMENTS", "STATES", "CONTROL", "MISSED", "REARMED"):
         monkeypatch.setattr(tables, t, {})
     store = DiskStore(tmp_path)
     spec_bytes = canonical(SPEC)
@@ -89,6 +90,9 @@ def test_settles_like_a_verifier_and_publishes_what_it_needs(world):
     assert world.store.has("0x" + mine.settlement["aggregateHash"].hex())  # next round's start weights
     assert tables.ROUNDS[1][1].status == "verifying" and OPS[0] in blobs.allowed(1, 1)
     assert not world.market.calls  # nothing is sent before the verifiers sign
+    gate = json.loads(world.store.get(ev.aggregate.hash))["gate"]
+    assert tables.STATES[1].model_dump() == {"job": 1, "rounds": [{"round": 1, "metric": gate["valAfter"], "seconds": 990}],
+                                             "trust": "untrusted"}
 
 
 def test_finalizes_once_the_threshold_signed(world):
@@ -102,6 +106,17 @@ def test_finalizes_once_the_threshold_signed(world):
     want = tables.SETTLEMENTS[(1, 1)]["settlement"]
     assert (name, job, rnd) == ("finalizeRound", 1, 1) and sigs == [b"\1" * 65, b"\2" * 65]
     assert s["payouts"] == [{"operator": op, "amount": a} for op, a in want["payouts"]] and len(s["payouts"]) == 3
+
+
+def test_state_comes_back_after_a_restart_from_the_stored_evidence(world):
+    world.d.tick()
+    doc = world.store.get(tables.EVIDENCE[(1, 1)].aggregate.hash)
+    tables.STATES.clear()  # a restarted coordinator: the in-memory tables are empty, the store is not
+    r = world.s.rounds[(1, 1)]
+    r.update(status=RoundStatus.SETTLED, aggEvidenceHash=k256(doc), aggregateHash=b"\7" * 32)
+    world.d.publish({})
+    (st,) = tables.STATES[1].rounds
+    assert (st.round, st.metric, st.seconds) == (1, json.loads(doc)["gate"]["valAfter"], None)
 
 
 def test_voids_a_round_below_quorum(world):
