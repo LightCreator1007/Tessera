@@ -2,8 +2,10 @@
 import gzip
 import hashlib
 import io
+import os
 import shutil
 import tarfile
+import threading
 import urllib.request
 from pathlib import Path
 
@@ -42,10 +44,14 @@ def fetch(name: str, cache: Path) -> dict[str, Path]:
         p = cache / url.rsplit("/", 1)[1]
         if not p.exists():
             # A stalled mirror must fail rather than hang a node, and a cut-off download must not stay cached.
-            part = p.with_suffix(p.suffix + ".part")
-            with urllib.request.urlopen(url, timeout=60) as r, open(part, "wb") as f:
-                shutil.copyfileobj(r, f)
-            part.rename(p)
+            # Each download writes its own part file, so processes sharing a cache can't corrupt each other's.
+            part = p.with_name(f"{p.name}.{os.getpid()}.{threading.get_ident()}.part")
+            try:
+                with urllib.request.urlopen(url, timeout=60) as r, open(part, "wb") as f:
+                    shutil.copyfileobj(r, f)
+                os.replace(part, p)
+            finally:
+                part.unlink(missing_ok=True)
         if want is not None and _sha256(p) != want:
             raise DatasetError(f"{p.name}: sha256 mismatch, refusing to use it")
         out[p.name] = p

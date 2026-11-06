@@ -234,8 +234,8 @@ def run(
         from .gas import ensure_gas
         ensure_gas(coordinator, account.key, emit=events.append)
         from .prewarm import Prewarm
-        from .trainer import Coordinator, LazyTrainer, Trainer, preset_datasets
-        prewarm = Prewarm(preset_datasets(data_dir() / "datasets"), emit=events.append)
+        from .trainer import Coordinator, LazyTrainer, Trainer, dataset_cache, preset_datasets
+        prewarm = Prewarm(preset_datasets(dataset_cache(data_dir() / "datasets")), emit=events.append)
         train = (LazyTrainer if mode == "fake:lazy" else Trainer)(Coordinator(coordinator, account.key, net.chain_id, net.market),
                         prewarm.datasets, account.address, net.chain_id, net.market)
     else:

@@ -2,6 +2,7 @@
 import json
 import logging
 import math
+import os
 import time
 import urllib.error
 import urllib.request
@@ -68,6 +69,11 @@ class Coordinator:
                                               "Content-Type": "application/octet-stream"})
         urllib.request.urlopen(req, timeout=60).close()
         return h
+
+
+def dataset_cache(default: Path) -> Path:
+    """DATASET_CACHE lets processes on one machine share a download, as the compose stack's nodes and verifiers do."""
+    return Path(os.environ.get("DATASET_CACHE") or default)
 
 
 def preset_datasets(cache: Path) -> Datasets:

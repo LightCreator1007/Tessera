@@ -79,3 +79,41 @@ def test_fetch_downloads_once_and_checks_sha(tmp_path, monkeypatch):
     monkeypatch.setitem(presets.SOURCES, "fake", {src.as_uri(): "00" * 32})
     with pytest.raises(DatasetError):
         presets.fetch("fake", tmp_path / "cache")
+
+
+def test_processes_sharing_a_cache_never_see_a_half_file(tmp_path, monkeypatch):
+    import threading
+
+    src = tmp_path / "src.bin"
+    src.write_bytes(b"x" * 1_000_000)
+    monkeypatch.setitem(presets.SOURCES, "fake", {src.as_uri(): presets.hashlib.sha256(src.read_bytes()).hexdigest()})
+    errors = []
+
+    def one():
+        try:
+            presets.fetch("fake", tmp_path / "cache")
+        except Exception as e:  # a corrupt shared file shows up here as a sha mismatch
+            errors.append(e)
+
+    threads = [threading.Thread(target=one) for _ in range(8)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert errors == [] and not list((tmp_path / "cache").glob("*.part"))
+
+
+def test_a_cut_off_download_leaves_nothing_cached(tmp_path, monkeypatch):
+    class Broken:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self, *a):
+            raise OSError("connection reset")
+
+    monkeypatch.setitem(presets.SOURCES, "fake", {"https://mirror/src.bin": "00" * 32})
+    monkeypatch.setattr(presets.urllib.request, "urlopen", lambda *a, **k: Broken())
+    with pytest.raises(OSError):
+        presets.fetch("fake", tmp_path / "cache")
+    assert list((tmp_path / "cache").iterdir()) == []

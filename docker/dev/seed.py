@@ -13,6 +13,7 @@ from pathlib import Path
 
 from tod_core.ledger import Ledger, Network, Reverted
 from tod_core.txmgr import ANVIL_CHAIN_ID
+from tod_datasets import presets
 from tod_node.devnet import Actor, script
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -24,6 +25,10 @@ NODES = int(os.environ.get("DEV_NODES", "4"))
 l = Ledger(Network.load(NET_FILE))
 if l.net.chain_id != ANVIL_CHAIN_ID:
     sys.exit("docker/dev/seed.py is for the local chain only")
+
+# Fill the shared cache once, before any node or verifier starts, instead of every one downloading its own copy.
+presets.load("mnist", Path(os.environ.get("DATASET_CACHE", DATA / "datasets")))
+print("mnist cached", flush=True)
 
 
 def http(path, body=None):
