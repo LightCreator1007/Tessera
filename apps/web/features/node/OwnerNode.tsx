@@ -15,6 +15,7 @@ import { Banner, ButtonLink, Card, EmptyState, Eyebrow, Money, PhaseStrip, Secti
 import { CompetitionNudge } from "@/features/competitions/Nudge";
 import { DemoChip, MIN_STAKE } from "./JoinFlow";
 import { LocalNode } from "./LocalNode";
+import { SlashHistory } from "./SlashHistory";
 
 const TOD = 1_000_000;
 const PROBATION_HOURS = 5;
@@ -124,6 +125,8 @@ export function OwnerNode() {
           <TxStatus tx={withdraw} />
         </Card>
       </div>
+
+      <SlashHistory owner={w.address} operator={node.operator} stake={node.stake} minStake={MIN_STAKE} />
 
       <LocalNode compact />
     </section>
