@@ -6,11 +6,16 @@ import { fileURLToPath } from 'node:url'
 const pkg = join(dirname(fileURLToPath(import.meta.url)), '..')
 const out = join(pkg, '..', '..', 'contracts', 'out')
 const outputs = new Map()
+// The ABIs Python loads at runtime are committed with tod_core, one entry per line so a change reads as a small diff.
+const runtime = new Set(['IJobMarket', 'INodeRegistry', 'Competitions'])
 let ts = '// Generated from compiled contract interfaces. Do not edit.\n'
 for (const name of ['IJobMarket', 'INodeRegistry', 'ToDToken', 'ToDFaucet', 'ToDTestExchange', 'Competitions']) {
   const { abi } = JSON.parse(readFileSync(join(out, `${name}.sol`, `${name}.json`), 'utf8'))
   const json = JSON.stringify(abi, null, 2)
   outputs.set(join(pkg, 'json', `${name}.json`), json + '\n')
+  if (runtime.has(name)) {
+    outputs.set(join(pkg, '..', 'core', 'tod_core', 'abi', `${name}.json`), `[\n${abi.map((e) => JSON.stringify(e)).join(',\n')}\n]\n`)
+  }
   ts += `\nexport const ${name[0].toLowerCase() + name.slice(1)}Abi = ${json} as const\n`
 }
 outputs.set(join(pkg, 'src', 'generated.ts'), ts)

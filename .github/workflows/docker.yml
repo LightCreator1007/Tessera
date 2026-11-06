@@ -3,11 +3,11 @@ name: docker
 on:
   pull_request:
     paths: ["apps/node/**", "apps/verifier/**", "packages/**", "vectors/**", "docker/**", "networks/**", "pyproject.toml", "uv.lock",
-            ".python-version", ".dockerignore", ".github/workflows/docker.yml", "contracts/src/I*.sol"]
+            ".python-version", ".dockerignore", ".github/workflows/docker.yml"]
   push:
     branches: [main]
     paths: ["apps/node/**", "apps/verifier/**", "packages/**", "vectors/**", "docker/**", "networks/**", "pyproject.toml", "uv.lock",
-            ".python-version", ".dockerignore", ".github/workflows/docker.yml", "contracts/src/I*.sol"]
+            ".python-version", ".dockerignore", ".github/workflows/docker.yml"]
 permissions:
   contents: read
 concurrency:
@@ -41,7 +41,7 @@ jobs:
             docker buildx build --platform "$p" --build-arg APP="$APP" -f docker/app.Dockerfile --load -t "tod-$APP:test" .
             docker run --rm --platform "$p" "tod-$APP:test" --version
             # Both apps talk to the chain through the ledger, which can't start without these.
-            docker run --rm --platform "$p" --entrypoint python "tod-$APP:test" -c "from tod_core.ledger import _load_abi; _load_abi('IJobMarket'); _load_abi('INodeRegistry')"
+            docker run --rm --platform "$p" --entrypoint python "tod-$APP:test" -c "from tod_core.ledger import _load_abi; _load_abi('IJobMarket'); _load_abi('INodeRegistry'); _load_abi('Competitions')"
             # The app must run as the unprivileged user and still be able to write its data volume.
             docker run --rm --platform "$p" -v tod-ci:/data --entrypoint sh "tod-$APP:test" -c 'test "$(id -u)" = 10001 && touch /data/ok'
             # Mac and Linux laptops train together only if the exact kernel gives the same bytes on both chips.

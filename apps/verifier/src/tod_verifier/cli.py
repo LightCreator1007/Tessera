@@ -38,8 +38,11 @@ def data_dir() -> Path:
     return Path(os.environ.get("TOD_VERIFIER_DATA", Path.home() / ".tod-verifier"))
 
 
-def fail(as_json: bool, code: int, message: str, err: str) -> None:
-    typer.echo(json.dumps({"error": message, "code": err}) if as_json else f"error: {message}", err=not as_json)
+def fail(as_json: bool, code: int, message: str, err: str, hint: str | None = None) -> None:
+    if as_json:
+        typer.echo(json.dumps({k: v for k, v in {"error": message, "code": err, "hint": hint}.items() if v}))
+    else:
+        typer.echo(f"error: {message}" + (f"\nhint: {hint}" if hint else ""), err=True)
     raise typer.Exit(code)
 
 
@@ -47,7 +50,7 @@ def _setup(network, coordinator, key_env, as_json):
     """Ledger, runner and key from flags and env. Dev keys are refused off anvil, as in txmgr.signer_from_env."""
     if not (network and coordinator):
         fail(as_json, BAD_INPUT, "need --network and --coordinator (or TOD_NETWORK and TOD_COORDINATOR)", "bad_config")
-    from tod_core.ledger import Ledger, Network
+    from tod_core.ledger import Ledger, Network, open_failure
     from tod_core.txmgr import ANVIL_CHAIN_ID, dev_key
     from tod_node.prewarm import Prewarm
     from tod_node.trainer import Coordinator, RoundRunner, dataset_cache, preset_datasets
@@ -65,7 +68,8 @@ def _setup(network, coordinator, key_env, as_json):
     try:
         ledger = Ledger(net)
     except Exception as e:
-        fail(as_json, UNREACHABLE, f"chain {net.name}: {e}", "rpc_unreachable")
+        code, message, err, hint = open_failure(net.name, e)
+        fail(as_json, code, message, err, hint)
     prewarm = Prewarm(preset_datasets(dataset_cache(data_dir() / "datasets")))
     runner = RoundRunner(Coordinator(coordinator, key, net.chain_id, net.market), prewarm.datasets,
                          net.chain_id, net.market)
