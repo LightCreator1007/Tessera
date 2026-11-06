@@ -3,9 +3,8 @@ import pytest
 from eth_account import Account
 from fastapi.testclient import TestClient
 
-import finalize as F
 from api import app as A, config, tables as T
-from tod_core import encodings
+from tod_core import encodings, finalize as F
 
 c = TestClient(A.app)
 V1, V2, OTHER = Account.create(), Account.create(), Account.create()

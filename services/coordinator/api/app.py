@@ -8,9 +8,9 @@ from contextlib import asynccontextmanager
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.responses import RedirectResponse, Response
 
-from finalize import message
 from identity import router as identity
 from tod_core import encodings
+from tod_core.finalize import message
 
 from . import admin, auth, blobs, config, nodes
 from .draft import build as build_draft
