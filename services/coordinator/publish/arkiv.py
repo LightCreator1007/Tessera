@@ -11,8 +11,8 @@ ARKIV = "0x4400000000000000000000000000000000000044"
 EXECUTE = keccak(text="execute((uint8,bytes)[])")[:4]  # 0x49650044 per the docs; a test pins it
 CREATED = "0x" + keccak(text="EntityCreated(bytes32,address,uint64,uint8)").hex()
 CREATE_OP = 1
-# Anyone may extend the expiry, so a public model can stay findable after its coordinator is gone. Not read-only:
-# a later Swarm upload patches swarmRef onto the same entity.
+# Anyone may extend the expiry, so a public model can stay findable after its coordinator is gone. Not read-only,
+# so a record made before Swarm was on can still get swarmRef patched on.
 PERMISSIONLESS_EXTENSION = 0b10
 INDEXED = 0x80
 U64, BYTES, STR, ADDR = 3, 7, 8, 9
@@ -24,7 +24,8 @@ MAX_BYTES = 128 * 1024
 # Our attribute types; anything not listed is a non-indexed str. Ids are u64 so range queries work.
 TYPES = {"chainId": U64 | INDEXED, "job": U64 | INDEXED, "round": U64 | INDEXED, "size": U64,
          "jobMarket": ADDR | INDEXED, "payload": BYTES, "arkiv.schema": STR | INDEXED, "keccak": STR | INDEXED,
-         "datasetHash": STR | INDEXED, "workload": STR | INDEXED, "visibility": STR | INDEXED}
+         "datasetHash": STR | INDEXED, "workload": STR | INDEXED, "visibility": STR | INDEXED,
+         "swarmRef": STR | INDEXED}
 
 
 def _word(n: int) -> bytes:

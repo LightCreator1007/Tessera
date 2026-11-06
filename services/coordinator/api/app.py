@@ -6,6 +6,7 @@ import threading
 import time
 from contextlib import asynccontextmanager
 
+from eth_utils import keccak
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.responses import RedirectResponse, Response
 
@@ -131,6 +132,14 @@ def model_bytes(h: str):
     if not publish.is_published(h):
         raise HTTPException(404, "not a published model")
     data = blobs.store.get(h)
+    ref = publish.swarm_ref_of(h) if data is None and config.SWARM_ENABLED else None
+    if ref:  # our copy is gone; fetch Swarm's and serve it only if it still hashes to the published keccak
+        try:
+            data = publish.swarm_client().download(ref)
+        except Exception as e:
+            raise HTTPException(502, f"Swarm read failed: {type(e).__name__}")
+        if "0x" + keccak(data).hex() != h.lower():
+            raise HTTPException(502, "Swarm returned bytes that do not match the published keccak")
     if data is None:
         raise HTTPException(404, "model bytes are not on this coordinator")
     return Response(data, media_type=publish.CONTENT_TYPE, headers={"X-Keccak": h.lower()})

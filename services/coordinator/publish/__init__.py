@@ -21,7 +21,10 @@ STUCK_TX = 30  # checks 5 s apart; after that a human looks at the tx before any
 db = sqlite3.connect(config.DB_PATH, check_same_thread=False)
 db.execute("""CREATE TABLE IF NOT EXISTS published (
     job INTEGER PRIMARY KEY, round INTEGER, keccak TEXT, state TEXT, arkiv_key TEXT, tx TEXT,
-    tx_checks INTEGER DEFAULT 0, error TEXT, attempts INTEGER DEFAULT 0, next_try REAL DEFAULT 0, updated INTEGER)""")
+    tx_checks INTEGER DEFAULT 0, error TEXT, attempts INTEGER DEFAULT 0, next_try REAL DEFAULT 0, updated INTEGER,
+    swarm_ref TEXT)""")
+if "swarm_ref" not in [c[1] for c in db.execute("PRAGMA table_info(published)")]:  # a table from before Swarm
+    db.execute("ALTER TABLE published ADD COLUMN swarm_ref TEXT")
 db.commit()
 _lock = threading.Lock()  # the worker thread and request threads share this connection
 HASH = re.compile(r"0x[0-9a-f]{64}")
@@ -47,13 +50,15 @@ def enqueue(job: int, round_: int, aggregate_hash: str):
 def status(job: int) -> dict | None:
     if not config.ARKIV_ENABLED:
         return None
-    row = db.execute("SELECT round, keccak, state, arkiv_key, tx FROM published WHERE job = ?", (job,)).fetchone()
+    row = db.execute("SELECT round, keccak, state, arkiv_key, tx, swarm_ref FROM published WHERE job = ?",
+                     (job,)).fetchone()
     if not row:
         return None
-    return {"round": row[0], "keccak": row[1], "state": row[2], "arkivKey": row[3], "arkivTx": row[4]}
+    return {"round": row[0], "keccak": row[1], "state": row[2], "arkivKey": row[3], "arkivTx": row[4],
+            "swarmRef": row[5]}
 
 
-def record(job: int, round_: int, h: str, size: int, spec: dict | None) -> dict:
+def record(job: int, round_: int, h: str, size: int, spec: dict | None, swarm_ref: str | None = None) -> dict:
     """The public record. Everything in it is a hash, a size, an id or a label; never a key, token or private URL."""
     spec = spec or {}
     rec = {"version": RECORD_VERSION, "kind": SCHEMA, "chainId": config.CHAIN_ID, "jobMarket": config.JOB_MARKET.lower(),
@@ -62,6 +67,8 @@ def record(job: int, round_: int, h: str, size: int, spec: dict | None) -> dict:
            "visibility": "public"}
     if config.PUBLIC_URL:
         rec["url"] = f"{config.PUBLIC_URL}/v1/models/{h}"  # public, unlike /v1/blobs which needs a BlobAccess
+    if swarm_ref:
+        rec["swarmRef"] = swarm_ref  # GET /bytes/<swarmRef> on any Bee node or gateway; check the keccak after
     return rec
 
 
@@ -69,7 +76,7 @@ def attributes(rec: dict) -> dict:
     """The record as Arkiv attributes: the indexed fields readers filter on, plus the whole record as the payload."""
     attrs = {"arkiv.schema": rec["kind"], "payload": json.dumps(rec, sort_keys=True, separators=(",", ":")).encode()}
     for k in ("chainId", "jobMarket", "job", "round", "keccak", "size", "contentType", "workload", "datasetHash",
-              "visibility"):
+              "visibility", "swarmRef"):
         if rec.get(k) is not None:
             attrs[k] = rec[k]
     if rec.get("url") and len(rec["url"].encode()) <= 128:
@@ -90,13 +97,20 @@ def is_published(h: str) -> bool:
                                                 (h.lower(),)).fetchone() is not None
 
 
+def swarm_ref_of(h: str) -> str | None:
+    """The Swarm reference holding a published model's bytes, if Swarm has a copy."""
+    row = db.execute("SELECT swarm_ref FROM published WHERE keccak = ? AND state != 'failed' AND swarm_ref IS NOT NULL",
+                     (h.lower(),)).fetchone()
+    return row[0] if row else None
+
+
 def step(job: int, store, client, specs: dict) -> str:
     """Moves one job as far as it can go and returns its state. Safe to call again after a crash at any line."""
-    row = db.execute("SELECT round, keccak, state, attempts, tx, tx_checks FROM published WHERE job = ?",
+    row = db.execute("SELECT round, keccak, state, attempts, tx, tx_checks, swarm_ref FROM published WHERE job = ?",
                      (job,)).fetchone()
     if not row or row[2] != "pending":
         return row[2] if row else "absent"
-    round_, h, _, attempts, tx, tx_checks = row
+    round_, h, _, attempts, tx, tx_checks, ref = row
     try:
         if tx:  # signed before, maybe before a crash: settle that transaction, never sign a second one
             return _settle(job, round_, tx, tx_checks, client)
@@ -107,8 +121,12 @@ def step(job: int, store, client, specs: dict) -> str:
             # The store names files by keccak, so this is a corrupt file. Never index bytes the chain did not record.
             _set(job, state="failed", error="stored blob does not hash to the aggregate hash")
             return "failed"
-        rec = record(job, round_, h, len(blob), json.loads(specs[job]) if job in specs else None)
-        # A Swarm upload slots in here: upload, download, check keccak, then add swarmRef to rec before indexing.
+        if config.SWARM_ENABLED and not ref:
+            # Before the Arkiv create, so the record carries swarmRef from its first version. Saved straight away so
+            # a crash after this never uploads again; a Swarm outage retries here like an Arkiv one.
+            ref = swarm_client().put(blob, h)
+            _set(job, swarm_ref=ref)
+        rec = record(job, round_, h, len(blob), json.loads(specs[job]) if job in specs else None, ref)
         key = client.find(rec)  # a record from an earlier run that crashed after it was mined
         if key:
             return _indexed(job, round_, key, None)
@@ -206,6 +224,17 @@ def client():
     return _client
 
 
+_swarm = None
+
+
+def swarm_client():
+    global _swarm
+    if _swarm is None and config.SWARM_ENABLED:
+        from .swarm import Swarm
+        _swarm = Swarm(config.SWARM_API_URL, config.SWARM_BATCH_ID)
+    return _swarm
+
+
 def _int(v):
     return int(v, 16) if isinstance(v, str) else int(v)
 
@@ -217,7 +246,8 @@ def from_arkiv(row: dict) -> dict | None:
         return {"arkivKey": row["key"], "owner": row["owner"], "expiresAt": _int(row["expiresAt"]),
                 "job": _int(a["job"]), "round": _int(a["round"]), "keccak": a["keccak"], "size": _int(a["size"]),
                 "chainId": _int(a["chainId"]), "jobMarket": "0x" + a["jobMarket"].removeprefix("0x")[-40:],
-                "workload": a.get("workload"), "datasetHash": a.get("datasetHash"), "url": a.get("url")}
+                "workload": a.get("workload"), "datasetHash": a.get("datasetHash"), "url": a.get("url"),
+                "swarmRef": a.get("swarmRef")}
     except (KeyError, ValueError, TypeError):
         return None
 

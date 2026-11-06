@@ -301,3 +301,95 @@ def test_refuses_to_start_with_the_coordinator_key_as_the_arkiv_key(tmp_path):
     run = subprocess.run([sys.executable, "-c", "import api.config"], cwd=Path(__file__).resolve().parents[1], env=env,
                          capture_output=True, text=True)
     assert run.returncode != 0 and "must not be the coordinator's key" in run.stderr
+
+
+class FakeSwarm:
+    """A Bee node in memory: content-addressed, so the same bytes always get the same reference."""
+
+    def __init__(self):
+        self.data, self.uploads, self.corrupt, self.fail = {}, 0, False, None
+
+    def put(self, data, h):
+        if self.fail:
+            raise self.fail
+        self.uploads += 1
+        if self.corrupt:
+            raise RuntimeError("Swarm did not read back")
+        ref = keccak(b"swarm" + data).hex()
+        self.data[ref] = data
+        return ref
+
+    def download(self, ref):
+        return self.data[ref]
+
+
+@pytest.fixture
+def swarm_on(on, monkeypatch):
+    sw = FakeSwarm()
+    monkeypatch.setattr(config, "SWARM_ENABLED", True)
+    monkeypatch.setattr(P, "_swarm", sw)
+    return (*on, sw)
+
+
+def test_swarm_copy_is_made_before_indexing_and_lands_in_the_record(swarm_on):
+    store, ark, sw = swarm_on
+    h = store.put(b"weights")
+    P.enqueue(7, 12, h)
+    assert P.step(7, store, ark, {}) == "pending"
+    ref = P.status(7)["swarmRef"]
+    assert sw.data[ref] == b"weights"
+    attrs = ark.sent[0][0]
+    assert attrs["swarmRef"] == ref and json.loads(attrs["payload"])["swarmRef"] == ref
+    assert P.step(7, store, ark, {}) == "indexed" and sw.uploads == 1
+
+
+def test_a_retry_after_the_upload_does_not_upload_again(swarm_on):
+    store, ark, sw = swarm_on
+    h = store.put(b"weights")
+    P.enqueue(7, 12, h)
+    ark.fail = ConnectionError("arkiv down")
+    assert P.step(7, store, ark, {}) == "pending" and sw.uploads == 1
+    ark.fail = None
+    P.step(7, store, ark, {})
+    assert sw.uploads == 1 and ark.sent[0][0]["swarmRef"] == P.status(7)["swarmRef"]
+
+
+def test_a_bad_swarm_read_back_blocks_indexing_and_retries(swarm_on):
+    store, ark, sw = swarm_on
+    sw.corrupt = True
+    P.enqueue(7, 12, store.put(b"weights"))
+    assert P.step(7, store, ark, {}) == "pending" and ark.sent == [] and P.status(7)["swarmRef"] is None
+
+
+def test_swarm_off_leaves_records_without_a_ref(on):
+    store, ark = on
+    P.enqueue(7, 12, store.put(b"weights"))
+    P.step(7, store, ark, {})
+    assert "swarmRef" not in ark.sent[0][0] and P.status(7)["swarmRef"] is None
+
+
+def test_public_route_falls_back_to_swarm_and_checks_the_hash(swarm_on, tmp_path):
+    store, ark, sw = swarm_on
+    c = TestClient(A.app)
+    h = store.put(b"weights")
+    P.enqueue(7, 12, h)
+    P.step(7, store, ark, {})
+    (tmp_path / (h[2:] + ".bin")).unlink()  # the coordinator lost its copy
+    A.blobs.store, saved = store, A.blobs.store
+    try:
+        r = c.get(f"/v1/models/{h}")
+        assert r.status_code == 200 and r.content == b"weights"
+        sw.data[P.status(7)["swarmRef"]] = b"tampered"
+        assert c.get(f"/v1/models/{h}").status_code == 502
+    finally:
+        A.blobs.store = saved
+
+
+def test_swarm_client_checks_the_read_back(monkeypatch):
+    from publish import swarm
+    s = swarm.Swarm("http://bee")
+    monkeypatch.setattr(s, "upload", lambda data: "ab" * 32)
+    monkeypatch.setattr(s, "download", lambda ref: b"weights")
+    assert s.put(b"weights", "0x" + keccak(b"weights").hex()) == "ab" * 32
+    with pytest.raises(RuntimeError):
+        s.put(b"weights", H32)

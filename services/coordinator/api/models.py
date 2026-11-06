@@ -82,6 +82,7 @@ class Published(BaseModel):
     state: Literal["pending", "indexed", "failed"]
     arkivKey: Hex32 | None
     arkivTx: Hex32 | None
+    swarmRef: str | None = None  # 64 hex, no 0x: the model's bytes on Swarm, when Swarm is on
 
 
 class ModelRecord(BaseModel):
@@ -98,6 +99,7 @@ class ModelRecord(BaseModel):
     workload: str | None = None
     datasetHash: Hex32 | None = None
     url: str | None = None
+    swarmRef: str | None = None
 
 
 Job.model_rebuild()  # Published is declared after Job

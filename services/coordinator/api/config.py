@@ -35,4 +35,9 @@ if ARKIV_PRIVATE_KEY and COORDINATOR_KEY and         ARKIV_PRIVATE_KEY.removepre
 ARKIV_ENABLED = bool(ARKIV_RPC_URL and ARKIV_PRIVATE_KEY)
 # Arkiv counts in 2 s blocks and caps a lifetime at 7,884,000 of them (about 182 days)
 ARKIV_LIFETIME_BLOCKS = min(7_884_000, max(1, int(float(os.environ.get("ARKIV_LIFETIME_DAYS", "30")) * 86400 / 2)))
+# Swarm keeps a copy of each published model's bytes, referenced from its Arkiv record. Empty turns it off. The
+# public gateway (https://api.gateway.ethswarm.org) needs no batch and is fine for demos; our own Bee node needs one.
+SWARM_API_URL = os.environ.get("SWARM_API_URL", "").rstrip("/")
+SWARM_BATCH_ID = os.environ.get("SWARM_BATCH_ID", "")
+SWARM_ENABLED = bool(SWARM_API_URL)
 PUBLIC_URL = os.environ.get("PUBLIC_URL", "").rstrip("/")  # the coordinator's public base URL, put in each record
