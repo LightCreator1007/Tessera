@@ -35,14 +35,18 @@ class DockerSandbox:
             return f"could not pull {self.image}"
         return None
 
-    def _run(self, args: list[str], mounts: list[str]) -> subprocess.CompletedProcess:
+    def _cmd(self, args: list[str], mounts: list[str], interactive: bool = False) -> list[str]:
         # The job's code is a stranger's: no network, no new privileges, a read-only root, capped CPU and memory.
-        cmd = ["docker", "run", "--rm", "--network", "none", "--read-only", "--tmpfs", "/tmp",
+        return ["docker", "run", "--rm", *(["-i"] if interactive else []), "--network", "none", "--read-only",
+               "--tmpfs", "/tmp",
                "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--pids-limit", "256",
                "--cpus", self.cpus, "--memory", self.memory, "--memory-swap", self.memory,
                "--user", f"{os.getuid()}:{os.getgid()}" if hasattr(os, "getuid") else "10001",
                "-e", "OMP_NUM_THREADS=1", "-e", "OPENBLAS_NUM_THREADS=1", "-e", "MKL_NUM_THREADS=1",
-               *mounts, "--entrypoint", "python", self.image, "-m", "tod_node.sandbox", *args]
+               *mounts, "--entrypoint", "python", self.image, *args]
+
+    def _run(self, args: list[str], mounts: list[str]) -> subprocess.CompletedProcess:
+        cmd = self._cmd(["-m", "tod_node.sandbox", *args], mounts)
         out = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT)
         if out.returncode:
             raise RuntimeError(f"training container exited {out.returncode}: {out.stderr.strip()[-500:]}")
@@ -75,6 +79,16 @@ class DockerSandbox:
 
     def selftest(self) -> str:
         return self._run(["selftest"], []).stdout.strip()
+
+
+def rl_serve(cache: Path, kind: str, folder: Path, entrypoint: str = "policy:act") -> list[str]:
+    """The command that serves an RL environment or policy package to the evaluator, each in its own container."""
+    from tod_workloads.rl import serve_command
+
+    if not enabled():
+        return serve_command(kind, folder, entrypoint)
+    return DockerSandbox(cache)._cmd(["-m", "tod_workloads.rl", kind, "/pkg", entrypoint],
+                                     ["-v", f"{folder}:/pkg:ro"], interactive=True)
 
 
 def _train(work: Path, data: Path) -> None:
