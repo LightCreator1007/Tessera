@@ -17,7 +17,7 @@ import { Button, DocsLink, Money, Segmented, SourceBadge, cx, short } from "@/co
 import { INSTALL, PAIR_PREFIX, PAIR_TTL_MIN, SETUP, pairCommand } from "@/features/docs/cli";
 import { SIMULATED, SelfTestCard } from "./SelfTestCard";
 import { ExcludedNotice } from "./Excluded";
-import { HumanCheck } from "@/components/human/HumanCheck";
+import { HumanGate } from "@/components/human/HumanGate";
 import { useHuman } from "@/lib/identity";
 
 const TOD = 1_000_000;
@@ -269,11 +269,7 @@ export function JoinFlow() {
           lede="One person, one node. It keeps anyone from running a fleet of fake laptops to outvote honest ones."
           footer={reviewing ? back : undefined}
         >
-          <HumanCheck
-            compact
-            intro="Scan once with World App. If you verified when you signed up, this step is already done."
-            onVerified={() => setWallet((x) => ({ node: x.node && { ...x.node, humanVerified: true }, eth: isDemo ? x.eth + 0.01 : x.eth }))}
-          />
+          <HumanGate intro="Scan once with World App. If you verified when you signed up, this step is already done." />
           <More label="What does World ID see?">
             <p>Nothing about you goes on chain except a one-time number that proves this person hasn&apos;t joined before. No name, no face, no address.</p>
             <p>Once you&apos;re verified, the coordinator sends your node a little test ETH for its own gas.</p>

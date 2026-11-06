@@ -35,6 +35,8 @@ export type Contracts = { chainId: number; market: Address; registry: Address; t
 export type ChainWallet = {
   address: Address | null;
   chainId: number | null;
+  /** Reconnecting silently to the wallet used last time; pages wait on this before deciding the person is signed out. */
+  restoring: boolean;
   /** The extension this session is using, from EIP-6963. */
   wallet: WalletInfo | null;
   /** The coordinator's network, once read. */
@@ -55,7 +57,7 @@ export type ChainWallet = {
 export type ConnectError = { kind: "rejected" | "pending" | "missing" | "failed"; message: string };
 
 const FAUCET = (process.env.NEXT_PUBLIC_FAUCET_ADDRESS || null) as Address | null;
-const EMPTY: ChainWallet = { wallet: null, targetChainId: null, connectError: null, address: null, chainId: null, wrongNetwork: false, tod: null, eth: null, allowance: null, claimable: null, stake: null, error: null };
+const EMPTY: ChainWallet = { restoring: false, wallet: null, targetChainId: null, connectError: null, address: null, chainId: null, wrongNetwork: false, tod: null, eth: null, allowance: null, claimable: null, stake: null, error: null };
 
 let contracts: Promise<Contracts> | null = null;
 let state: ChainWallet = EMPTY;
@@ -102,12 +104,14 @@ function boot() {
   startDiscovery();
   void getContracts().then((c) => set({ targetChainId: c.chainId })).catch(() => { /* refresh() reports a coordinator that's down */ });
   const last = remembered();
-  if (last) whenFound(last, (w) => {
+  if (!last) return;
+  set({ restoring: true });
+  whenFound(last, (w) => {
     use(w);
     void w.provider.request({ method: "eth_accounts" })
-      .then((a) => { if (a[0]) { set({ address: a[0] as Address }); void refresh(); } else remember(null); })
-      .catch(() => remember(null));
-  });
+      .then((a) => { if (a[0]) { set({ address: a[0] as Address, restoring: false }); void refresh(); } else { remember(null); set({ restoring: false }); } })
+      .catch(() => { remember(null); set({ restoring: false }); });
+  }, () => set({ restoring: false }));
 }
 
 /** Make this wallet the one every read and write goes through, and follow its account and network changes. */

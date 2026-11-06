@@ -21,6 +21,8 @@ export type DemoWallet = {
   claims: { amount: number; at: number }[];
   /** World ID proof made outside node setup (entering a competition). A node's humanVerified counts too. */
   personVerified: boolean;
+  /** Which World ID credential the demo approval used. */
+  personCredential?: "orb" | "selfie";
   /** Competitions this wallet hosts and entries it made, kept here until a competition contract exists. */
   hosted: HostedCompetition[];
   entries: CompetitionEntry[];
@@ -75,6 +77,7 @@ export function useWallet() {
       allowanceTo: { market: d.allowance, registry: d.allowance },
       chainError: null as string | null,
       connectError: null as chain.ConnectError | null,
+      restoring: false,
       walletInfo: d.address ? DEMO_WALLET : null,
       targetChainId: CHAIN_ID,
       connecting: false,
@@ -96,6 +99,7 @@ export function useWallet() {
     allowanceTo: read ? c.allowance! : { market: 0, registry: 0 },
     chainError: c.error,
     connectError: c.connectError,
+    restoring: c.restoring,
     walletInfo: c.wallet,
     targetChainId: c.targetChainId,
     connecting: c.address !== null && !read && !c.wrongNetwork && c.error === null,

@@ -57,13 +57,14 @@ export const walletsServerSnapshot = () => NONE;
 
 export const providerFor = (rdns: string) => found.find((w) => w.rdns === rdns) ?? null;
 /** Subscribe for the moment a remembered wallet announces itself. */
-export function whenFound(rdns: string, f: (w: Found) => void) {
+export function whenFound(rdns: string, f: (w: Found) => void, missing?: () => void) {
   const hit = providerFor(rdns);
   if (hit) return f(hit);
-  const off = () => subs.delete(check);
-  const check = () => { const w = providerFor(rdns); if (w) { off(); f(w); } };
+  let done = false;
+  const check = () => { const w = providerFor(rdns); if (w && !done) { done = true; subs.delete(check); f(w); } };
   subs.add(check);
-  setTimeout(off, 3000);
+  // An uninstalled or disabled wallet never announces; give up so the page can stop waiting.
+  setTimeout(() => { if (!done) { done = true; subs.delete(check); missing?.(); } }, 3000);
 }
 
 /** Where to get a wallet when none is installed. */

@@ -20,7 +20,7 @@ export function ConnectGate({ title, children, figure = "crow", onConnect = open
         <p className="max-w-md text-sm leading-relaxed text-muted">{children}</p>
         <div className="flex flex-wrap items-center gap-4">
           <Button variant="primary" icon={Wallet} onClick={onConnect}>Connect wallet</Button>
-          {signUp && <Link href="/welcome" className="text-sm text-muted underline decoration-subtle underline-offset-4 hover:text-ink">New here? Sign up in 2 minutes</Link>}
+          {signUp && <Link href="/join" className="text-sm text-muted underline decoration-subtle underline-offset-4 hover:text-ink">New here? Sign up in 2 minutes</Link>}
         </div>
         <p className="max-w-md font-mono text-xs leading-relaxed text-subtle">Tessera never asks for a seed phrase. Connecting shares your address only; every payment is a transaction you sign.</p>
       </div>

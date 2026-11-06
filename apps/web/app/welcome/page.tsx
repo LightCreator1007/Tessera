@@ -1,14 +1,9 @@
-// Sign up: wallet, World ID once, then a first step.
-import type { Metadata } from "next";
-import { Suspense } from "react";
-import { Welcome } from "@/features/welcome/Welcome";
+// The old sign-up address; it moved to /join, which keeps ?next=.
+import { redirect } from "next/navigation";
+import { safeNext } from "@/lib/safe-next";
 
-export const metadata: Metadata = { title: "Sign up" };
-
-export default function Page() {
-  return (
-    <Suspense>
-      <Welcome />
-    </Suspense>
-  );
+export default async function Page({ searchParams }: { searchParams: Promise<{ next?: string | string[] }> }) {
+  const n = (await searchParams).next;
+  const next = safeNext(typeof n === "string" ? n : null);
+  redirect(next ? `/join?next=${encodeURIComponent(next)}` : "/join");
 }

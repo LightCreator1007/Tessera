@@ -80,7 +80,7 @@ export function Profile() {
             <Card className="divide-y divide-rule-row">
               <Fact label="Address"><CopyAddress value={address} /></Fact>
               <Fact label="Network">{w.wrongNetwork ? <span className="flex flex-wrap items-center gap-2"><Pill tone="warn">wrong network</Pill><button type="button" onClick={w.switchNetwork} className="text-sm text-ink underline decoration-subtle underline-offset-4">Switch</button></span> : <Pill tone="neutral">Base Sepolia</Pill>}</Fact>
-              <Fact label="One person" hint="World ID, checked once for this wallet">{human.loading ? <span className="font-mono text-xs text-subtle">checking</span> : human.verified ? <span className="flex items-center gap-2"><Pill tone="ok">verified</Pill>{human.status?.credential && <span className="font-mono text-xs text-muted">{CREDENTIAL_LABEL[human.status.credential]}</span>}</span> : <Link href="/welcome?next=/me" className="text-sm text-muted underline decoration-subtle underline-offset-4 hover:text-ink">Not yet. Verify, about a minute</Link>}</Fact>
+              <Fact label="One person" hint="World ID, checked once for this wallet">{human.loading ? <span className="font-mono text-xs text-subtle">checking</span> : human.verified ? <span className="flex items-center gap-2"><Pill tone="ok">verified</Pill>{human.status?.credential && <span className="font-mono text-xs text-muted">{CREDENTIAL_LABEL[human.status.credential]}</span>}</span> : <Link href="/join/verify?next=/me" className="text-sm text-muted underline decoration-subtle underline-offset-4 hover:text-ink">Not yet. Verify, about a minute</Link>}</Fact>
               <Fact label="Earnings go to" hint="where Withdraw sends round pay">
                 <button type="button" onClick={() => openSettings("wallet")} className="text-left font-mono text-sm text-ink underline decoration-subtle underline-offset-4 hover:decoration-ink">
                   {p.claimTo ? short(p.claimTo, 6, 4) : "this wallet"}
@@ -156,7 +156,7 @@ function Shortcut({ icon: Icon, title, hint, onClick }: { icon: LucideIcon; titl
 
 const POSTERS = [
   { key: "joined", cover: "heron", title: "First light", got: "Your laptop joined the network", todo: "Add your laptop as a node", href: "/nodes/add" },
-  { key: "human", cover: "owl", title: "One person", got: "Proved you're one person", todo: "Verify with World ID", href: "/welcome?next=/me" },
+  { key: "human", cover: "owl", title: "One person", got: "Proved you're one person", todo: "Verify with World ID", href: "/join/verify?next=/me" },
   { key: "earned", cover: "crow", title: "First round", got: "Your node was paid for a round", todo: "Get paid for one round", href: "/nodes/add" },
   { key: "graduated", cover: "nightheron", title: "Proven", got: "Finished the 7-day proving period", todo: "Stay honest through proving", href: "/nodes" },
   { key: "spent", cover: "tiger", title: "First job", got: "You trained a model", todo: "Lock a budget for a job", href: "/jobs/new" },

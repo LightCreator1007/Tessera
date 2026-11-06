@@ -13,6 +13,8 @@ export type HumanStatus = {
   joined: boolean;
   credential: Credential | null;
   verifiedAt: number | null;
+  /** Selfie Check's risk score after World verified it; null for an Orb proof. */
+  sybilScore?: number | null;
   excluded: { reason: string; at: number } | null;
 };
 /** IDKit's rp_context. */
@@ -97,7 +99,7 @@ export function useHuman() {
   });
   if (isDemo) {
     const status: HumanStatus | null = owner
-      ? { owner, verified: demoVerified, joined: !!w.node?.joined, credential: demoVerified ? "orb" : null, verifiedAt: null, excluded: null }
+      ? { owner, verified: demoVerified, joined: !!w.node?.joined, credential: demoVerified ? (w.personCredential ?? "orb") : null, verifiedAt: null, excluded: null }
       : null;
     return { owner, status, verified: demoVerified && !!owner, loading: false, error: null as Error | null };
   }
@@ -114,7 +116,7 @@ export async function rpContext(cfg: IdentityConfig): Promise<RpContext> {
   return { rp_id: cfg.rpId, nonce: s.nonce, created_at: s.created_at, expires_at: s.expires_at, signature: s.sig };
 }
 
-export type Verified = { owner: string; nullifier: string; credential: Credential };
+export type Verified = { owner: string; nullifier: string; credential: Credential; sybilScore?: number | null };
 
 /** Hands the IDKit result to the coordinator, which checks it with World and records one human for this wallet. */
 export function useSubmitProof() {
@@ -124,13 +126,14 @@ export function useSubmitProof() {
     if (isDemo) {
       await wait(1100);
       if (demoFail) throw new IdentityError(demoFail, DEMO_FAIL[demoFail] ?? "");
-      out = { owner, nullifier: "0x" + "d3".repeat(32), credential: "orb" };
+      const picked = (proof as { demoCredential?: Credential } | null)?.demoCredential ?? "orb";
+      out = { owner, nullifier: "0x" + "d3".repeat(32), credential: picked, sybilScore: picked === "selfie" ? 1 : null };
     } else {
       out = await call<Verified>("/verify", { owner, proof: proof ?? {} });
     }
-    setWallet({ personVerified: true });
+    setWallet({ personVerified: true, personCredential: out.credential === "selfie" ? "selfie" : "orb" });
     qc.setQueryData(["identity", "owner", owner.toLowerCase()], (s: HumanStatus | undefined) => ({
-      owner, verified: true, joined: s?.joined ?? false, credential: out.credential, verifiedAt: Math.floor(Date.now() / 1000), excluded: null,
+      owner, verified: true, joined: s?.joined ?? false, credential: out.credential, sybilScore: out.sybilScore ?? null, verifiedAt: Math.floor(Date.now() / 1000), excluded: null,
     }));
     return out;
   };

@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useWallet } from "@/lib/wallet";
 import { CREDENTIAL_LABEL, useHuman } from "@/lib/identity";
-import { ConnectDialog, openConnect } from "./connect";
+import { ConnectRoute, openConnect } from "./connect";
 import { SettingsDialog, openSettings } from "./settings";
 import { useHealth } from "@/lib/api/hooks";
 import { useActivity, useSeen } from "@/features/activity/useActivity";
@@ -119,7 +119,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
       <main id="main" className="min-w-0 flex-1 bg-surface md:overflow-y-auto md:rounded-xl md:border md:border-rule">
         {children}
       </main>
-      <ConnectDialog />
+      <ConnectRoute />
       <SettingsDialog />
     </div>
   );
@@ -381,7 +381,7 @@ function WalletRow() {
             <Label>Sign in</Label>
           </button>
         </Tip>
-        <Link href="/welcome" className={cx("rail-label mt-1 block px-2 text-xs text-subtle underline decoration-subtle underline-offset-4 hover:text-ink")}>New here? Sign up</Link>
+        <Link href="/join" className={cx("rail-label mt-1 block px-2 text-xs text-subtle underline decoration-subtle underline-offset-4 hover:text-ink")}>New here? Sign up</Link>
       </div>
     );
   }
@@ -430,7 +430,7 @@ function ConnectedWalletRow({ address }: { address: string }) {
               <div className="flex justify-between gap-3"><dt className="text-muted">Earned, unclaimed</dt><dd><Money units={w.claimable} live /></dd></div>
               <div className="flex justify-between gap-3"><dt className="text-muted">One person</dt><dd className={cx("font-mono text-xs", human.verified ? "text-ok" : "text-subtle")}>{human.loading ? "checking" : human.verified ? (human.status?.credential ? CREDENTIAL_LABEL[human.status.credential] : "verified") : "not yet"}</dd></div>
             </dl>
-            {unverified && <MenuItem icon={ScanFace} title="Prove you're one person" hint="World ID, about a minute" href="/welcome" onClick={close} />}
+            {unverified && <MenuItem icon={ScanFace} title="Prove you're one person" hint="World ID, about a minute" href="/join/verify" onClick={close} />}
             <div className="my-1 h-px bg-rule" />
             {w.wrongNetwork && <MenuItem title={`Switch to ${chainName(w.targetChainId ?? undefined)}`} onClick={() => { w.switchNetwork(); close(); }} />}
             <MenuItem icon={UserRound} title="Profile" hint="Roles, identity, posters" href="/me" onClick={close} />
