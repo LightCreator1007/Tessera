@@ -305,6 +305,19 @@ export async function send(make: () => Promise<Call>, onHash?: (hash: Hex) => vo
   return r.status === "success" ? { phase: "confirmed", hash, reason: null } : { phase: "reverted", hash, reason: "The transaction reverted on chain after it was sent." };
 }
 
+/** An EIP-191 signature over plain text from the connected wallet, for coordinator writes that a wallet must authorise. */
+export async function signText(message: string): Promise<{ address: Address; signature: Hex }> {
+  const p = provider();
+  if (!p || !state.address) throw new Error("Connect a wallet first.");
+  const wallet = createWalletClient({ account: state.address, transport: custom(p) });
+  try {
+    return { address: state.address, signature: await wallet.signMessage({ account: state.address, message }) };
+  } catch (e) {
+    if (e instanceof BaseError && e.walk((x) => x instanceof UserRejectedRequestError)) throw new Rejected("rejected");
+    throw e;
+  }
+}
+
 function refusal(e: unknown, abi: readonly unknown[]): Refused {
   if (e instanceof BaseError) {
     const raw = e.walk((x) => x instanceof ContractFunctionRevertedError) as ContractFunctionRevertedError | null;

@@ -2,8 +2,10 @@
 // Competition list and detail. Against a coordinator, the Competitions contract's competitions with onchain scores; in demo mode, examples plus this wallet's.
 import Link from "next/link";
 import { Fragment, useEffect, useState } from "react";
-import { ChevronDown, Lock, Plus, Trophy } from "lucide-react";
+import { ChevronDown, Lock, Plus, RotateCw, Trophy } from "lucide-react";
 import { AddressChip, Banner, Button, ButtonLink, Crumbs, DocsLink, EmptyState, Eyebrow, HashChip, Money, PageHeader, Pill, ROW, Segmented, Skeleton, TD, TH, THead, cx, type Tone } from "@/components/primitives";
+import { Countdown } from "./Countdown";
+import { CompetitionNotebooks } from "./Notebooks";
 import { Term } from "@/components/term";
 import { ReVerify } from "@/features/verify/ReVerify";
 import { Command } from "@/components/flow";
@@ -12,7 +14,7 @@ import { PosterCard } from "@/components/mosaic/PosterCard";
 import { coverFor } from "@/components/mosaic/figures";
 import { formatToken } from "@/lib/money";
 import { ITEMS, labelBytes, rescore, scoreOf, type Competition } from "@/lib/learn/competition";
-import { entryGate, relationOf, useCompetition, useCompetitions } from "./model";
+import { chainTime, entryGate, relationOf, useCompetition, useCompetitions } from "./model";
 import { sha256 } from "@/lib/learn/replay";
 
 type Status = Competition["status"];
@@ -38,8 +40,32 @@ function Disabled({ children, icon }: { children: string; icon: typeof Plus }) {
   return <Button variant="primary" icon={icon} disabled aria-describedby="not-live">{children}</Button>;
 }
 
+/** The list or page couldn't be read: with nothing to show, the body says so; with something, a line above it does. */
+function ReadFailed({ stale, retry }: { stale: boolean; retry: () => void }) {
+  const again = <Button variant="secondary" icon={RotateCw} onClick={retry}>Try again</Button>;
+  if (stale) return <Banner tone="warn" title="Couldn't refresh." action={again}>Showing the last competitions read from the chain.</Banner>;
+  return (
+    <EmptyState icon={Trophy} title="Couldn't read competitions" action={again}>
+      The coordinator didn&apos;t answer, or couldn&apos;t read the Competitions contract. Nothing here is lost; try again in a moment.
+    </EmptyState>
+  );
+}
+
+function ListSkeleton() {
+  return (
+    <div aria-busy="true" aria-label="Loading competitions" className="grid gap-4 px-4 pb-6 sm:grid-cols-2 md:px-6 xl:grid-cols-3">
+      {[0, 1, 2].map((k) => (
+        <div key={k} className="flex flex-col overflow-hidden rounded-xl border border-rule">
+          <Skeleton className="h-48 w-full" />
+          <div className="flex flex-col gap-2 p-4"><Skeleton className="h-6 w-3/4" /><Skeleton className="h-4 w-1/2" /></div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function CompetitionList() {
-  const { list, w } = useCompetitions();
+  const { list, w, state, stale, retry } = useCompetitions();
   const [seg, setSeg] = useState<"all" | Status>("all");
   const counts = { all: list.length, open: 0, closed: 0, finished: 0, unrevealed: 0 };
   list.forEach((c) => counts[c.status]++);
@@ -51,10 +77,13 @@ export function CompetitionList() {
       </PageHeader>
       <div className="flex flex-col gap-3 px-4 pt-4 md:px-6">
         {isDemo && <ExampleBanner />}
+        {stale && <ReadFailed stale retry={retry} />}
         <p id="not-live" className="text-xs text-muted">{NOT_LIVE}</p>
         <Segmented label="Status" value={seg} onChange={setSeg} counts={counts} items={[{ key: "all", label: "All" }, { key: "open", label: "Open" }, { key: "closed", label: "Closed" }, { key: "finished", label: "Finished" }, { key: "unrevealed", label: "Not revealed" }]} />
       </div>
-      <div className="mt-3 flex-1">
+      <div className={cx("mt-3 flex-1", stale && "opacity-60")}>
+        {state === "loading" && <ListSkeleton />}
+        {state === "error" && <ReadFailed stale={false} retry={retry} />}
         {shown.length > 0 && (
           <div className="grid gap-4 px-4 pb-6 sm:grid-cols-2 md:px-6 xl:grid-cols-3">
             {shown.map((c, k) => {
@@ -65,7 +94,7 @@ export function CompetitionList() {
                   key={c.id}
                   href={`/competitions/${c.id}`}
                   n={String(k + 1).padStart(2, "0")}
-                  title={c.title}
+                  title={<span title={c.title} className="line-clamp-2 break-words">{c.title}</span>}
                   cover={coverFor(c.id)}
                   live={c.status === "open"}
                   tag={rel ? <Pill tone="brand">{REL[rel as keyof typeof REL]}</Pill> : <Pill tone={TONE[c.status]}>{LABEL[c.status]}</Pill>}
@@ -75,11 +104,15 @@ export function CompetitionList() {
             })}
           </div>
         )}
-        {shown.length === 0 && (
-          <EmptyState icon={Trophy} title="No competitions here" action={<Link href="/competitions/leaf-10" className="text-sm text-ink underline decoration-subtle underline-offset-4">See a finished example</Link>}>
+        {state === "ready" && shown.length === 0 && (list.length === 0 && !isDemo ? (
+          <EmptyState icon={Trophy} title="No competitions yet">
+            Nobody has hosted a competition on this network yet. The first one shows here as soon as its transaction lands.
+          </EmptyState>
+        ) : (
+          <EmptyState icon={Trophy} title="No competitions here" action={seg !== "all" ? <button type="button" onClick={() => setSeg("all")} className="text-sm text-ink underline decoration-subtle underline-offset-4">Show all</button> : isDemo ? <Link href="/competitions/leaf-10" className="text-sm text-ink underline decoration-subtle underline-offset-4">See a finished example</Link> : undefined}>
             Nothing matches this status.
           </EmptyState>
-        )}
+        ))}
       </div>
     </div>
   );
@@ -87,7 +120,7 @@ export function CompetitionList() {
 
 export const RULES = [
   ["Scoring", `Accuracy on ${ITEMS.toLocaleString()} hidden labels. Anyone can recompute it once the labels are revealed.`],
-  ["Ties", "The entry committed first wins. Commit order is on chain."],
+  ["Ties", "The entry whose latest commit came first wins. Replacing an entry moves it to the back of the queue for ties. Commit order is on chain."],
   ["No entries", "If nobody enters by the deadline, the prize returns to the host."],
   ["Labels not revealed", "If the host doesn't reveal labels that match the commitment within 48 hours of the deadline, the prize is split evenly between entrants."],
   ["Who can enter", "One entry per verified person. The host's own identity is blocked from entering."],
@@ -181,8 +214,64 @@ function Commitment({ c }: { c: Competition }) {
   );
 }
 
-function Leaderboard({ c }: { c: Competition }) {
+const PAGE = 50;
+const entrantHref = (c: Competition, op: string) => `/competitions/${c.id}/entries/${op}`;
+
+/** Live standings: every entrant, scored ones ranked as the contract ranks them, the rest saying why they have no score. */
+function Standings({ c, you }: { c: Competition; you: string | null }) {
+  const [shown, setShown] = useState(PAGE);
+  const scoring = c.stage === "scoring";
+  const rows = [...c.entries].sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity));
+  if (rows.length === 0) {
+    return (
+      <section aria-label="Leaderboard" className="flex flex-col gap-3">
+        <Eyebrow>Leaderboard</Eyebrow>
+        <p className="rounded-xl border border-rule px-4 py-6 text-center text-sm text-muted">Nobody entered this competition{c.settled?.refunded ? ", so the prize went back to the host" : ""}.</p>
+      </section>
+    );
+  }
+  const unscored = rows.filter((e) => e.rank === null || e.rank === undefined).length;
+  return (
+    <section aria-label="Leaderboard" className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <Eyebrow>Leaderboard</Eyebrow>
+        {unscored > 0 && <span className="text-xs text-muted">{unscored} of {rows.length} {scoring ? "not revealed yet" : "never revealed, so not scored"}</span>}
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-rule">
+        <table className="w-full text-sm">
+          <THead>
+            <TH>Rank</TH>
+            <TH>Entrant</TH>
+            <TH className="text-right">Accuracy</TH>
+            <TH className="text-right"><span className="sr-only">Entry</span></TH>
+          </THead>
+          <tbody>
+            {rows.slice(0, shown).map((e) => {
+              const mine = !!you && e.op.toLowerCase() === you.toLowerCase();
+              const ranked = e.rank !== null && e.rank !== undefined;
+              return (
+                <tr key={e.op} className={cx(ROW, mine && "bg-brand-soft")}>
+                  <TD className="tabular text-muted">{ranked ? <span className="inline-flex items-center gap-2">{e.rank}{e.tied && <Pill tone="neutral">Tie</Pill>}</span> : "-"}</TD>
+                  <TD><AddressChip value={e.op} href={entrantHref(c, e.op)} you={mine} /></TD>
+                  <TD className="text-right font-mono tabular text-ink">{e.score !== undefined ? pct(e.score) : <span className="font-sans text-xs text-muted">{scoring ? "Not revealed yet" : "Not revealed"}</span>}</TD>
+                  <TD className="text-right"><Link href={entrantHref(c, e.op)} className="whitespace-nowrap text-xs text-muted underline decoration-subtle underline-offset-4 hover:text-ink">View entry</Link></TD>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {rows.length > shown && (
+        <Button variant="secondary" onClick={() => setShown((n) => n + PAGE)}>Show {Math.min(PAGE, rows.length - shown)} more of {rows.length - shown}</Button>
+      )}
+      {rows.some((e) => e.tied) && <p className="text-xs text-muted">Tied entries rank by when their latest commit landed, as the contract breaks ties.</p>}
+    </section>
+  );
+}
+
+function Leaderboard({ c, you }: { c: Competition; you: string | null }) {
   const [open, setOpen] = useState<string | null>(null);
+  if (c.live) return <Standings c={c} you={you} />;
   // A live entry nobody revealed has no score; it isn't ranked.
   const ranked = c.entries.filter((e) => !c.live || e.score !== undefined).map((e) => ({ e, s: scoreOf(c, e) })).sort((a, b) => b.s - a.s);
   return (
@@ -203,7 +292,7 @@ function Leaderboard({ c }: { c: Competition }) {
                 <Fragment key={e.op}>
                   <tr className={ROW}>
                     <TD className="tabular text-muted">{i + 1}</TD>
-                    <TD><AddressChip value={e.op} href={`/nodes/${e.op}`} /></TD>
+                    <TD><AddressChip value={e.op} href={entrantHref(c, e.op)} /></TD>
                     <TD className="text-right font-mono tabular text-ink">{pct(s)}</TD>
                     <TD className="text-right">
                       {c.live ? <span className="text-xs text-muted">Scored onchain</span> : <button type="button" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : e.op)} className="inline-flex items-center gap-1 text-xs text-muted hover:text-ink">
@@ -235,15 +324,25 @@ function Leaderboard({ c }: { c: Competition }) {
   );
 }
 
+function DetailSkeleton() {
+  return (
+    <div aria-busy="true" aria-label="Loading competition" className="flex flex-col gap-8 px-4 py-6 md:px-6 lg:flex-row">
+      <div className="flex flex-1 flex-col gap-3"><Skeleton className="h-6 w-40" /><Skeleton className="h-8 w-2/3" /><Skeleton className="h-4 w-full max-w-lede" /><Skeleton className="mt-6 h-48 w-full" /></div>
+      <Skeleton className="h-64 w-full lg:w-80" />
+    </div>
+  );
+}
+
 export function CompetitionDetail({ id }: { id: string }) {
-  const { c, w } = useCompetition(id);
+  const { c, w, state, stale, retry } = useCompetition(id);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   if (!c) {
-    if (!mounted) return <div className="p-6"><Skeleton className="h-8 w-64" /></div>;
+    if (!mounted || state === "loading") return <DetailSkeleton />;
+    if (state === "error") return <ReadFailed stale={false} retry={retry} />;
     return (
       <EmptyState icon={Trophy} title="No competition with that id" action={<Link href="/competitions" className="text-sm text-ink underline decoration-subtle underline-offset-4">All competitions</Link>}>
-        Competitions you host live in this browser until the contract ships. Another browser won&apos;t have them.
+        {isDemo ? "Competitions you host live in this browser in demo mode. Another browser won't have them." : `The Competitions contract has no competition ${id}.`}
       </EmptyState>
     );
   }
@@ -251,22 +350,25 @@ export function CompetitionDetail({ id }: { id: string }) {
   const gate = entryGate(c, w);
   const mine = w.entries.find((e) => e.competition === c.id);
   const isOpen = c.status === "open";
+  const you = mounted ? w.address : null;
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader title={<Crumbs items={[{ href: "/competitions", label: "competitions" }, { label: c.title }]} />}>
+      <PageHeader title={<Crumbs items={[{ href: "/competitions", label: "competitions" }, { label: <span title={c.title} className="block max-w-56 truncate sm:max-w-md">{c.title}</span> }]} />}>
         {isOpen && rel === null && (isDemo && gate.ok ? <ButtonLink href={`/competitions/${c.id}/enter`} variant="primary" icon={Trophy}>Enter</ButtonLink> : <Disabled icon={Trophy}>Enter</Disabled>)}
       </PageHeader>
       <div className="flex flex-col gap-8 px-4 py-6 md:px-6 lg:flex-row">
         <div className="flex min-w-0 flex-1 flex-col gap-8">
           {rel !== "host" && !c.live && <ExampleBanner />}
+          {stale && <ReadFailed stale retry={retry} />}
           <header className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center gap-2">
               <Pill tone={TONE[c.status]}>{LABEL[c.status]}</Pill>
               {rel && <Pill tone="brand">{REL[rel]}</Pill>}
               <span className="text-xs text-muted">Deadline {when(c)}</span>
+              {isOpen && <Countdown to={Date.parse(c.deadline)} clock={() => chainTime(c)} />}
             </div>
-            <h1 className="text-xl font-medium text-ink">{c.title}</h1>
-            <p className="max-w-lede text-sm text-muted">{c.task}</p>
+            <h1 className="break-words text-xl font-medium text-ink">{c.title}</h1>
+            <p className="max-w-lede whitespace-pre-line break-words text-sm text-muted">{c.task}</p>
             {isOpen && rel === null && <p id="not-live" className="text-xs text-muted">{gate.ok ? NOT_LIVE : gate.text}</p>}
           </header>
           {rel === "host" && isOpen && (
@@ -282,14 +384,17 @@ export function CompetitionDetail({ id }: { id: string }) {
               <p className="text-xs text-muted">Keep the file. After the deadline you upload it for scoring, and it must hash to this commitment.</p>
             </section>
           )}
-          {c.status === "finished" && <Leaderboard c={c} />}
-          {isOpen && (
+          {c.status === "finished" && <Leaderboard c={c} you={you} />}
+          {(isOpen || c.status === "closed" || c.status === "unrevealed") && (
             <section aria-label="Entries" className="flex flex-col gap-3">
-              <Eyebrow>{c.entries.length === 0 ? "No entries yet" : `${c.entries.length} ${c.entries.length === 1 ? "entry" : "entries"} so far`}</Eyebrow>
-              <p className="text-sm text-muted">Scores appear after the deadline, when the host reveals the labels. A reveal that doesn&apos;t hash to the commitment is rejected, so the host can&apos;t pick a winner by editing the answers.</p>
-              {c.entries.length > 0 && <ul className="flex flex-wrap gap-2">{c.entries.map((e) => <li key={e.op}><AddressChip value={e.op} href={`/nodes/${e.op}`} you={!!w.address && e.op.toLowerCase() === w.address.toLowerCase()} /></li>)}</ul>}
+              <Eyebrow>{c.entries.length === 0 ? (isOpen ? "No entries yet" : "Nobody entered") : `${c.entries.length} ${c.entries.length === 1 ? "entry" : "entries"}${isOpen ? " so far" : ""}`}</Eyebrow>
+              <p className="text-sm text-muted">{isOpen
+                ? "Scores appear after the deadline, when the host reveals the labels. A reveal that doesn't hash to the commitment is rejected, so the host can't pick a winner by editing the answers."
+                : c.entries.length === 0 ? "Entries are closed and nobody committed one." : "Entries are closed. Scores appear once the host reveals the labels and each entry is revealed."}</p>
+              {c.entries.length > 0 && <ul className="flex flex-wrap gap-2">{c.entries.map((e) => <li key={e.op}><AddressChip value={e.op} href={entrantHref(c, e.op)} you={!!you && e.op.toLowerCase() === you.toLowerCase()} /></li>)}</ul>}
             </section>
           )}
+          <CompetitionNotebooks c={c} you={you} entered={rel === "entered"} />
           {c.status === "unrevealed" && (
             <Banner tone="danger" title="The host didn't reveal the labels.">
               The {c.live ? span(c.revealWindow) : "48-hour"} reveal window closed without labels matching the commitment, so no score can be trusted. Under the rules the prize is split between the {c.entries.length} entrants.
@@ -302,8 +407,18 @@ export function CompetitionDetail({ id }: { id: string }) {
           <Commitment c={c} />
           <dl className="flex flex-col gap-2.5 rounded-xl border border-rule p-4 text-sm">
             <div className="flex justify-between gap-3"><dt className="text-muted">Prize</dt><dd><Money units={c.prize} /></dd></div>
-            <div className="flex justify-between gap-3"><dt className="text-muted">Compute budget</dt><dd><Money units={c.budget} /></dd></div>
-            <div className="flex justify-between gap-3"><dt className="text-muted">Entry fee</dt><dd>{c.fee === 0 ? <span className="text-ink">Free</span> : <Money units={c.fee} />}</dd></div>
+            {c.live ? (
+              <>
+                <div className="flex justify-between gap-3"><dt className="text-muted">Items</dt><dd className="tabular text-ink">{(c.items ?? ITEMS).toLocaleString()}</dd></div>
+                <div className="flex justify-between gap-3"><dt className="text-muted">Reveal window</dt><dd className="text-ink">{span(c.revealWindow)}</dd></div>
+                <div className="flex justify-between gap-3"><dt className="text-muted">Entry fee</dt><dd className="text-ink">Free</dd></div>
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between gap-3"><dt className="text-muted">Compute budget</dt><dd><Money units={c.budget} /></dd></div>
+                <div className="flex justify-between gap-3"><dt className="text-muted">Entry fee</dt><dd>{c.fee === 0 ? <span className="text-ink">Free</span> : <Money units={c.fee} />}</dd></div>
+              </>
+            )}
             <div className="flex justify-between gap-3"><dt className="text-muted">Entries</dt><dd className="tabular text-ink">{c.entries.length}</dd></div>
             <div className="flex items-center justify-between gap-3"><dt className="text-muted">Host</dt><dd><AddressChip value={c.host} href={`/u/${c.host}`} you={rel === "host"} /></dd></div>
             {c.live && c.arkiv?.listing && <div className="flex items-center justify-between gap-3"><dt className="text-muted">Listed on Arkiv</dt><dd><HashChip value={c.arkiv.listing} label="Arkiv listing" /></dd></div>}

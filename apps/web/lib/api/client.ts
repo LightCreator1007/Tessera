@@ -2,8 +2,9 @@
 // Live reads go to /api/coord on this origin, a route handler that proxies to the coordinator, which sends no CORS headers.
 import { keccak256 } from "viem";
 import * as fx from "@/mocks/fixtures";
+import * as demoNotebooks from "@/lib/learn/notebooks";
 import type {
-  Draft, DraftRequest, LiveCompetition, ModelRecord, NodeEvent, NodeHealth, NodeStatus, Spec, Workload,
+  CompetitionEntry, Notebook, NotebookIn, NotebookIndex, OwnerCompetitions, Draft, DraftRequest, LiveCompetition, ModelRecord, NodeEvent, NodeHealth, NodeStatus, Spec, Workload,
   Config, Evidence, Health, Job, JobState, Node, NodeChain, Pool, Round, RoundSummary, RoundVerdicts, Settlement, Sourced, OwnerHistory, OwnerIdentity, OwnerRecord } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_COORDINATOR_URL ? "/api/coord" : undefined;
@@ -82,6 +83,11 @@ export const api = {
   health: () => (BASE ? get<Health>("/v1/health") : demo(() => ({ ...fx.health, block: demoBlock() }), "health")),
   pool: () => (BASE ? get<Pool>("/v1/pool") : demo(() => fx.pool, "pool")),
   competitions: () => (BASE ? get<LiveCompetition[]>("/v1/competitions") : demo(() => [] as LiveCompetition[], "competitions")),
+  competitionEntry: (id: string, who: string) => get<CompetitionEntry>(`/v1/competitions/${encodeURIComponent(id)}/entries/${who}`),
+  notebooks: (id: string) => (BASE ? get<NotebookIndex>(`/v1/competitions/${encodeURIComponent(id)}/notebooks`) : demo(() => demoNotebooks.index(id), "notebooks")),
+  notebook: (id: string, who: string) => (BASE ? get<Notebook>(`/v1/competitions/${encodeURIComponent(id)}/notebooks/${who}`) : demo(() => demoNotebooks.one(id, who), "notebook")),
+  attachNotebook: (id: string, body: NotebookIn) => post<{ sha256: string; revisions: number; opensAt: number }>(`/v1/competitions/${encodeURIComponent(id)}/notebooks`, body),
+  ownerCompetitions: (owner: string) => get<OwnerCompetitions>(`/v1/owners/${owner}/competitions`),
   jobs: () => (BASE ? get<Job[]>("/v1/jobs") : demo(() => fx.jobs, "jobs")),
   job: (id: number) => (BASE ? get<Job>(`/v1/jobs/${id}`) : demo(() => findJob(id), `Job ${id}`)),
   jobState: (id: number) => (BASE ? get<JobState>(`/v1/jobs/${id}/state`) : demo(() => fx.jobStates[id] ?? null, `Job ${id}`)),
