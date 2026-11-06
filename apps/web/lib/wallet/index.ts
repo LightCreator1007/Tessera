@@ -103,8 +103,8 @@ export function useWallet() {
 const noSub = () => () => {};
 const noChain = chain.serverSnapshot;
 
-/** Demo: two fixture jobs stand in for jobs this wallet posted, so the owner panel and refunds can be walked without a chain. */
-export const DEMO_OWNED_JOBS = [4, 3];
+/** Demo: fixture jobs that stand in for jobs this wallet posted, so the owner panel, refunds and a stalled job can be walked without a chain. */
+export const DEMO_OWNED_JOBS = [5, 4, 3];
 
 /** One rule for "yours" on every page: you posted it from this wallet (or, in demo, it is a stand-in fixture). */
 export function ownsJob(address: string | null, isDemo: boolean, job: { id: number; requester: string }) {

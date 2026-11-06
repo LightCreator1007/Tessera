@@ -33,9 +33,14 @@ export type Job = {
   status: JobStatus;
   trust: Trust;
   workload: string;
+  /** Why the job isn't opening rounds. Absent on coordinators that don't report it; null while rounds open normally. */
+  waiting?: Waiting | null;
   /** Where the final model is indexed on Arkiv. Absent on coordinators without Arkiv; null until the job completes. */
   published?: Published | null;
 };
+/** The coordinator's read on a stuck job: seats it can fill against seats it needs, what holds the other nodes back, and when anyone may abandon it. Times are unix seconds. */
+export type Waiting = { since: number; eligible: number; quorum: number; blocked: Partial<Record<BlockReason, number>>; abandonAfter: number };
+export type BlockReason = "notJoined" | "stake" | "offline" | "busy" | "selftest" | "benched" | "credential" | "sameOwner";
 export type Published = {
   round: number;
   keccak: string;

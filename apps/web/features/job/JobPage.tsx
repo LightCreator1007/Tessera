@@ -15,7 +15,7 @@ import { f64 } from "@/lib/api/metric";
 import { Problem, errorKind } from "@/components/problem";
 import { ModelPanel } from "./ModelPanel";
 import { useConfig, useJob, useJobState, useNodes, useRound, useRounds, useSpec, useVerdicts } from "@/lib/api/hooks";
-import type { Job, Round, RoundSummary } from "@/lib/api/types";
+import type { BlockReason, Job, Round, RoundSummary, Waiting } from "@/lib/api/types";
 import { LossChart, toPoints } from "@/components/charts";
 import { RoundTrack, WorkloadArt } from "@/components/pixel";
 import { CoverBand } from "@/components/mosaic/CoverBand";
@@ -38,6 +38,7 @@ export function JobPage({ id, tab: rawTab }: { id: number; tab?: string }) {
   const job = useJob(id);
   const rounds = useRounds(id);
 
+  const w = useWallet();
   if (job.isPending) return <JobSkeleton />;
   if (job.isError) {
     return (
@@ -79,7 +80,7 @@ export function JobPage({ id, tab: rawTab }: { id: number; tab?: string }) {
               </p>
             </div>
           </header>
-          <StatusBanner job={j} />
+          <StatusBanner job={j} mine={ownsJob(w.address, isDemo, j)} />
           <PillTabs
             value={tab}
             hrefFor={(t) => (t === "overview" ? `/jobs/${id}` : `/jobs/${id}?tab=${t}`)}
@@ -177,7 +178,54 @@ function BudgetMeter({ job }: { job: Job }) {
   );
 }
 
-function StatusBanner({ job }: { job: Job }) {
+const BLOCKED: Record<BlockReason, (n: number) => string> = {
+  busy: (n) => `${n} busy in another job`,
+  stake: (n) => `${n} staked below this job's minimum`,
+  offline: (n) => `${n} offline`,
+  notJoined: (n) => `${n} not joined yet`,
+  selftest: (n) => `${n} without a passing self-test`,
+  benched: (n) => `${n} benched after missed rounds`,
+  credential: (n) => `${n} missing a credential this workload needs`,
+  sameOwner: (n) => `${n} sharing an owner with a counted node`,
+};
+
+function ago(sec: number): string {
+  const m = Math.max(1, Math.round((Date.now() / 1000 - sec) / 60));
+  return m < 60 ? `${m} min` : `${Math.round(m / 60)} h`;
+}
+
+/** A job stuck for nodes: why, for how long, and the way out once the stall window has passed. */
+function Stalled({ job, wait, mine }: { job: Job; wait: Waiting; mine: boolean }) {
+  const abandon = useTx({ revertAs: "TooEarly" });
+  const reasons = (Object.entries(wait.blocked) as [BlockReason, number][]).filter(([, n]) => n > 0).map(([k, n]) => BLOCKED[k](n));
+  const canAbandon = Date.now() / 1000 >= wait.abandonAfter;
+  const at = new Date(wait.abandonAfter * 1000).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  const title = job.currentRound === null ? "Waiting for nodes" : `Waiting for nodes after round ${job.currentRound}`;
+  return (
+    <Banner tone={canAbandon ? "warn" : "pending"} title={title}>
+      <span className="flex flex-col items-start gap-3">
+        <span>
+          {wait.eligible} of {wait.quorum} seats can be filled right now{reasons.length ? `. Of the other nodes: ${reasons.join(", ")}.` : "."} Stuck for {ago(wait.since)}. The coordinator retries every few seconds.
+        </span>
+        {mine && !canAbandon && <span className="text-subtle">If it&apos;s still stuck at {at}, you can abandon it and get the unspent <Money units={job.remaining} /> back.</span>}
+        {mine && canAbandon && (
+          <>
+            <span>You can abandon it now. Finalized rounds stay paid and the unspent <Money units={job.remaining} /> comes back to you.</span>
+            <TxButton tx={abandon} variant="secondary" label="Abandon job" onRun={() => abandon.send(() => calls.abandonJob(job.id))} />
+            <TxStatus tx={abandon} />
+          </>
+        )}
+      </span>
+    </Banner>
+  );
+}
+
+function StatusBanner({ job, mine }: { job: Job; mine: boolean }) {
+  if (job.waiting && (job.status === "open" || job.status === "running")) return <Stalled job={job} wait={job.waiting} mine={mine} />;
+  return <Verdicts job={job} />;
+}
+
+function Verdicts({ job }: { job: Job }) {
   const cur = job.currentRound;
   const v = useVerdicts(job.id, cur);
   const disagree = cur !== null && v.data && new Set(v.data.data.filter((x) => x.verdict === "pass" || x.verdict === "fail").map((x) => x.verdict)).size > 1;
