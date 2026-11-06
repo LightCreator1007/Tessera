@@ -75,7 +75,8 @@ def stake_in(l: Ledger, name: str, inv: dict) -> None:
     op = inv["operator"]
     if l.registry.getNode(op).joined:
         sys.exit(f"{op} has already joined")
-    stake = stake_needed(l)
+    # 10% over the floor: one missed reveal costs 1%, and a node exactly at the floor would then sit out every job.
+    stake = stake_needed(l) * 11 // 10
     script("fund.py", op, "--tokens", "0", "--journal-dir", str(DATA / "faucet"), rpc=l.net.rpc, net=NET_FILE)  # gas
     owner = Actor(l, NET_FILE, DATA, label(name), units=stake)
     try:

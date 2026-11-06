@@ -40,7 +40,7 @@ Copy the whole `tod-pair:...` line back to the host. It expires in 30 minutes.
 docker compose -f docker/compose.dev.yml exec coordinator python docker/dev/admit.py join <name> <tod-pair:...>
 ```
 
-That funds the owner, gets an invite through the dev identity route, joins the node and stakes enough for every open job. Then start the node on the PC:
+That funds the owner, gets an invite through the dev identity route, joins the node and stakes 10% more than every open job needs, so one missed reveal (a 1% penalty) doesn't leave it below the floor. Then start the node on the PC:
 
 ```sh
 docker/tod-node run
