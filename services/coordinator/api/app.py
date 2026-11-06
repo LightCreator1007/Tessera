@@ -18,7 +18,7 @@ from publish import shards as publish_shards
 from tod_core import encodings
 from tod_core.finalize import message
 
-from . import admin, auth, blobs, config, nodes
+from . import admin, auth, blobs, config, nodes, persist
 from .draft import build as build_draft
 from .models import (Collected, Config, Dispute, DisputeIn, Draft, DraftRequest, Evidence, Health, Job, JobState,
                      ModelRecord, Payout, Published, Round, RoundSummary, Selftest, SettlementOut, SignatureIn, Workload)
@@ -31,6 +31,7 @@ if config.COORDINATOR_KEY is None:
 @asynccontextmanager
 async def lifespan(_):
     blobs.store.self_test()  # never serve from a store that cannot read back what it wrote
+    persist.load()  # admin controls and re-arms, before the driver's first tick reads them
     driver.start(blobs.store)  # off unless TOD_NETWORK is set
     stop = threading.Event()
     if config.ARKIV_ENABLED:

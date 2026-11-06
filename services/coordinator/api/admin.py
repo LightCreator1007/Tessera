@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 import publish
 
-from . import auth, config, tables
+from . import auth, config, persist, tables
 
 router = APIRouter(prefix="/v1/admin", dependencies=[Depends(auth.admin)])
 
@@ -22,12 +22,22 @@ def _control(job):
 @router.post("/jobs/{job}/mode")
 def mode(job: int, m: Mode):
     _control(job)["auto"] = m.auto
+    persist.save()
     return tables.CONTROL[job]
 
 
 @router.post("/jobs/{job}/pause")
 def pause(job: int):
     _control(job)["paused"] = True
+    persist.save()
+    return tables.CONTROL[job]
+
+
+@router.post("/jobs/{job}/resume")
+def resume(job: int):
+    """Undo a pause. Pauses now outlive a restart, so they need a way back."""
+    _control(job)["paused"] = False
+    persist.save()
     return tables.CONTROL[job]
 
 
@@ -36,6 +46,7 @@ def rearm(op: str):
     """Clear a node's missed-commit streak so the matcher seats it again."""
     tables.MISSED.pop(op.lower(), None)
     tables.REARMED[op.lower()] = int(time.time())
+    persist.save()
     return {"op": op, "missedCommitsInARow": 0}
 
 
