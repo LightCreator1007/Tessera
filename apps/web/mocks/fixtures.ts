@@ -1,7 +1,8 @@
 // Demo data shaped exactly like the coordinator responses. Shown only when NEXT_PUBLIC_COORDINATOR_URL is unset, always under a "Demo data" label.
-import type { Settlement,
+import type { Settlement, Draft, DraftRequest, ModelRecord, Workload,
   Config, Evidence, Health, Job, JobState, Node, NodeChain, Pool, Round, RoundStatus, RoundSummary, RoundVerdicts,
 } from "@/lib/api/types";
+import { toF64 } from "@/lib/api/metric";
 
 function hex(seed: string, len = 64): string {
   let h = 2166136261;
@@ -37,7 +38,8 @@ export const jobs: Job[] = [
   { id: 7, workload: "mlp-exact", status: "running", trust: "chain", budget: 120 * TOD, remaining: 78.4 * TOD, rounds: 20, currentRound: 8, modelSpecHash: hex("spec7"), requester: REQ[0], stakePerNode: 5 * TOD },
   { id: 6, workload: "cnn-torch", status: "running", trust: "hash-checked", budget: 300 * TOD, remaining: 261 * TOD, rounds: 12, currentRound: 2, modelSpecHash: hex("spec6"), requester: REQ[1], stakePerNode: 10 * TOD },
   { id: 5, workload: "mlp-exact", status: "open", trust: "chain", budget: 40 * TOD, remaining: 40 * TOD, rounds: 8, currentRound: null, modelSpecHash: hex("spec5"), requester: REQ[2], stakePerNode: 2 * TOD },
-  { id: 4, workload: "mlp-exact", status: "completed", trust: "chain", budget: 60 * TOD, remaining: 0, rounds: 12, currentRound: 12, modelSpecHash: hex("spec4"), requester: REQ[0], stakePerNode: 5 * TOD },
+  { id: 4, workload: "mlp-exact", status: "completed", trust: "chain", budget: 60 * TOD, remaining: 0, rounds: 12, currentRound: 12, modelSpecHash: hex("spec4"), requester: REQ[0], stakePerNode: 5 * TOD,
+    published: { round: 11, keccak: hex("agg4-11"), state: "indexed", arkivKey: hex("arkiv4"), arkivTx: hex("arkivtx4"), swarmRef: hex("swarm4").slice(2) } },
   { id: 3, workload: "cnn-torch", status: "abandoned", trust: "untrusted", budget: 90 * TOD, remaining: 61.2 * TOD, rounds: 10, currentRound: 3, modelSpecHash: hex("spec3"), requester: REQ[1], stakePerNode: 10 * TOD },
 ];
 
@@ -45,7 +47,7 @@ function lossCurve(job: number, n: number, start = 2.31, floor = 0.18): JobState
   return Array.from({ length: n }, (_, i) => {
     const wobble = Math.sin(i * 1.7 + job) * 0.03;
     const v = floor + (start - floor) * Math.exp(-i / 3.2) + wobble;
-    return { round: i + 1, metric: i === 4 && job === 7 ? null : v.toFixed(4), seconds: 140 + ((i * 37 + job * 11) % 60) };
+    return { round: i + 1, metric: i === 4 && job === 7 ? null : toF64(v), seconds: 140 + ((i * 37 + job * 11) % 60) };
   });
 }
 export const jobStates: Record<number, JobState> = {
@@ -162,7 +164,7 @@ export const nodes: Node[] = OPS.map((o, i) => ({
   idle: i === 1 || i === 3 || i === 4,
   version: "0.1.0",
   workloads: i % 2 ? ["mlp-exact", "cnn-torch"] : ["mlp-exact"],
-  prewarm: {},
+  prewarm: { image: null, datasets: [] },
 }));
 
 function historyFor(op: string): NodeChain["history"] {
@@ -213,3 +215,40 @@ export const nodeChain: Record<string, NodeChain> = Object.fromEntries(
 );
 
 export const DEMO_NOW = NOW;
+
+export const workloads: Workload[] = [
+  { id: "mlp-exact/1", replayClass: "exact", defaults: { epochs: 1, batch: 64, lr: 0.05 }, tier: "core" },
+  { id: "cnn-torch/1", replayClass: "tolerance", defaults: { epochs: 1, batch: 32, lr: 0.01 }, tier: "stretch" },
+];
+
+export const models: ModelRecord[] = jobs.filter((j) => j.published?.state === "indexed").map((j) => ({
+  arkivKey: j.published!.arkivKey!,
+  owner: addr("arkiv-writer"),
+  expiresAt: NOW + 30 * 86400,
+  job: j.id,
+  round: j.published!.round,
+  keccak: j.published!.keccak,
+  size: 407_552,
+  chainId: config.chainId,
+  jobMarket: config.jobMarket,
+  workload: j.workload,
+  datasetHash: hex(`dataset${j.id}`),
+  url: null,
+  swarmRef: j.published!.swarmRef ?? null,
+}));
+
+export function specFor(job: Job): Record<string, unknown> {
+  return { workload: job.workload, rounds: job.rounds, shards: 4, batch: 64, lr: 0.05, dataset: { id: "mnist", hash: hex(`dataset${job.id}`) } };
+}
+
+export function draftFor(req: DraftRequest): Draft {
+  const spec = { workload: req.workload, dataset: req.datasetHash, epochs: req.epochs, minQuorum: req.minQuorum ?? 3, maxPerRound: req.maxPerRound ?? 6, ...req.overrides };
+  return {
+    spec,
+    modelSpecHash: hex(`draft-spec${JSON.stringify(spec)}`),
+    initialWeightsHash: hex(`draft-w${req.workload}`),
+    windows: { commit: 600, reveal: 300, verify: 600 },
+    minStake: 5 * TOD,
+    createJobCalldata: hex(`calldata${req.budget}`, 200),
+  };
+}

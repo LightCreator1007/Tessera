@@ -33,7 +33,39 @@ export type Job = {
   status: JobStatus;
   trust: Trust;
   workload: string;
+  /** Where the final model is indexed on Arkiv. Absent on coordinators without Arkiv; null until the job completes. */
+  published?: Published | null;
 };
+export type Published = {
+  round: number;
+  keccak: string;
+  state: "pending" | "indexed" | "failed";
+  arkivKey: string | null;
+  arkivTx: string | null;
+  /** 64 hex, no 0x: the model's bytes on Swarm, when Swarm is on. */
+  swarmRef?: string | null;
+};
+/** GET /v1/models: one record read straight from Arkiv, not from the coordinator's own tables. */
+export type ModelRecord = {
+  arkivKey: string;
+  owner: string;
+  expiresAt: number;
+  job: number;
+  round: number;
+  keccak: string;
+  size: number;
+  chainId: number;
+  jobMarket: string;
+  workload: string | null;
+  datasetHash: string | null;
+  url: string | null;
+  swarmRef: string | null;
+};
+export type Workload = { id: string; replayClass: "exact" | "tolerance"; defaults: Record<string, unknown>; tier: "core" | "stretch" };
+export type DraftRequest = { workload: string; datasetHash: string; budget: number; epochs: number; minQuorum?: number; maxPerRound?: number; overrides?: Record<string, unknown> };
+export type Draft = { spec: Record<string, unknown>; modelSpecHash: string; initialWeightsHash: string; windows: Record<string, number>; minStake: number; createJobCalldata: string };
+/** The spec bytes as served, parsed, plus whether their keccak matches the job's on-chain modelSpecHash. */
+export type Spec = { spec: Record<string, unknown>; keccak: string; matches: boolean };
 export type RoundState = { round: number; metric: string | null; seconds: number | null };
 export type JobState = { job: number; rounds: RoundState[]; trust: Trust };
 export type Seat = { op: string; shard: number };
@@ -80,7 +112,7 @@ export type Node = {
   online: boolean;
   version: string;
   workloads: string[];
-  prewarm: Record<string, unknown>;
+  prewarm: { image: string | null; datasets: string[] };
 };
 export type Pool = { online: number; idle: number; busy: number };
 
@@ -102,6 +134,17 @@ export type NodeChain = {
   history: { job: number; round: number; result: NodeRoundResult }[];
 };
 export type NodeRoundResult = "paid" | "fallback" | "slashed" | "reverted" | "voided" | "live";
+
+// The local node, read through /api/node (apps/node/src/tod_node/api.py on :7777).
+export type NodeEvent = { seq: number; ts: number; type: string; job: number | null; round: number | null; data: Record<string, unknown> };
+export type NodeStatus = {
+  dataDir: string;
+  initialized: boolean;
+  operator: string | null;
+  daemon: { state: "running" | "stopped"; pid: number | null };
+  lastEvent: NodeEvent | null;
+};
+export type NodeHealth = { ok: boolean; loopAgeSeconds: number | null };
 
 export type Source = "live" | "demo";
 export type Sourced<T> = { data: T; source: Source };
