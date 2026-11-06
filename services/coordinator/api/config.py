@@ -11,6 +11,7 @@ CHAIN_ID = int(os.environ.get("CHAIN_ID", str(LOCAL_CHAIN_ID)))
 JOB_MARKET = os.environ.get("JOB_MARKET", ZERO)
 NODE_REGISTRY = os.environ.get("NODE_REGISTRY", ZERO)
 COMPETITIONS = os.environ.get("COMPETITIONS", "")  # empty: this network has no Competitions contract
+RL_COMPETITIONS = os.environ.get("RL_COMPETITIONS", "")  # empty: this network has no RLCompetitions contract
 TOKEN = os.environ.get("TOKEN", ZERO)
 # A throwaway key is only acceptable on a local chain; on any other chain the key must be set.
 COORDINATOR_KEY = os.environ.get("COORDINATOR_PRIVATE_KEY") or (
