@@ -182,13 +182,18 @@ def map_event(e: dict) -> Event:
         step = t.split(".")[1]
         what, detail = STEP_WORDS[step], str(d.get("reason") or "")
         kind = "warn" if step == "skipped" else "ok"
+    elif t == "round.waiting":
+        what, detail, kind = "Waiting for this round's inputs", str(d.get("reason") or ""), "warn"
+    elif t == "heartbeat.restored":
+        what, kind = "Coordinator reachable again", "ok"
     elif t == "tx.reverted":
         what, kind = "Transaction failed", "danger"
         detail = f"{d.get('kind', '')} {d.get('revert') or ''}".strip()
     elif t == "gas.topup":
         what, kind = "Gas topped up by the coordinator", "ok"
     elif t == "error":
-        what = {"gas": "Low on gas", "api": "Local API didn't start"}.get(str(d.get("what")), "Error")
+        what = {"gas": "Low on gas", "api": "Local API didn't start",
+                "heartbeat": "Coordinator not taking heartbeats"}.get(str(d.get("what")), "Error")
         if d.get("code") == "salt_lost":
             what = "Lost a reveal salt"
         detail, kind = str(d.get("reason") or d.get("code") or ""), "danger"

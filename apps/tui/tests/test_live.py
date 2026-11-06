@@ -117,6 +117,10 @@ def test_events_map_to_words():
     e = map_event(ev(3, "tx.reverted", 7, 12, kind="reveal", revert="RevealTooLate"))
     assert (e.what, e.kind, e.detail) == ("Transaction failed", "danger", "reveal RevealTooLate")
     assert map_event(ev(4, "node.stopping", source="api")).detail == "from the console"
+    w = map_event(ev(5, "round.waiting", 7, 12, reason="inputs not available yet: 403"))
+    assert (w.what, w.kind) == ("Waiting for this round's inputs", "warn")
+    assert map_event(ev(6, "error", what="heartbeat", reason="refused")).what == "Coordinator not taking heartbeats"
+    assert map_event(ev(7, "heartbeat.restored")).kind == "ok"
     assert map_event(ev(5, "something.new")).what == "Something new"  # a newer node never renders blank
 
 
