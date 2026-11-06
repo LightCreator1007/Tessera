@@ -169,6 +169,40 @@ def competition_one(cid: int):
     return found[0]
 
 
+def _address(a: str, what: str) -> str:
+    if not re.fullmatch(r"0x[0-9a-fA-F]{40}", a):
+        raise HTTPException(400, f"{what} must be 0x + 40 hex")
+    return a
+
+
+def _competitions_read(fn):
+    if not competitions.enabled():
+        raise HTTPException(503, "this network has no Competitions contract")
+    try:
+        return fn()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(502, f"chain read failed: {type(e).__name__}")
+
+
+@v1.get("/competitions/{cid}/entries/{address}")
+def competition_entry(cid: int, address: str):
+    """One entrant's standing, and once scored, the predictions it was scored on and how they did per class."""
+    _address(address, "address")
+    found = _competitions_read(lambda: competitions.entry(cid, address))
+    if found is None:
+        raise HTTPException(404, "no such competition")
+    return found
+
+
+@v1.get("/owners/{owner}/competitions")
+def owner_competitions(owner: str):
+    """The competitions an address hosted or entered, with ranks, prizes won and shares claimed."""
+    _address(owner, "owner")
+    return _competitions_read(lambda: competitions.of_owner(owner))
+
+
 @v1.get("/models", response_model=list[ModelRecord])
 def models():
     """Finished models as Arkiv holds them, read from Arkiv rather than from this coordinator's tables."""
