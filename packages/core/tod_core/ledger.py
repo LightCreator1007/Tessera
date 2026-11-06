@@ -1,20 +1,26 @@
 """Python adapter for both contracts: calls generated from the ABIs, one event reader, state rebuilt from events."""
 import json
 import os
+import re
 import tomllib
 from dataclasses import dataclass, field
 from enum import IntEnum
 from pathlib import Path
 from typing import Iterable, Iterator, NamedTuple
 
-from requests import HTTPError
+from requests import HTTPError, RequestException
 from web3 import Web3
-from web3.exceptions import ContractCustomError, ContractLogicError, Web3RPCError
+from web3.exceptions import ContractCustomError, ContractLogicError, Web3Exception, Web3RPCError
 
 from .txmgr import TxManager, TxReverted
 
 REPO = Path(__file__).resolve().parents[3]
-ABI_DIR = REPO / "packages" / "abi" / "json"
+# Committed with the code, so every way of running it has them. packages/abi/scripts/generate.mjs writes these.
+ABI_DIR = Path(__file__).parent / "abi"
+# What a failing RPC raises. OSError itself stays out, because a missing file is one too.
+RPC_ERRORS = (RequestException, Web3Exception, ConnectionError, TimeoutError)
+# RPC URLs usually carry an API key, and requests quotes them in its errors.
+_URL = re.compile(r"[a-z][a-z0-9+.-]*://\S+|(?<=url: )/\S+", re.I)
 ZERO32 = b"\0" * 32
 
 # Token metadata, controlled issuance views and ERC-20 calls used by funding and settlement.
@@ -62,6 +68,10 @@ class Outcome(IntEnum):
     ACCEPTED, REVERTED = range(2)
 
 
+class WrongChain(RuntimeError):
+    """The RPC answered, but for a different chain than the network file names."""
+
+
 class Reverted(Exception):
     """A contract call reverted. `name` is the Solidity error, e.g. "WrongState"."""
 
@@ -107,6 +117,16 @@ class Event(NamedTuple):
     log_index: int
     tx_hash: str
     timestamp: int | None
+
+
+def open_failure(network: str, e: Exception) -> tuple[int, str, str, str]:
+    """Why opening a ledger failed, as (exit code, message, stable code, hint), so only a real RPC failure blames the RPC."""
+    text = _URL.sub("<rpc url>", str(e))
+    if isinstance(e, WrongChain):
+        return 2, text, "wrong_chain", "point the RPC URL at this network's chain"
+    if isinstance(e, RPC_ERRORS):
+        return 4, f"chain {network}: {text}", "rpc_unreachable", "check the RPC URL, or set one of your own"
+    return 1, f"could not start: {type(e).__name__}: {text}", "startup_failed", "this isn't a network problem; reinstall, and report it if it comes back"
 
 
 def _load_abi(name: str) -> list[dict]:
@@ -172,7 +192,7 @@ class Ledger:
         self.net, self.sender = net, sender
         self.w3 = w3 or Web3(Web3.HTTPProvider(net.rpc, request_kwargs={"timeout": 30}))
         if w3 is None and self.w3.eth.chain_id != net.chain_id:
-            raise RuntimeError(f"RPC is on chain {self.w3.eth.chain_id}, {net.name} is {net.chain_id}")
+            raise WrongChain(f"RPC is on chain {self.w3.eth.chain_id}, {net.name} is {net.chain_id}")
         market_abi, registry_abi = _load_abi("IJobMarket"), _load_abi("INodeRegistry")
         contract = lambda addr, abi: self.w3.eth.contract(address=addr, abi=abi, decode_tuples=True)  # noqa: E731
         self._market = contract(net.market, market_abi)

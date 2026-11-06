@@ -34,7 +34,8 @@ export const COMMANDS: CliCommand[] = [
 
 export const EXIT_CODES: [number, string][] = [
   [0, "ok"],
-  [2, "bad input, for example an address that is not 0x"],
+  [1, "could not start for a reason other than the network, such as a broken install"],
+  [2, "bad input, for example an address that is not 0x, or an RPC on the wrong chain"],
   [3, "not eligible: not initialized, or the self-test failed"],
   [4, "unreachable: the coordinator or the chain did not answer"],
   [6, "a node is already running on this machine"],

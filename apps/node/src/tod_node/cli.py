@@ -219,7 +219,7 @@ def run(
         fail(as_json, BAD_INPUT, "no network set", "bad_config", "run `tod-node init --network anvil` or set TOD_NETWORK")
     # Imported here so the one-shot commands start fast and work without web3 loaded.
     from filelock import FileLock, Timeout
-    from tod_core.ledger import Ledger, Network
+    from tod_core.ledger import Ledger, Network, open_failure
     from tod_core.txmgr import LocalSigner, TxManager
 
     from .daemon import run as run_daemon
@@ -242,8 +242,9 @@ def run(
     try:
         ledger = Ledger(net)
         sender = TxManager(ledger.w3, LocalSigner(account.key), data_dir() / "journal")
-    except Exception as e:  # RPC down or on the wrong chain: nothing this node can do until that is fixed
-        fail(as_json, UNREACHABLE, f"chain {net.name}: {e}", "rpc_unreachable")
+    except Exception as e:
+        code, message, err, hint = open_failure(net.name, e)
+        fail(as_json, code, message, err, hint)
     sb = sandbox_or_none(as_json) if mode == "honest" else None  # fake:lazy never trains
     pid_path().write_text(str(os.getpid()))
     events = events_log()

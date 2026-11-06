@@ -209,3 +209,29 @@ def test_tui_points_the_screen_at_this_node_and_its_coordinator(run, monkeypatch
     monkeypatch.setenv("TOD_COORDINATOR", "http://127.0.0.1:8000")
     assert run("tui").exit_code == 0
     assert calls == [["/bin/tod-tui", "--node", "http://127.0.0.1:7778", "--coordinator", "http://127.0.0.1:8000"]]
+
+
+def _network(tmp_path, rpc: str) -> str:
+    addr = '"0x' + "33" * 20 + '"'
+    path = tmp_path / "net.toml"
+    path.write_text(f'name = "t"\nchainId = 84532\nrpc = "{rpc}"\n[roles]\n[contracts]\nmarket = {addr}\nregistry = {addr}\n'
+                    f'token = {addr}\ndeployBlock = 0\n')
+    return str(path)
+
+
+def test_run_reports_a_dead_rpc_without_its_key(run, tmp_path):
+    run("init", "--network", _network(tmp_path, "http://127.0.0.1:1/v2/SECRETKEY"))
+    result = run("run", "--json")
+    assert result.exit_code == UNREACHABLE
+    assert json.loads(result.output)["code"] == "rpc_unreachable"
+    assert "SECRETKEY" not in result.output
+
+
+def test_run_does_not_blame_the_rpc_for_a_broken_install(run, tmp_path, monkeypatch):
+    def broken(*_):
+        raise FileNotFoundError("IJobMarket.json")
+    monkeypatch.setattr("tod_core.ledger.Ledger", broken)
+    run("init", "--network", _network(tmp_path, "http://127.0.0.1:1"))
+    result = run("run", "--json")
+    assert result.exit_code == 1
+    assert json.loads(result.output)["code"] == "startup_failed"

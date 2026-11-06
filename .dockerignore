@@ -11,3 +11,4 @@ runs
 store
 *.zip
 signing-key-*.json
+packages/abi/json

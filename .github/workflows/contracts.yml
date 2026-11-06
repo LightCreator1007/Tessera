@@ -2,10 +2,10 @@
 name: contracts
 on:
   pull_request:
-    paths: ["contracts/**", "packages/abi/**", ".github/workflows/contracts.yml"]
+    paths: ["contracts/**", "packages/abi/**", "packages/core/tod_core/abi/**", ".github/workflows/contracts.yml"]
   push:
     branches: [main]
-    paths: ["contracts/**", "packages/abi/**", ".github/workflows/contracts.yml"]
+    paths: ["contracts/**", "packages/abi/**", "packages/core/tod_core/abi/**", ".github/workflows/contracts.yml"]
 permissions:
   contents: read
 concurrency:
@@ -27,7 +27,15 @@ jobs:
         run: forge build
       - if: hashFiles('contracts/foundry.toml') != ''
         run: forge test
-      # ABIs are generated rather than committed (some are over 2,000 lines), so CI just proves generation works.
+      # The ABIs Python loads are committed, so regenerating them must change nothing.
       - if: hashFiles('packages/abi/scripts/generate.mjs') != ''
         working-directory: .
         run: node packages/abi/scripts/generate.mjs
+      - if: hashFiles('packages/abi/scripts/generate.mjs') != ''
+        working-directory: .
+        run: |
+          if [ -n "$(git status --porcelain -- packages/core/tod_core/abi)" ]; then
+            git status --short -- packages/core/tod_core/abi
+            echo "Committed ABIs are stale. Run packages/abi/scripts/generate.mjs and commit the result." >&2
+            exit 1
+          fi

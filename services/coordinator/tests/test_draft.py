@@ -1,8 +1,6 @@
 """Job drafts: the frozen spec, the stored blobs and the createJob calldata agree with each other and the contract."""
 import json
 import re
-import shutil
-import subprocess
 
 import jsonschema
 import pytest
@@ -97,12 +95,6 @@ def test_min_stake_matches_the_contract():
 
 def test_create_job_matches_the_generated_abi():
     path = ABI_DIR / "IJobMarket.json"
-    if not path.exists():
-        # The ABI is generated, not committed; build it the way scripts/deploy.py does.
-        if not (shutil.which("forge") and shutil.which("node")):
-            pytest.skip("needs foundry and node to generate the ABI")
-        subprocess.run(["forge", "build"], cwd=draft.ROOT / "contracts", check=True, capture_output=True)
-        subprocess.run(["node", str(draft.ROOT / "packages/abi/scripts/generate.mjs")], check=True, capture_output=True)
     fn = next(x for x in json.loads(path.read_text()) if x.get("name") == "createJob")
 
     def sig(i):
