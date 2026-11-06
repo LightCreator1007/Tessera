@@ -85,7 +85,7 @@ export function JobsPage({ scope: asked }: { scope?: Scope }) {
         {filtered && <button type="button" onClick={() => { setSeg("all"); setWl("all"); setQ(null); }} className="ml-1 text-xs text-muted underline-offset-4 hover:text-ink hover:underline">Clear</button>}
       </div>
 
-      {!lockedOut && <RoundMosaic jobs={list} loading={jobs.isPending} />}
+      {!lockedOut && (jobs.isPending || list.length > 0) && <RoundMosaic jobs={list} loading={jobs.isPending} />}
 
       {jobs.isError && (
         <div className="px-4 pb-3 md:px-6">
@@ -102,8 +102,9 @@ export function JobsPage({ scope: asked }: { scope?: Scope }) {
         </div>
       )}
 
-      <div className={cx("flex-1 overflow-x-auto", view === "cards" && !lockedOut && "hidden")}>
-        <table className={cx("w-full min-w-table text-sm", lockedOut && "hidden")}>
+      {/* In cards view this block only carries the empty state, which has to show in both views. */}
+      <div className={cx("flex-1 overflow-x-auto", view === "cards" && !lockedOut && (jobs.isPending || rows > 0) && "hidden")}>
+        <table className={cx("w-full min-w-table text-sm", (lockedOut || (view === "cards" && rows === 0)) && "hidden")}>
           <THead>
             <TH>Job</TH>
             <TH>Status</TH>
@@ -123,7 +124,7 @@ export function JobsPage({ scope: asked }: { scope?: Scope }) {
         </table>
         {lockedOut ? (
           <ConnectGate title="Connect to see your jobs" figure="tiger">Your jobs are the ones this wallet paid for. Nothing is private; it is a filter on the same list.</ConnectGate>
-        ) : !jobs.isPending && rows === 0 && (
+        ) : !jobs.isPending && !jobs.isError && rows === 0 && (
           <EmptyState icon={Layers} poster={list.length === 0 ? "EMPTY" : undefined} title={scope === "yours" && list.length === 0 ? "Train your first model" : list.length === 0 ? "No jobs yet" : "No jobs match these filters"} action={list.length === 0 ? <ButtonLink href="/jobs/new" variant="primary" icon={Plus}>New job</ButtonLink> : undefined}>
             {scope === "yours" && list.length === 0 ? "Lock a budget, pick a workload, and idle laptops train it. If your node has earned anything, that pays first." : list.length === 0 ? "Once someone locks a budget, the job shows up here within a block." : "Try another status or workload."}
           </EmptyState>
