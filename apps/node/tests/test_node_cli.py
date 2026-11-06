@@ -192,3 +192,19 @@ def test_fake_mode_is_refused_off_test_chains(run, monkeypatch, tmp_path):
     run("init")
     result = run("run", "--mode", "fake:lazy", "--json")
     assert result.exit_code == BAD_INPUT and "test chains" in json.loads(result.output)["error"]
+
+
+def test_tui_says_how_to_install_it_when_missing(run, monkeypatch):
+    monkeypatch.setattr("tod_node.cli.shutil.which", lambda name: None)
+    result = run("tui")
+    assert result.exit_code == NOT_ELIGIBLE and "uv tool install ./apps/tui" in result.output
+
+
+def test_tui_points_the_screen_at_this_node_and_its_coordinator(run, monkeypatch):
+    calls = []
+    monkeypatch.setattr("tod_node.cli.shutil.which", lambda name: "/bin/tod-tui")
+    monkeypatch.setattr("tod_node.cli.subprocess.call", lambda args: calls.append(args) or 0)
+    monkeypatch.setenv("TOD_API_BIND", "127.0.0.1:7778")
+    monkeypatch.setenv("TOD_COORDINATOR", "http://127.0.0.1:8000")
+    assert run("tui").exit_code == 0
+    assert calls == [["/bin/tod-tui", "--node", "http://127.0.0.1:7778", "--coordinator", "http://127.0.0.1:8000"]]

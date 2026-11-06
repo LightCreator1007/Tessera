@@ -4,8 +4,10 @@ import base64
 import json
 import os
 import platform
+import shutil
 import signal
 import stat
+import subprocess
 import threading
 import time
 import urllib.request
@@ -374,3 +376,21 @@ def doctor(
         raise typer.Exit(NOT_ELIGIBLE)
     if coord[0] is False:
         raise typer.Exit(UNREACHABLE)
+
+
+@app.command()
+def tui(
+    node: Annotated[str | None, typer.Option("--node", help="Node API URL; default from TOD_API_BIND.")] = None,
+    demo: Annotated[bool, typer.Option("--demo", help="Scripted round, no network.")] = False,
+) -> None:
+    """Open the terminal UI (apps/tui) on this node, with the coordinator this node uses."""
+    exe = shutil.which("tod-tui")
+    if exe is None:
+        fail(False, NOT_ELIGIBLE, "tod-tui is not installed", "tui_not_installed",
+             "install it with `uv tool install ./apps/tui` from the repo, or run `uv run tod-tui` in apps/tui")
+    bind = os.environ.get("TOD_API_BIND", "127.0.0.1:7777")
+    args = [exe, "--demo"] if demo else [exe, "--node", node or f"http://{'127.0.0.1:7777' if bind == 'off' else bind}"]
+    coordinator = config.resolve(data_dir())["coordinator"][0]
+    if coordinator and not demo:
+        args += ["--coordinator", coordinator]
+    raise typer.Exit(subprocess.call(args))
