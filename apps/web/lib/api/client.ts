@@ -108,10 +108,31 @@ export const api = {
   models: () => (BASE ? get<ModelRecord[]>("/v1/models") : demo(() => fx.models, "models")),
   draft: (req: DraftRequest) => (BASE ? post<Draft>("/v1/jobs/draft", req) : demo(() => fx.draftFor(req), "draft")),
   nodes: () => (BASE ? get<Node[]>("/v1/nodes") : demo(() => fx.nodes, "nodes")),
-  // Chain reads below have no coordinator route; they come from JobMarket and NodeRegistry. Demo until lib/chain wires getLogs.
-  verdicts: (id: number, r: number) => demo<RoundVerdicts>(() => { const j = findJob(id); return j ? fx.verdictsFor(j, r) : null; }, `Round ${r}`),
+  // Per-verifier verdicts have no coordinator route. Live, they are derived from the round itself: its status, the
+  // threshold, and confirmed cheats. Demo uses fixtures. Either way the receipt labels them as derived, not signed.
+  verdicts: async (id: number, r: number): Promise<Sourced<RoundVerdicts>> => {
+    if (!BASE) return demo<RoundVerdicts>(() => { const j = findJob(id); return j ? fx.verdictsFor(j, r) : null; }, `Round ${r}`);
+    const [rd, cfg] = await Promise.all([get<Round>(`/v1/jobs/${id}/rounds/${r}`), get<Config>("/v1/config")]);
+    return { data: deriveVerdicts(rd.data, cfg.data), source: "live" };
+  },
   nodeChain: (op: string) => demo<NodeChain>(() => fx.nodeChain[op.toLowerCase()] ?? fx.nodeChain[op] ?? null, "Node"),
 };
+
+/** What the verifiers must have said, given what the round did. Exact for settled rounds; pending before then. */
+export function deriveVerdicts(rd: Round, cfg: Config): RoundVerdicts {
+  const vs = cfg.verifiers;
+  const cheat = (rd.confirmed as { op?: string }[]).find((c) => c.op)?.op;
+  switch (rd.status) {
+    case "finalized": return vs.map((v, i) => ({ verifier: v, verdict: i < cfg.threshold ? "pass" : "absent" }));
+    case "reverted": return vs.map((v) => ({ verifier: v, verdict: "fail", target: cheat }));
+    case "fallback": return vs.map((v, i) => ({ verifier: v, verdict: i === 0 ? "pass" : "absent" }));
+    case "voided": return vs.map((v) => ({ verifier: v, verdict: "absent" }));
+    default: return vs.map((v) => ({ verifier: v, verdict: "pending" }));
+  }
+}
+
+/** Blob refs from the coordinator are paths on it, so they go through the same-origin proxy. */
+export const blobFetchUrl = (url: string) => (BASE && url.startsWith("/") ? `${BASE}${url}` : url);
 
 /** URL of a published model's bytes. Clients check the keccak themselves; X-Keccak says which hash to expect. */
 export const modelUrl = (keccak: string) => (BASE ? `${BASE}/v1/models/${keccak}` : null);
