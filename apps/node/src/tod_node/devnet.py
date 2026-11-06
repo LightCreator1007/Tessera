@@ -147,6 +147,10 @@ class BlobServer:
                 self.end_headers()
                 self.wfile.write(body or b"")
 
+            def do_HEAD(self):  # unsigned, like the coordinator's: whether a blob is stored, nothing more
+                self.send_response(200 if self.path.rsplit("/", 1)[-1] in outer.blobs else 404)
+                self.end_headers()
+
             def do_POST(self):
                 from eth_account import Account
                 from eth_account.messages import encode_defunct

@@ -17,6 +17,7 @@ from tod_workloads.runner import run_round, sampler
 
 log = logging.getLogger(__name__)
 BLOB_TTL = 240  # s; the coordinator accepts BlobAccess expiries up to five minutes ahead
+UPLOAD_TRIES, UPLOAD_BACKOFF = 3, 2  # 2 s then 4 s: short, since the commit window can be as little as 45 s
 # (datasetHash) -> (X with one row per example, y)
 Datasets = Callable[[str], tuple[np.ndarray, np.ndarray]]
 
@@ -131,11 +132,16 @@ class Trainer:
         r = state.rounds[(job, rnd)]
         shard = next(v["shard"] for op, v in r["nodeRounds"].items() if op.lower() == self.operator)
         hs, final, spec_hash = self.runner.run(state, job, rnd, shard)
-        try:
-            # The merge needs our final weights; a failed upload only makes them unavailable, it doesn't cost stake.
-            self.runner.c.put(to_blob(spec_hash, final), job, rnd)
-        except (urllib.error.URLError, OSError) as e:
-            log.warning("job %s round %s: final weights upload failed: %s", job, rnd, e)
+        blob = to_blob(spec_hash, final)
+        for attempt in range(UPLOAD_TRIES):
+            try:
+                # Verifiers report weights that never arrived as DataUnavailable, which costs stake, so retry.
+                self.runner.c.put(blob, job, rnd)
+                break
+            except (urllib.error.URLError, OSError) as e:
+                log.warning("job %s round %s: final weights upload failed (try %d): %s", job, rnd, attempt + 1, e)
+                if attempt + 1 < UPLOAD_TRIES:
+                    time.sleep(UPLOAD_BACKOFF * (attempt + 1))
         return hs
 
 

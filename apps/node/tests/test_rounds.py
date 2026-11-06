@@ -178,3 +178,21 @@ def test_rounds_done_counts_only_kept_rounds_that_trained_the_shard():
         (1, 7): rnd(RoundStatus.SETTLED, [0]),  # later than the round being trained
     })
     assert [rounds_done(st, 1, 6, s) for s in (0, 1, 2, 3)] == [1, 2, 1, 0]
+
+
+def test_final_weights_upload_is_retried(monkeypatch):
+    import numpy as np
+    from tod_node import trainer
+
+    monkeypatch.setattr(trainer.time, "sleep", lambda s: None)
+    puts = []
+
+    def put(data, job, rnd):
+        puts.append(data)
+        if len(puts) < 3:
+            raise OSError("coordinator briefly down")
+
+    t = trainer.Trainer(SimpleNamespace(put=put), None, "0xA", 1, "0x" + "00" * 20)
+    t.runner.run = lambda *a: ([b"\1" * 32], np.zeros(2, np.float32), b"\2" * 32)
+    st = SimpleNamespace(rounds={(1, 1): {"nodeRounds": {"0xa": {"shard": 0}}}})
+    assert t(st, 1, 1) == [b"\1" * 32] and len(puts) == 3 and puts[0] == puts[2]

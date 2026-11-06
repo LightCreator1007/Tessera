@@ -1,12 +1,26 @@
-"""Verifier side of a round: replay every revealed node, make sure the seed is drawn, attest once, then co-sign."""
+"""Verifier side of a round: replay every revealed node, check its weights are stored, attest once, then co-sign."""
 import json
 import logging
+import urllib.error
+import urllib.request
 
 from tod_core import encodings as enc
 from tod_core.hashing import k256
 from tod_core.ledger import Kind, Phase, Reverted, RoundStatus
 
 log = logging.getLogger(__name__)
+KINDS = {"ReplayMismatch": Kind.REPLAY_MISMATCH, "DataUnavailable": Kind.DATA_UNAVAILABLE}
+
+
+def stored(url: str, h: str) -> bool:
+    """HEAD on the coordinator's blob route. Only a 404 means absent; any other failure raises, so we retry later."""
+    try:
+        urllib.request.urlopen(urllib.request.Request(f"{url}/v1/blobs/{h}", method="HEAD"), timeout=30).close()
+        return True
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return False
+        raise
 
 
 def replay_round(runner, state, job: int, rnd: int) -> dict[str, dict]:
@@ -17,8 +31,12 @@ def replay_round(runner, state, job: int, rnd: int) -> dict[str, dict]:
             continue
         hs, _, _ = runner.run(state, job, rnd, nr["shard"])
         replay, claimed = enc.checkpoint_root(hs), bytes(nr["checkpointRoot"])
-        out[op] = {"kind": None if replay == claimed else "ReplayMismatch",
-                   "replayRoot": "0x" + replay.hex(), "claimedRoot": "0x" + claimed.hex()}
+        kind = None if replay == claimed else "ReplayMismatch"
+        # The node uploads before it commits, so a blob still missing now never arrived. The merge needs it, and
+        # without a confirmed failure the round could never settle.
+        if kind is None and not stored(runner.c.url, "0x" + bytes(nr["updateHash"]).hex()):
+            kind = "DataUnavailable"
+        out[op] = {"kind": kind, "replayRoot": "0x" + replay.hex(), "claimedRoot": "0x" + claimed.hex()}
     return out
 
 
@@ -84,7 +102,7 @@ class VerifierLoop:
                 self.upload(report, job, rnd)
             except OSError as e:  # the hash on chain still commits to the report; uploading is for readers
                 log.warning("job %s round %s: report upload failed: %s", job, rnd, e)
-        failures = [(op, int(Kind.REPLAY_MISMATCH), False) for op in failed]
+        failures = [(op, int(KINDS[results[op]["kind"]]), False) for op in failed]
         self.market.attestRound(job, rnd, k256(report), failures)
         self.done.add((job, rnd))
         self.emit("round.attested", job=job, round=rnd, failures=failed)
