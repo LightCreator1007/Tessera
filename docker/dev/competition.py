@@ -22,6 +22,7 @@ import os
 import secrets
 import sys
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -127,8 +128,21 @@ def truth(c: dict) -> bytes | None:
     return bytes(mnist_test(c["items"])[1]) if c.get("dataset") == "mnist" else None
 
 
+def competition(cid: int) -> dict:
+    """The coordinator's view of one competition. It caches the list for a few seconds, so a brand-new one can take
+    a moment to appear."""
+    for _ in range(10):
+        try:
+            return http(f"/v1/competitions/{cid}")
+        except urllib.error.HTTPError as e:
+            if e.code != 404:
+                raise
+            time.sleep(2)
+    sys.exit(f"no competition {cid}")
+
+
 def enter(ledger, args):
-    c = http(f"/v1/competitions/{args.id}")
+    c = competition(args.id)
     y = truth(c)
     if args.predictions:
         preds = Path(args.predictions).read_bytes()
@@ -199,7 +213,7 @@ def claim_share(ledger, args):
 
 
 def status(_, args):
-    rows = [http(f"/v1/competitions/{args.id}")] if args.id else http("/v1/competitions")
+    rows = [competition(args.id)] if args.id else http("/v1/competitions")
     for c in rows:
         board = ", ".join(f"{e['entrant'][:10]} {e['score']}/{c['items']}" for e in c["leaderboard"]) or "no scores yet"
         print(f"#{c['id']} {c['title']} [{c['status']}] {c['prize'] / TOD:g} TOD, {c['entries']} entries | {board}")
