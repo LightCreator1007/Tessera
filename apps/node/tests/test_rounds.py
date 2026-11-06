@@ -128,5 +128,35 @@ def test_daemon_rebuilds_state_after_a_failed_sync(monkeypatch):
             stop.set()
 
     monkeypatch.setattr(daemon, "ChainState", FlakyState)
-    daemon.run(None, SimpleNamespace(tick=lambda s: None), stop, poll=0)
+    daemon.run(None, SimpleNamespace(tick=lambda s: None, pending_reveal=lambda s: [], accepting=True), stop, poll=0)
     assert len(made) == 2
+
+
+def test_stop_drains_reveals_before_returning(monkeypatch):
+    """A stop between commit and reveal keeps ticking until the reveal is done, and takes no new round."""
+    stop, ticks, pending = threading.Event(), [], [[(1, 1)], [(1, 1)], []]
+    stop.set()
+
+    class State:
+        def sync(self, ledger):
+            pass
+
+    loop = SimpleNamespace(accepting=True, tick=lambda s: ticks.append(loop.accepting),
+                           pending_reveal=lambda s: pending.pop(0))
+    monkeypatch.setattr(daemon, "ChainState", State)
+    events = []
+    daemon.run(None, loop, stop, poll=0, emit=lambda t, **k: events.append(t))
+    assert ticks == [False, False] and events == ["node.draining"]
+
+
+def test_training_failure_skips_the_round_once(store):
+    calls, events = [], []
+
+    def broken(*a):
+        calls.append(a)
+        raise RuntimeError("no trainer for this job yet")
+
+    node = RoundLoop(FakeMarket(store), ME, 31337, store, broken, emit=lambda t, **k: events.append((t, k)))
+    node.tick(state())
+    node.tick(state())
+    assert len(calls) == 1 and events[0][0] == "round.skipped" and "no trainer" in events[0][1]["reason"]

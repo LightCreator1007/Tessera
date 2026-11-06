@@ -148,3 +148,37 @@ def test_doctor_uses_the_saved_coordinator(run, monkeypatch, health_server):
     run("init", "--coordinator", url)
     out = json.loads(run("doctor", "--json").output)
     assert out["coordinator"]["ok"] is True
+
+
+def test_events_seq_survives_a_restart(tmp_path):
+    from tod_node.events import EventLog
+    log = EventLog(tmp_path / "events.ndjson")
+    log.append("node.started")
+    log.append("round.committed", job=1, round=2, commitHash="0xab")
+    with (tmp_path / "events.ndjson").open("a") as f:
+        f.write('{"seq": 3, "half')  # a crash mid-write
+    again = EventLog(tmp_path / "events.ndjson")
+    assert again.append("node.stopped")["seq"] == 3
+    assert [e["seq"] for e in again.read(since=1)] == [2, 3]  # the half line is gone, not glued to seq 3
+
+
+def test_logs_and_status_read_the_event_log(run, tmp_path):
+    from tod_node.events import EventLog
+    EventLog(tmp_path / "events.ndjson").append("round.revealed", job=7, round=12, updateHash="0x01")
+    lines = run("logs", "--json").output.strip().splitlines()
+    assert json.loads(lines[-1])["type"] == "round.revealed"
+    assert "j7 r12" in run("logs").output
+    out = json.loads(run("status", "--json").output)
+    assert out["daemon"] == {"state": "stopped", "pid": None} and out["lastEvent"]["round"] == 12
+
+
+def test_stop_without_a_daemon_says_so(run):
+    result = run("stop", "--json")
+    assert result.exit_code == NOT_ELIGIBLE and json.loads(result.output)["code"] == "daemon_not_running"
+
+
+def test_run_needs_a_network(run, monkeypatch):
+    monkeypatch.delenv("TOD_NETWORK", raising=False)
+    run("init")
+    result = run("run", "--json")
+    assert result.exit_code == BAD_INPUT and json.loads(result.output)["code"] == "bad_config"
