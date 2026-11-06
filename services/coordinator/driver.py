@@ -14,7 +14,7 @@ from tod_datasets.canonical import split
 import scheduler
 from api import config, nodes, tables
 from api.draft import mlp
-from api.models import Evidence, EvidenceRef, Job, JobState, Payout, Round, RoundState, Seat
+from api.models import Evidence, EvidenceRef, Job, JobState, Payout, Round, RoundState, Seat, Waiting
 from identity import router as identity
 
 log = logging.getLogger(__name__)
@@ -97,7 +97,9 @@ class Driver:
                 id=job, status=JOB_STATUS[j["status"]], workload=spec["workload"]["id"] if spec else "unknown",
                 requester=j["requester"], budget=p.budget, remaining=j["remaining"], rounds=p.rounds,
                 currentRound=j["nextRound"] - 1 or None, stakePerNode=p.stakePerNode,
-                modelSpecHash=_hex(p.modelSpecHash))
+                modelSpecHash=_hex(p.modelSpecHash),
+                waiting=Waiting(**w, abandonAfter=j["closedAt"] + p.windows.stall)
+                if (w := tables.STALLED.get(job)) else None)
         for (job, rnd), r in self.state.rounds.items():
             nrs, agg = r["nodeRounds"], r["aggregateHash"]
             settled = r["status"] == RoundStatus.SETTLED
@@ -196,8 +198,18 @@ class Driver:
 
     def open_rounds(self):
         workloads = {job: spec["workload"]["id"] for job in self.state.jobs if (spec := self.spec(job))}
-        for job, ops, shards in scheduler.queue(self.state, scheduler.rebuild(self.state), self.fleet(),
-                                                int(self.now()), workloads, tables.CONTROL, self.credentials()):
+        now, stalled = int(self.now()), {}
+        rosters = scheduler.queue(self.state, scheduler.rebuild(self.state), self.fleet(), now, workloads,
+                                  tables.CONTROL, self.credentials(), stalled)
+        # Keep the first time each job was seen stuck, so "waiting since" doesn't reset every tick.
+        for job, d in stalled.items():
+            if job not in tables.STALLED:
+                log.info("job %s: waiting, %s of %s seats can be filled %s", job, d["eligible"], d["quorum"],
+                         d["blocked"])
+            stalled[job] = {**d, "since": tables.STALLED.get(job, {}).get("since", now)}
+        tables.STALLED.clear()
+        tables.STALLED.update(stalled)
+        for job, ops, shards in rosters:
             tables.SEATING[(job, self.state.jobs[job]["nextRound"])] = {op.lower() for op in ops}
             try:
                 self.l.market.openRound(job, ops, shards)
