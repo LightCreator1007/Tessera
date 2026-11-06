@@ -268,6 +268,8 @@ export function CompetitionDetail({ id }: { id: string }) {
             <div className="flex justify-between gap-3"><dt className="text-muted">Entry fee</dt><dd>{c.fee === 0 ? <span className="text-ink">Free</span> : <Money units={c.fee} />}</dd></div>
             <div className="flex justify-between gap-3"><dt className="text-muted">Entries</dt><dd className="tabular text-ink">{c.entries.length}</dd></div>
             <div className="flex items-center justify-between gap-3"><dt className="text-muted">Host</dt><dd><AddressChip value={c.host} you={rel === "host"} /></dd></div>
+            {c.live && c.arkiv?.listing && <div className="flex items-center justify-between gap-3"><dt className="text-muted">Listed on Arkiv</dt><dd><HashChip value={c.arkiv.listing} label="Arkiv listing" /></dd></div>}
+            {c.live && c.arkiv?.result && <div className="flex items-center justify-between gap-3"><dt className="text-muted">Result on Arkiv</dt><dd><HashChip value={c.arkiv.result} label="Arkiv result" /></dd></div>}
           </dl>
         </aside>
       </div>
