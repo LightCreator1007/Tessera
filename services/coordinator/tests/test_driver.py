@@ -41,7 +41,7 @@ class Market:
 @pytest.fixture
 def world(tmp_path, monkeypatch):
     for t in ("JOBS", "ROUNDS", "SPECS", "MODELS", "EVIDENCE", "SETTLEMENTS", "STATES", "CONTROL", "MISSED", "REARMED",
-              "SEATING", "STALLED"):
+              "SEATING", "STALLED", "PUBLIC"):
         monkeypatch.setattr(tables, t, {})
     store = DiskStore(tmp_path)
     spec_bytes = canonical(SPEC)
@@ -158,6 +158,25 @@ def test_a_job_that_cannot_seat_a_quorum_says_why_and_since_when(world):
     world.d.fleet = lambda: {op: online[OPS[1]] for op in OPS}
     world.d.tick()
     assert world.market.calls[0][0] == "openRound" and 1 not in tables.STALLED
+
+
+def test_a_finalized_round_opens_its_blobs_and_rebuilds_its_evidence_after_a_restart(world):
+    r = world.s.rounds[(1, 1)]
+    agg_ev, pay_ev, agg = bytes([10]) * 32, bytes([11]) * 32, bytes([12]) * 32
+    r.update(status=RoundStatus.SETTLED, aggEvidenceHash=agg_ev, payEvidenceHash=pay_ev, aggregateHash=agg)
+    r["nodeRounds"][OPS[2]]["revealed"] = False  # a node that never revealed has no update to show
+    world.d.tick()
+    ev = tables.EVIDENCE[(1, 1)]
+    assert (ev.aggregate.hash, ev.pay.hash) == ("0x" + agg_ev.hex(), "0x" + pay_ev.hex())
+    assert ev.aggregate.url == "/v1/blobs/0x" + agg_ev.hex()
+    want = {agg_ev, pay_ev, agg, r["startWeightsHash"], *(r["nodeRounds"][op]["updateHash"] for op in OPS[:2])}
+    assert set(tables.PUBLIC) == {"0x" + bytes(h).hex() for h in want}
+    assert "0x" + bytes(r["nodeRounds"][OPS[2]]["updateHash"]).hex() not in tables.PUBLIC
+
+
+def test_an_open_round_publishes_nothing(world):
+    world.d.tick()
+    assert tables.PUBLIC == {}
 
 
 def test_a_broken_round_does_not_stop_the_tick(world):

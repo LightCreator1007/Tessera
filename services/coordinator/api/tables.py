@@ -17,3 +17,5 @@ SETTLEMENTS: dict[tuple[int, int], dict] = {}  # (job, round) -> {settlement, si
 MISSED: dict[str, int] = {}  # operator -> commits missed in a row
 STALLED: dict[int, dict] = {}  # job -> scheduler.diagnose() plus "since", for jobs that can't seat a quorum
 REARMED: dict[str, int] = {}  # operator -> unix time of its last re-arm; misses in rounds opened before it don't count
+# blob hash -> (job, round) for the evidence and weights of finalized rounds, which anyone may read to audit a payout
+PUBLIC: dict[str, tuple[int, int]] = {}

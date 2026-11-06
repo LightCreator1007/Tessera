@@ -77,3 +77,15 @@ def test_store_self_test_runs_at_startup():
     blobs.store.self_test()
     with TestClient(A.app) as client:  # entering the client runs the lifespan boot check
         assert client.get("/v1/health").json()["storeOk"]
+
+
+def test_a_finalized_rounds_blobs_are_public_and_the_rest_still_need_a_signature(monkeypatch):
+    assert c.put(URL, content=DATA, headers=access(OP, H, "PUT")).status_code == 201
+    assert c.get(URL).status_code == 401  # round not finalized yet
+    monkeypatch.setitem(T.PUBLIC, H, (1, 1))
+    r = c.get(URL)
+    assert r.status_code == 200 and r.content == DATA and "immutable" in r.headers["cache-control"]
+    assert c.get(URL, headers=access(STRANGER, H, "GET")).status_code == 403  # a signed read keeps the role check
+    gone = "0x" + "ab" * 32
+    monkeypatch.setitem(T.PUBLIC, gone, (1, 1))
+    assert c.get(f"/v1/blobs/{gone}").status_code == 404
