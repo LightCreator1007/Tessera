@@ -11,7 +11,12 @@ Run inside the stack: `docker compose -f docker/compose.dev.yml exec coordinator
   settle ID      waits for the scoring window, then pays the winner (or refunds the host)
   claim-share ID --name NAME
                  the host never revealed the labels: this entrant takes an equal part of the prize
+  address --name NAME
+                 the dev wallet behind NAME, to verify with World ID on the coordinator's /v1/identity/test page
   status [ID]
+
+host and enter take --pass JSON: an entry pass from that page (IDENTITY_MODE=worldid). Without it they ask the
+coordinator for a dev-mode pass.
 
 Labels, predictions and salts are kept in /dev-data/competitions so the reveals can be made later.
 Local chain only: hosts and entrants are public dev keys derived from --name.
@@ -30,7 +35,7 @@ import numpy as np
 from eth_abi import encode
 from eth_utils import keccak
 from tod_core.ledger import Ledger, Network, Reverted
-from tod_core.txmgr import ANVIL_CHAIN_ID
+from tod_core.txmgr import ANVIL_CHAIN_ID, LocalSigner, dev_key
 from tod_datasets import presets
 from tod_datasets.canonical import split
 from tod_node.devnet import Actor
@@ -69,8 +74,11 @@ def actor(ledger, name: str, units: int = 0) -> Actor:
     return Actor(ledger, NET_FILE, DATA, name, units=units)
 
 
-def pass_for(a: Actor) -> tuple:
-    p = http("/v1/identity/entry-pass", {"owner": a.address})
+def pass_for(a: Actor, given: str | None = None) -> tuple:
+    """The pass args for create and enter: from the World ID page if given, else a dev-mode pass."""
+    p = json.loads(given) if given else http("/v1/identity/entry-pass", {"owner": a.address})
+    if p["wallet"].lower() != a.address.lower():
+        sys.exit(f"that pass is for {p['wallet']}, not {a.address}; verify that wallet instead")
     return bytes.fromhex(p["nullifier"][2:]), p["deadline"], bytes.fromhex(p["signature"][2:])
 
 
@@ -94,7 +102,7 @@ def host(ledger, args):
     labels_hash = keccak(keccak(labels) + salt)  # abi.encode(bytes32, bytes32) is the two words back to back
     a.l.token.approve(ledger.net.competitions, prize)
     before = ledger.competitions.count()
-    a.l.competitions.create(prize, labels_hash, deadline, args.window, args.items, meta, *pass_for(a))
+    a.l.competitions.create(prize, labels_hash, deadline, args.window, args.items, meta, *pass_for(a, args.pass_json))
     cid = ledger.competitions.count()
     if cid == before:
         sys.exit("create did not go through")
@@ -163,7 +171,7 @@ def enter(ledger, args):
     a = actor(ledger, args.name)
     salt = secrets.token_bytes(32)
     commit = keccak(encode(["uint256", "address", "bytes32", "bytes32"], [args.id, a.address, keccak(preds), salt]))
-    a.l.competitions.enter(args.id, commit, *pass_for(a))
+    a.l.competitions.enter(args.id, commit, *pass_for(a, args.pass_json))
     KEEP.mkdir(parents=True, exist_ok=True)
     kept = {"predictions": preds.hex(), "salt": salt.hex()}
     (KEEP / f"{args.id}-entry-{a.address}.json").write_text(json.dumps(kept))
@@ -212,6 +220,10 @@ def claim_share(ledger, args):
           flush=True)
 
 
+def address(ledger, args):
+    print(LocalSigner(dev_key(args.name)).address)
+
+
 def status(_, args):
     rows = [competition(args.id)] if args.id else http("/v1/competitions")
     for c in rows:
@@ -231,6 +243,7 @@ def main():
     h.add_argument("--name", default="host/demo")
     h.add_argument("--labels", help="a file with one label byte per item, instead of MNIST")
     h.add_argument("--task", help="what entrants predict, shown on the listing")
+    h.add_argument("--pass", dest="pass_json", help="an entry pass from the World ID page, as JSON")
     e = sub.add_parser("enter")
     e.add_argument("id", type=int)
     e.add_argument("--name", required=True)
@@ -238,11 +251,13 @@ def main():
     g.add_argument("--job", type=int)
     g.add_argument("--accuracy", type=float)
     g.add_argument("--predictions", help="a file with one predicted byte per item")
+    e.add_argument("--pass", dest="pass_json", help="an entry pass from the World ID page, as JSON")
     for cmd in ("reveal", "settle"):
         sub.add_parser(cmd).add_argument("id", type=int)
     cs = sub.add_parser("claim-share")
     cs.add_argument("id", type=int)
     cs.add_argument("--name", required=True)
+    sub.add_parser("address").add_argument("--name", required=True)
     sub.add_parser("status").add_argument("id", type=int, nargs="?")
     args = ap.parse_args()
     ledger = Ledger(Network.load(NET_FILE))
@@ -251,7 +266,7 @@ def main():
     if not ledger.net.competitions:
         sys.exit("this network file has no Competitions contract; redeploy the stack")
     commands = {"host": host, "enter": enter, "reveal": reveal, "settle": settle, "claim-share": claim_share,
-                "status": status}
+                "address": address, "status": status}
     commands[args.cmd](ledger, args)
 
 
