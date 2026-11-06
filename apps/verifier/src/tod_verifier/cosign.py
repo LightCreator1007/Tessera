@@ -17,6 +17,7 @@ from tod_core.settle import needs_weights, settle
 from tod_datasets.canonical import split
 
 log = logging.getLogger(__name__)
+RESEND_SECONDS = 30  # how often a kept signature is offered again while the coordinator lacks the threshold
 
 
 class CoordinatorApi:
@@ -80,11 +81,13 @@ def differences(mine: dict, theirs: dict) -> list[str]:
 
 class CoSigner:
     def __init__(self, market, registry, runner, api: CoordinatorApi, key: bytes, chain_id: int,
-                 emit=lambda *a, **k: None):
+                 emit=lambda *a, **k: None, now=time.monotonic):
         self.market, self.registry, self.runner, self.api = market, registry, runner, api
-        self.key, self.chain_id, self.emit = key, chain_id, emit
+        self.key, self.chain_id, self.emit, self.now = key, chain_id, emit, now
         self.address = Account.from_key(key).address
-        self.decided: set[tuple[int, int, str]] = set()  # one decision per (round, settlement digest)
+        # One decision per (round, settlement digest): refused stays refused, and a signature is kept to post again.
+        self.refused: set[tuple[int, int, str]] = set()
+        self.signed: dict[tuple[int, int, str], list] = {}  # -> [signature hex, when last posted]
 
     def tick(self, state) -> None:
         for (job, rnd), r in sorted(state.rounds.items()):
@@ -98,7 +101,16 @@ class CoSigner:
 
     def _consider(self, state, job: int, rnd: int) -> None:
         theirs = self.api.get_json(f"/v1/jobs/{job}/rounds/{rnd}/settlement")
-        if theirs is None or (job, rnd, theirs["digest"]) in self.decided:
+        if theirs is None:
+            return
+        key = (job, rnd, theirs["digest"].lower())
+        if key in self.refused:
+            return
+        if key in self.signed:
+            # A coordinator that restarted rebuilds the same Settlement but has lost the signatures: hand ours in again.
+            sig, last = self.signed[key]
+            if theirs["collected"] < self.market.threshold() and self.now() - last >= RESEND_SECONDS:
+                self._post(job, rnd, key, sig)
             return
         agg = (self.api.get_json(f"/v1/jobs/{job}/rounds/{rnd}/evidence") or {}).get("aggregate")
         if not agg or agg["hash"].lower() != theirs["aggEvidenceHash"].lower():
@@ -106,14 +118,21 @@ class CoSigner:
         doc = json.loads(self.runner.c.get(agg["hash"], job, rnd))  # the client checks keccak(doc) == hash
         mine = recompute(self.runner, self.registry, self.market, state, job, rnd, doc["matcher"]["inputs"]).settlement
         digest = "0x" + enc.digest("FinalizeRound", self.chain_id, self.market.address, message(job, rnd, mine)).hex()
-        self.decided.add((job, rnd, theirs["digest"]))
         diff = differences(wire(mine), theirs) + (["digest"] if digest.lower() != theirs["digest"].lower() else [])
         if diff:
+            self.refused.add(key)
             self.emit("settlement.refused", job=job, round=rnd, fields=diff)
             log.error("job %s round %s: settlement differs from ours in %s, not signing", job, rnd, diff)
             return
-        sig = enc.sign(self.key, "FinalizeRound", self.chain_id, self.market.address, message(job, rnd, mine))
-        got = self.api.post_signed(f"/v1/jobs/{job}/rounds/{rnd}/signatures",
-                                   {"verifier": self.address, "signature": "0x" + bytes(sig).hex()})
-        self.emit("round.cosigned", job=job, round=rnd, collected=got.get("collected"))
-        log.info("job %s round %s: co-signed the settlement (%s collected)", job, rnd, got.get("collected"))
+        sig = "0x" + bytes(enc.sign(self.key, "FinalizeRound", self.chain_id, self.market.address,
+                                    message(job, rnd, mine))).hex()
+        self._post(job, rnd, key, sig)
+
+    def _post(self, job: int, rnd: int, key: tuple, sig: str) -> None:
+        # Kept before posting, so a failed POST is retried by the resend path rather than recomputed.
+        resend = key in self.signed
+        self.signed[key] = [sig, self.now()]
+        got = self.api.post_signed(f"/v1/jobs/{job}/rounds/{rnd}/signatures", {"verifier": self.address, "signature": sig})
+        self.emit("round.cosigned", job=job, round=rnd, collected=got.get("collected"), resent=resend)
+        log.info("job %s round %s: %s the settlement signature (%s collected)", job, rnd,
+                 "re-sent" if resend else "co-signed with", got.get("collected"))
