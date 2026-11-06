@@ -20,6 +20,7 @@ from tod_core.ledger import JobStatus, Ledger, Network, Reverted
 from tod_core.txmgr import ANVIL_CHAIN_ID, LocalSigner, dev_key
 from tod_node.devnet import Actor, script
 
+ROOT = Path(__file__).resolve().parents[2]
 DATA = Path(os.environ.get("DEV_DATA", "/dev-data"))
 NET_FILE = os.environ["TOD_NETWORK"]
 COORD = os.environ.get("TOD_COORDINATOR", "http://127.0.0.1:8000")
@@ -30,14 +31,19 @@ def label(name: str) -> str:
     return f"owner/remote/{name}"
 
 
-DEFAULT_STAKE = 15_000_000  # what post_job.py's default job (30 TOD, quorum 2) asks for, if no job is open yet
-
-
 def stake_needed(l: Ledger) -> int:
-    """Enough for every active job, so the node can be seated in any of them."""
+    """Enough for every active job, so the node can be seated in any of them. Before any job is open, what the
+    coordinator would ask of post_job.py's default job (the draft route prices it and posts nothing)."""
     state = l.rebuild()
-    return max((j["params"].stakePerNode for j in state.jobs.values() if j["status"] == JobStatus.ACTIVE),
-               default=DEFAULT_STAKE)
+    open_jobs = [j["params"].stakePerNode for j in state.jobs.values() if j["status"] == JobStatus.ACTIVE]
+    if open_jobs:
+        return max(open_jobs)
+    mnist = json.loads((ROOT / "vectors/kernel/presets.json").read_text())["mnist"]["card"]["hash"]
+    body = {"workload": "mlp-exact/1", "datasetHash": mnist, "epochs": 1, "minQuorum": 2, "maxPerRound": 3}
+    req = urllib.request.Request(f"{COORD}/v1/jobs/draft", data=json.dumps(body).encode(),
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.load(r)["minStake"]
 
 
 def join(l: Ledger, name: str, code: str) -> None:
