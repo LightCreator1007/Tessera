@@ -73,6 +73,17 @@ class Job(BaseModel):
     modelSpecHash: Hex32
     trust: Trust = "chain"
     published: "Published | None" = None  # null while Arkiv publishing is off or the job has no final model yet
+    waiting: "Waiting | None" = None  # set while the job is ready for a round but too few nodes can take a seat
+
+
+class Waiting(BaseModel):
+    """Why a running job isn't opening rounds. blocked counts nodes by the first rule they fail: notJoined, stake,
+    offline, busy, selftest, benched, credential or sameOwner (a second node of an owner already counted)."""
+    since: int  # unix time the coordinator first saw the job stuck
+    eligible: int  # owners with a node that could take a seat now
+    quorum: int  # seats the job needs per round
+    blocked: dict[str, int]
+    abandonAfter: int  # unix time after which anyone may call abandonJob and get the unopened rounds refunded
 
 
 class Published(BaseModel):

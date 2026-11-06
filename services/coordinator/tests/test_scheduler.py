@@ -2,7 +2,7 @@
 from types import SimpleNamespace as NS
 
 from api import tables
-from scheduler import ORB_MIN_BUDGET, pick, queue, rebuild
+from scheduler import ORB_MIN_BUDGET, diagnose, pick, queue, rebuild
 from tod_core.ledger import ChainState, JobStatus, RoundStatus
 
 NOW = 1000
@@ -107,3 +107,31 @@ def test_roster_never_exceeds_the_shard_count():
     s.jobs[1] = {"params": NS(**{**vars(P), "shards": 2})}  # maxPerRound 3 > 2 shards
     roster, shards = match(s)
     assert len(roster) == len(shards) == 2
+
+
+def test_diagnose_counts_each_node_by_the_first_rule_it_fails():
+    s = state()
+    s.nodes[OPS[0]]["stake"] = 14
+    s.nodes[OPS[1]]["busyJob"] = 7
+    s.nodes[OPS[5]]["joined"] = False
+    f = fleet(**{OPS[2]: {"seen": NOW - 61}, OPS[3]: {"busy": True}, OPS[4]: {"selftest": {}}})
+    d = diagnose(s, rebuild(s), 1, f, NOW, "w", CREDS)
+    assert d == {"eligible": 0, "quorum": 2,
+                 "blocked": {"stake": 1, "busy": 2, "offline": 1, "selftest": 1, "notJoined": 1}}
+
+
+def test_diagnose_counts_one_seat_per_owner():
+    s = state()
+    for op in OPS[1:]:
+        s.nodes[op]["owner"] = OPS[0]  # one person runs all six
+    d = diagnose(s, rebuild(s), 1, fleet(), NOW, "w", CREDS)
+    assert d == {"eligible": 1, "quorum": 2, "blocked": {"sameOwner": 5}}
+
+
+def test_queue_reports_the_jobs_it_could_not_seat():
+    s = state()
+    s.jobs[1].update(status=JobStatus.ACTIVE, roundsOpened=0, nextRound=1, remaining=100)
+    s.jobs[1]["params"] = NS(**vars(P), rounds=4)
+    stalled = {}
+    assert queue(s, rebuild(s), fleet(**{op: {"busy": True} for op in OPS[1:]}), NOW, {1: "w"}, {}, CREDS, stalled) == []
+    assert stalled == {1: {"eligible": 1, "quorum": 2, "blocked": {"busy": 5}}}

@@ -45,6 +45,30 @@ def rebuild(state: ChainState) -> Sched:
     return s
 
 
+def _blocker(n: dict, hb: dict | None, p, sched: Sched, op: str, now: int, workload: str, credentials: dict,
+             need: int) -> str | None:
+    """Why this node can't be seated in the job's next round, or None if it can. The first failing rule wins."""
+    if not n["joined"]:
+        return "notJoined"
+    if n["stake"] < p.stakePerNode:
+        return "stake"  # includes a node slashed below the job's stake; depositStake brings it back
+    if not hb or now - hb["seen"] > ONLINE_WITHIN:
+        return "offline"
+    if n["busyJob"] != 0 or hb["busy"]:
+        return "busy"
+    if not hb["selftest"].get(workload, {}).get("ok"):
+        return "selftest"
+    if sched.missed.get(op.lower(), 0) >= BENCH_AFTER:
+        return "benched"
+    if CREDENTIAL_RANK.get(credentials.get(n["owner"].lower()), 0) < need:
+        return "credential"
+    return None
+
+
+def _need(p) -> int:
+    return CREDENTIAL_RANK["orb" if p.budget >= ORB_MIN_BUDGET else "selfie"]
+
+
 def pick(state: ChainState, sched: Sched, job_id: int, fleet: dict, now: int, workload: str, credentials: dict):
     """Return (nodes, shards) for the job's next round, or None if fewer than minQuorum nodes qualify.
 
@@ -54,16 +78,9 @@ def pick(state: ChainState, sched: Sched, job_id: int, fleet: dict, now: int, wo
     """
     p = state.jobs[job_id]["params"]
     prev = sched.prev_seed.get(job_id, ZERO32)
-    need = CREDENTIAL_RANK["orb" if p.budget >= ORB_MIN_BUDGET else "selfie"]
-    ok = []
-    for op, n in state.nodes.items():
-        hb = fleet.get(op.lower())
-        if (n["joined"] and n["busyJob"] == 0 and n["stake"] >= p.stakePerNode
-                and hb and now - hb["seen"] <= ONLINE_WITHIN and not hb["busy"]
-                and hb["selftest"].get(workload, {}).get("ok")
-                and sched.missed.get(op.lower(), 0) < BENCH_AFTER
-                and CREDENTIAL_RANK.get(credentials.get(n["owner"].lower()), 0) >= need):
-            ok.append(op)
+    need = _need(p)
+    ok = [op for op, n in state.nodes.items()
+          if _blocker(n, fleet.get(op.lower()), p, sched, op, now, workload, credentials, need) is None]
     # Longest-idle first; the previous seed breaks ties so no operator is always first.
     ok.sort(key=lambda op: (sched.last_assigned.get(op, 0), Web3.keccak(prev + bytes.fromhex(op[2:]))))
     # openRound reverts on two seats for one owner, and on more nodes than shards.
@@ -81,13 +98,35 @@ def pick(state: ChainState, sched: Sched, job_id: int, fleet: dict, now: int, wo
     return roster, shards
 
 
+def diagnose(state: ChainState, sched: Sched, job_id: int, fleet: dict, now: int, workload: str,
+             credentials: dict) -> dict:
+    """Why pick found no roster: how many nodes could take a seat against the quorum, and what held the rest back.
+
+    Seats count one per owner, the way openRound does, so a second node of the same owner shows as "sameOwner".
+    """
+    p = state.jobs[job_id]["params"]
+    need = _need(p)
+    blocked: dict[str, int] = {}
+    owners = set()
+    for op, n in state.nodes.items():
+        why = _blocker(n, fleet.get(op.lower()), p, sched, op, now, workload, credentials, need)
+        if why is None and n["owner"].lower() in owners:
+            why = "sameOwner"
+        if why is None:
+            owners.add(n["owner"].lower())
+        else:
+            blocked[why] = blocked.get(why, 0) + 1
+    return {"eligible": len(owners), "quorum": p.minQuorum, "blocked": blocked}
+
+
 def queue(state: ChainState, sched: Sched, fleet: dict, now: int, workloads: dict[int, str], control: dict,
-          credentials: dict):
+          credentials: dict, stalled: dict | None = None):
     """Rosters for every job that can open a round now, as [(job, nodes, shards)], best-paying job first.
 
     A job's price is its next round budget as the contract computes it; ties go to the older job.
     workloads: job -> workload id; jobs missing here are skipped.
     control: job -> {"auto", "paused"}, set through the admin routes.
+    stalled: if given, filled with job -> diagnose() for every job that is ready for a round but can't seat a quorum.
     """
     fleet = dict(fleet)
     ready = []
@@ -105,4 +144,6 @@ def queue(state: ChainState, sched: Sched, fleet: dict, now: int, workloads: dic
             out.append((job, *match))
             for op in match[0]:
                 fleet[op.lower()] = {**fleet[op.lower()], "busy": True}  # a node works one job at a time
+        elif stalled is not None:
+            stalled[job] = diagnose(state, sched, job, fleet, now, workloads[job], credentials)
     return out

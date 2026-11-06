@@ -41,7 +41,7 @@ class Market:
 @pytest.fixture
 def world(tmp_path, monkeypatch):
     for t in ("JOBS", "ROUNDS", "SPECS", "MODELS", "EVIDENCE", "SETTLEMENTS", "STATES", "CONTROL", "MISSED", "REARMED",
-              "SEATING"):
+              "SEATING", "STALLED"):
         monkeypatch.setattr(tables, t, {})
     store = DiskStore(tmp_path)
     spec_bytes = canonical(SPEC)
@@ -137,6 +137,27 @@ def test_opens_the_next_round_on_idle_nodes(world):
     assert (name, job, len(ops)) == ("openRound", 1, 3) and OPS[3] in ops  # the node that sat out goes first
     assert set(ops) <= blobs.allowed(1, 2)  # seated nodes can fetch the spec before the next tick publishes round 2
     assert tables.ROUNDS[1][1].status == "finalized" and tables.JOBS[1].workload == "mlp-exact/1"
+
+
+def test_a_job_that_cannot_seat_a_quorum_says_why_and_since_when(world):
+    world.s.rounds[(1, 1)]["status"] = RoundStatus.SETTLED
+    world.s.nodes = {op: {**n, "busyJob": 0} for op, n in world.s.nodes.items()}
+    world.s.nodes[OPS[0]]["stake"] = 0  # the slashed cheater
+    world.s.jobs[1].update(closedAt=900)
+    world.s.jobs[1]["params"].windows = NS(stall=3600)
+    online = {op: {"seen": 1000, "busy": False, "selftest": {"mlp-exact/1": {"ok": True}}} for op in OPS[:2]}
+    world.d.fleet = lambda: online  # OPS[2] and OPS[3] are offline
+    world.d.credentials = lambda: dict.fromkeys(OPS, "orb")
+    world.d.tick()
+    world.d.now = lambda: 1030
+    world.d.tick()  # publish runs before open_rounds, so the second tick shows the first tick's diagnosis
+    assert not world.market.calls
+    w = tables.JOBS[1].waiting
+    assert (w.eligible, w.quorum, w.blocked) == (1, 2, {"stake": 1, "offline": 2})
+    assert (w.since, w.abandonAfter) == (1000, 4500)  # the first tick it was seen stuck; closedAt + stall
+    world.d.fleet = lambda: {op: online[OPS[1]] for op in OPS}
+    world.d.tick()
+    assert world.market.calls[0][0] == "openRound" and 1 not in tables.STALLED
 
 
 def test_a_broken_round_does_not_stop_the_tick(world):
