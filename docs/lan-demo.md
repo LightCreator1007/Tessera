@@ -15,12 +15,18 @@ TOD_BIND=0.0.0.0 docker compose -f docker/compose.dev.yml up --build -d
 
 ## On each other PC
 
-Use the `docker/tod-node` wrapper from the repo, or `docker/tod-node.ps1` on Windows. It pulls the node image built from `main`.
+The node CLI runs on the PC itself, and each round's training runs in a throwaway, locked-down container from the node image (no network, read-only, capped CPU and memory). So each PC needs Docker, git and [uv](https://docs.astral.sh/uv/). There's no one-line install yet, so run it from a clone:
 
 ```sh
-export TOD_NETWORK=anvil ANVIL_RPC_URL=http://<host>:8545 TOD_COORDINATOR=http://<host>:8000
-docker/tod-node init --network anvil --coordinator http://<host>:8000
+git clone https://github.com/LightCreator1007/Tessera && cd Tessera
+uv sync --package tod-node
+alias tod-node="uv run --package tod-node tod-node"
+export ANVIL_RPC_URL=http://<host>:8545
+tod-node init --network anvil --coordinator http://<host>:8000
+tod-node doctor
 ```
+
+`uv sync --package tod-node` installs only the node's dependencies; on a machine that also runs the stack, use `uv sync --all-packages` instead. `doctor` checks the key, Docker, the self-test and the coordinator. The first `doctor`, `selftest` or `run` pulls the node image (about 450 MB), so do it before the demo. On a slow link it takes several minutes.
 
 The web join flow's wallet is still simulated, so the host admits each PC from the command line. Pick a name for this PC, then on the host:
 
@@ -31,7 +37,7 @@ docker compose -f docker/compose.dev.yml exec coordinator python docker/dev/admi
 That prints a dev owner address. On the PC, pair with it, using the registry address from `curl http://<host>:8000/v1/config`:
 
 ```sh
-docker/tod-node pair --owner <owner> --chain-id 31337 --registry <nodeRegistry>
+tod-node pair --owner <owner> --chain-id 31337 --registry <nodeRegistry>
 ```
 
 Copy the whole `tod-pair:...` line back to the host. It expires in 30 minutes.
@@ -43,10 +49,10 @@ docker compose -f docker/compose.dev.yml exec coordinator python docker/dev/admi
 That funds the owner, gets an invite through the dev identity route, joins the node and stakes 10% more than every open job needs, so one missed reveal (a 1% penalty) doesn't leave it below the floor. Then start the node on the PC:
 
 ```sh
-docker/tod-node run
+tod-node run
 ```
 
-It downloads the job's dataset in the background (`dataset.fetching`, then `dataset.ready` in `docker/tod-node logs`) and reports busy until it has it, so it isn't seated in a round it would miss.
+It downloads the job's dataset in the background (`dataset.fetching`, then `dataset.ready` in `tod-node logs`) and reports busy until it has it, so it isn't seated in a round it would miss. `tod-node stop` finishes any reveal it owes, then exits.
 
 ### With a real World ID check
 

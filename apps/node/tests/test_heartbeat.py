@@ -84,3 +84,16 @@ def test_busy_while_a_dataset_downloads_and_ready_datasets_are_reported(coordina
     hb(chain())
     assert got[0][2]["busy"] is True and got[0][2]["prewarm"] == {"datasets": []}
     assert got[1][2]["busy"] is False and got[1][2]["prewarm"] == {"datasets": ["0x01"]}
+
+
+def test_a_download_starting_is_reported_at_once_not_at_the_next_interval(coordinator):
+    url, got, _ = coordinator
+    clock = [0.0]
+    warm = SimpleNamespace(busy=lambda: False, names=lambda: [])
+    hb = Heartbeat(url, OP.key, OP.address, "0.0.1", SELFTEST, now=lambda: clock[0], prewarm=warm)
+    hb(chain())
+    clock[0] += 2  # a job appears and its dataset starts downloading, well inside the interval
+    warm.busy = lambda: True
+    hb(chain())
+    hb(chain())  # still busy, nothing new to say
+    assert [b["busy"] for _, _, b in got] == [False, True]
