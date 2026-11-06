@@ -1,4 +1,4 @@
-"""Local HTTP API on :7777 for the TUI and agents: health, status, the event stream, and a token-guarded stop."""
+"""Local HTTP API on :7777 for the TUI, agents and the website: health, status, events, self-test and a token-guarded stop."""
 import hmac
 import json
 import os
@@ -13,6 +13,11 @@ STALE_AFTER = 30  # seconds without a loop tick before health says 503
 MAX_WAIT = 25
 
 
+def web_origins() -> set[str]:
+    """Sites whose pages may call this API from the visitor's browser, from TOD_WEB_ORIGINS (comma separated)."""
+    return {o.strip().rstrip("/") for o in os.environ.get("TOD_WEB_ORIGINS", "").split(",") if o.strip()}
+
+
 def load_token(data_dir: Path) -> str:
     """32 random bytes in data_dir/api.token (0600), made on first use. Anyone who can read the data dir may stop the node."""
     path = data_dir / "api.token"
@@ -24,8 +29,10 @@ def load_token(data_dir: Path) -> str:
 
 
 class Api:
-    def __init__(self, status, events, stop, token: str):
+    def __init__(self, status, events, stop, token: str, selftest=None, origins: set[str] | None = None):
         self.status, self.events, self.stop, self.token = status, events, stop, token
+        self.selftest = selftest  # () -> the `selftest --json` object
+        self.origins = web_origins() if origins is None else origins
         self.last_tick = time.monotonic()
 
     def tick(self, state=None) -> None:
@@ -49,8 +56,15 @@ def _handler(api: Api):
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
+            self._cors()
             self.end_headers()
             self.wfile.write(data)
+
+        def _cors(self) -> None:
+            origin = self.headers.get("Origin")
+            if origin in api.origins:
+                self.send_header("Access-Control-Allow-Origin", origin)
+                self.send_header("Vary", "Origin")
 
         def _allowed(self) -> bool:
             # A page on another site can reach 127.0.0.1 by DNS rebinding; it can't fake Host or drop Origin.
@@ -60,10 +74,25 @@ def _handler(api: Api):
             if name not in {"127.0.0.1", "localhost", "[::1]"}:
                 self._send(421, {"code": "bad_host"})
                 return False
-            if self.headers.get("Origin") is not None:
+            # Pages from other sites are refused; only the website named in TOD_WEB_ORIGINS may read and ask.
+            origin = self.headers.get("Origin")
+            if origin is not None and origin not in api.origins:
                 self._send(403, {"code": "cross_origin"})
                 return False
             return True
+
+        def do_OPTIONS(self):
+            # Browsers preflight a public page's call to 127.0.0.1 (Private Network Access) and any Authorization header.
+            if not self._allowed():
+                return
+            self.send_response(204)
+            self._cors()
+            self.send_header("Access-Control-Allow-Methods", "GET, POST")
+            self.send_header("Access-Control-Allow-Headers", "Authorization")
+            self.send_header("Access-Control-Allow-Private-Network", "true")
+            self.send_header("Access-Control-Max-Age", "600")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
 
         def do_GET(self):
             url = urlparse(self.path)
@@ -74,6 +103,8 @@ def _handler(api: Api):
                 return
             if url.path == "/v1/status":
                 return self._send(200, api.status())
+            if url.path == "/v1/selftest" and api.selftest:
+                return self._send(200, api.selftest())
             if url.path == "/v1/events":
                 q = parse_qs(url.query)
                 try:

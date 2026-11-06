@@ -6,7 +6,7 @@ NAME=tod-node
 TTY=""
 if [ -t 0 ] && [ -t 1 ]; then TTY="-t"; fi
 # A bare -e NAME passes the host value only if it is set, so RPC URLs never land in the image or docker inspect.
-ENVS="-e TOD_NETWORK -e TOD_COORDINATOR -e BASE_SEPOLIA_RPC_URL -e ANVIL_RPC_URL -e NO_COLOR"
+ENVS="-e TOD_NETWORK -e TOD_COORDINATOR -e TOD_WEB_ORIGINS -e BASE_SEPOLIA_RPC_URL -e ANVIL_RPC_URL -e NO_COLOR"
 # Lets a local chain or coordinator on the host be reached as host.docker.internal on Linux too.
 HOST="--add-host host.docker.internal:host-gateway"
 # A ceiling for a shared laptop: a full MNIST round peaks near 300 MB on one core, CIFAR-10's data is ~740 MB.

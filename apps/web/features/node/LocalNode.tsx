@@ -1,8 +1,8 @@
 "use client";
-// The tod-node running on this machine, read live through /api/node: its state, what it is doing, its event log, and a stop button.
+// The tod-node running on this machine, read live through /api/node or straight from the browser: its state, what it is doing, its event log, and a stop button.
 import { useEffect, useRef, useState } from "react";
 import { Activity, CirclePause, CircleStop, Laptop, PlugZap, TriangleAlert } from "lucide-react";
-import { node, NodeError } from "@/lib/api/client";
+import { node, NodeError, onNodeMachine } from "@/lib/api/client";
 import { useNodeHealth, useNodeStatus } from "@/lib/api/hooks";
 import type { NodeEvent, NodeStatus, OwedReveal } from "@/lib/api/types";
 import { formatToken } from "@/lib/money";
@@ -133,11 +133,16 @@ export function LocalNode({ compact }: { compact?: boolean }) {
         </EmptyState>
       );
     }
+    // From a hosted page, a node started without this site in TOD_WEB_ORIGINS refuses the browser, which looks the same as no node.
+    const hosted = !onNodeMachine();
     return (
       <Card className="flex flex-col gap-3 p-4">
         <SectionTitle title="No node on this machine" sub="nothing answered on 127.0.0.1:7777" />
-        <p className="text-sm text-muted">Start it, and this panel picks it up within a few seconds. If it runs in Docker, check the wrapper published port 7777.</p>
-        <Command cmd="tod-node run" />
+        <p className="text-sm text-muted">
+          Start it, and this panel picks it up within a few seconds.
+          {hosted ? " The node only answers this website if you start it with this site's address." : " If it runs in Docker, check the wrapper published port 7777."}
+        </p>
+        <Command cmd={hosted ? `TOD_WEB_ORIGINS=${window.location.origin} tod-node run` : "tod-node run"} />
       </Card>
     );
   }
@@ -204,7 +209,9 @@ export function LocalNode({ compact }: { compact?: boolean }) {
           <Banner tone="warn" title="The console couldn't stop the node">
             {stopping.error === "token_unreadable"
               ? "The stop token in ~/.tod/api.token isn't readable from here. That is normal when the node runs in Docker. Stop it from a terminal instead."
-              : stopping.error === "bad_token" ? "The node refused the stop token. It may have been recreated. Stop it from a terminal." : "The node didn't answer. Stop it from a terminal."}
+              : stopping.error === "bad_token" ? "The node refused the stop token. It may have been recreated. Stop it from a terminal."
+              : stopping.error === "stop_from_terminal" ? "Only the console on the node's own machine can stop it. Stop it from a terminal."
+              : "The node didn't answer. Stop it from a terminal."}
             <div className="mt-2"><Command cmd="tod-node stop" /></div>
           </Banner>
         )}

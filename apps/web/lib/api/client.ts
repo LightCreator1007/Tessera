@@ -144,9 +144,15 @@ export const blobFetchUrl = (url: string) => (BASE && url.startsWith("/") ? `${B
 /** URL of a published model's bytes. Clients check the keccak themselves; X-Keccak says which hash to expect. */
 export const modelUrl = (keccak: string) => (BASE ? `${BASE}/v1/models/${keccak}` : null);
 
-// The node on this machine, through the same-origin bridge in app/api/node. Never demo: no node means no node.
+// The node on this machine. Never demo: no node means no node. A console on the node's own machine goes through the
+// same-origin bridge in app/api/node; a hosted page calls the node's API from the browser, which the node allows only
+// for the sites in its TOD_WEB_ORIGINS.
+const NODE_API = process.env.NEXT_PUBLIC_NODE_API || "http://127.0.0.1:7777";
+export const onNodeMachine = () => typeof window === "undefined" || ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
+export const nodeUrl = (path: string) => (onNodeMachine() ? `/api/node/${path}` : `${NODE_API}/v1/${path}`);
+
 async function nodeGet<T>(path: string, timeoutMs = TIMEOUT_MS): Promise<T> {
-  const res = await request(`/api/node/${path}`, { cache: "no-store" }, timeoutMs);
+  const res = await request(nodeUrl(path), { cache: "no-store" }, timeoutMs);
   const body = await res.text();
   if (!res.ok) throw new NodeError(res.status, codeOf(body));
   return JSON.parse(body) as T;
@@ -164,7 +170,7 @@ export const node = {
   status: () => nodeGet<NodeStatus>("status"),
   // 503 from the node means its loop has not ticked for 30 s; the body still says how long.
   health: async (): Promise<NodeHealth> => {
-    const res = await request("/api/node/health", { cache: "no-store" });
+    const res = await request(nodeUrl("health"), { cache: "no-store" });
     const body = await res.text();
     if (res.status === 503) return { ...(JSON.parse(body) as NodeHealth), ok: false };
     if (!res.ok) throw new NodeError(res.status, codeOf(body));
@@ -172,13 +178,15 @@ export const node = {
   },
   /** Long-poll: resolves when events past `since` exist or after `wait` seconds. NDJSON, one event per line. */
   events: async (since: number, wait = 20): Promise<NodeEvent[]> => {
-    const res = await request(`/api/node/events?since=${since}&wait=${wait}`, { cache: "no-store" }, (wait + 10) * 1000);
+    const res = await request(nodeUrl(`events?since=${since}&wait=${wait}`), { cache: "no-store" }, (wait + 10) * 1000);
     const body = await res.text();
     if (!res.ok) throw new NodeError(res.status, codeOf(body));
     return body.split("\n").filter(Boolean).map((l) => JSON.parse(l) as NodeEvent);
   },
   stop: async (): Promise<void> => {
-    const res = await request("/api/node/stop", { method: "POST", cache: "no-store" });
+    // The stop token never leaves the node's machine, so a hosted page can't send it.
+    if (!onNodeMachine()) throw new NodeError(0, "stop_from_terminal");
+    const res = await request(nodeUrl("stop"), { method: "POST", cache: "no-store" });
     if (!res.ok) throw new NodeError(res.status, codeOf(await res.text()));
   },
 };
