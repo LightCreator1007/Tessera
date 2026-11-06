@@ -48,6 +48,32 @@ docker/tod-node run
 
 It downloads the job's dataset in the background (`dataset.fetching`, then `dataset.ready` in `docker/tod-node logs`) and reports busy until it has it, so it isn't seated in a round it would miss.
 
+### With a real World ID check
+
+`docker/compose.worldid.yml` switches the coordinator to World ID staging, with the app settings from your `.env`:
+
+```sh
+docker compose --env-file .env -f docker/compose.dev.yml -f docker/compose.worldid.yml up -d --no-deps --force-recreate coordinator
+```
+
+Then, instead of the `join` step, the PC's owner opens `http://<host>:8000/v1/identity/test`, enters the owner address and the pairing code, picks Proof of Human (Orb) and verifies in the World ID simulator, one simulator identity per PC. The page prints an invite as JSON. On the host:
+
+```sh
+docker compose -f docker/compose.dev.yml exec coordinator python docker/dev/admit.py invite <name> '<invite json>'
+```
+
+Browsers may block World ID's crypto on a plain-http page that isn't localhost. If the page errors on a PC, do that verification on the host at `http://localhost:8000/v1/identity/test`.
+
+## Posting a job
+
+The web app's "Post a job" uses the simulated wallet, so post from the host for now. This drafts through the coordinator, which prices the job from its spec, then funds a dev requester with that price and creates the job onchain:
+
+```sh
+docker compose -f docker/compose.dev.yml exec coordinator python docker/dev/post_job.py --quorum 2
+```
+
+`--quorum` is how many nodes a round needs. Keep it below the number of nodes you have, since a slashed cheater can't be seated again.
+
 ## The web app
 
 On any PC, from `apps/web`:
@@ -64,4 +90,4 @@ Open http://localhost:3100. Job, round and node pages read the coordinator. The 
 - A node sits at `round.waiting` with a 403: the coordinator lists a round's roster a few seconds after opening it. It retries on its own.
 - Pairing fails with an expired consent: the PC's clock is off. The code's deadline comes from the PC, and the chain checks it against its own time.
 - Two missed rounds bench a node. Re-arm it with the admin token in `docker/compose.dev.yml`.
-- Publishing to Arkiv and Swarm is off in this stack. Turning it on needs a funded Arkiv writer key and a working Swarm API, and the public Swarm gateway sometimes refuses uploads.
+- Publishing to Arkiv and Swarm is off unless you add `-f docker/compose.arkiv.yml` with a funded Arkiv writer key (see that file). The public Swarm gateway sometimes refuses uploads; the model still gets indexed on Arkiv without its Swarm copy.

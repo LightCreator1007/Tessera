@@ -1,0 +1,14 @@
+# Turns on Arkiv publishing (Rabdi testnet) and the Swarm copy (public gateway) for the dev coordinator.
+# Keys come from the shell at `up` time and never go in this file:
+#   export ARKIV_PRIVATE_KEY=$(cat <writer key file>)   a key of its own, holding test tGLM only
+#   export ARKIV_ACCESS_KEY=$(cat <access key file>)    optional; without it the public RPC rate-limits
+#   docker compose -f docker/compose.dev.yml -f docker/compose.arkiv.yml up -d
+services:
+  coordinator:
+    environment:
+      ARKIV_RPC_URL: https://rpc.rabdi.db-chain.testnet.arkiv.network
+      ARKIV_PRIVATE_KEY: "${ARKIV_PRIVATE_KEY:-}"
+      ARKIV_ACCESS_KEY: "${ARKIV_ACCESS_KEY:-}"
+      ARKIV_LIFETIME_DAYS: "30"  # records must outlive the judging, and anyone can extend them after
+      SWARM_API_URL: https://api.gateway.ethswarm.org
+      CHAIN_CONFIRMATIONS: "0"

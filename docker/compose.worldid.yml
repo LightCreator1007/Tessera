@@ -1,0 +1,11 @@
+# Real World ID (staging simulator) for the dev coordinator, in place of IDENTITY_MODE=dev. The values come from the
+# repo's .env through `docker compose --env-file .env ...`; only these names reach the container.
+services:
+  coordinator:
+    environment:
+      IDENTITY_MODE: worldid
+      WORLD_ID_APP_ID: "${WORLD_ID_APP_ID:-}"
+      WORLD_ID_RP_ID: "${WORLD_ID_RP_ID:-}"
+      WORLD_ID_RP_SIGNING_KEY: "${WORLD_ID_RP_SIGNING_KEY:-}"
+      WORLD_ID_ACTION: "${WORLD_ID_ACTION:-tod-pool-join}"
+      WORLD_ID_ENV: staging
