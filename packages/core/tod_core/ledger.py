@@ -84,6 +84,7 @@ class Network:
     log_span: int
     roles: dict
     windows: dict
+    competitions: str = ""  # optional: networks deployed before Competitions have none
 
     @classmethod
     def load(cls, network: str | Path, rpc: str | None = None) -> "Network":
@@ -96,7 +97,7 @@ class Network:
         if not url:
             raise RuntimeError(f"RPC URL missing; set {d.get('rpcEnv', 'the network RPC')} or pass an override")
         return cls(d["name"], d["chainId"], url, c["market"], c["registry"], c["token"], c["deployBlock"],
-                   d.get("logSpan", 2000), d["roles"], d.get("windows", {}))
+                   d.get("logSpan", 2000), d["roles"], d.get("windows", {}), c.get("competitions", ""))
 
 
 class Event(NamedTuple):
@@ -178,6 +179,9 @@ class Ledger:
         self._registry = contract(net.registry, registry_abi)
         self.market = _Bound(self, self._market, market_abi)
         self.registry = _Bound(self, self._registry, registry_abi)
+        if net.competitions:
+            comp_abi = _load_abi("Competitions")
+            self.competitions = _Bound(self, contract(net.competitions, comp_abi), comp_abi)
         self.token = _Bound(self, contract(net.token, TOKEN_ABI), TOKEN_ABI)
         self._timestamps: dict[int, int] = {}
 

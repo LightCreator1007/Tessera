@@ -170,3 +170,25 @@ def test_owner_mismatch_is_refused_without_checking_the_signature(owner):
     code = identity.PAIR_PREFIX + base64.urlsafe_b64encode(body).decode().rstrip("=")
     r = join(owner, code)
     assert r.status_code == 400 and "different owner" in r.json()["detail"]
+
+
+def test_entry_pass_is_signed_for_this_wallet_and_competitions(owner, monkeypatch):
+    comps = "0x" + "cc" * 20
+    assert client.post("/v1/identity/entry-pass", json={"owner": owner}).status_code == 503  # no contract here
+    monkeypatch.setattr(config, "COMPETITIONS", comps)
+    r = client.post("/v1/identity/entry-pass", json={"owner": owner})
+    assert r.status_code == 200, r.text
+    out = r.json()
+    msg = {"wallet": owner, "nullifier": bytes.fromhex(out["nullifier"][2:]), "deadline": out["deadline"]}
+    assert enc.recover("EntryPass", config.CHAIN_ID, comps, msg, bytes.fromhex(out["signature"][2:])) == \
+        identity.ADMITTER.address
+    again = client.post("/v1/identity/entry-pass", json={"owner": owner}).json()
+    assert again["nullifier"] == out["nullifier"]  # the same person, so the contract sees one entrant
+
+
+def test_entry_pass_keeps_one_wallet_per_person(owner, monkeypatch):
+    monkeypatch.setattr(config, "COMPETITIONS", "0x" + "cc" * 20)
+    other = Account.create().address
+    monkeypatch.setattr(identity, "verify_human", lambda o, p: ("0x" + "ab" * 32, "orb"))
+    assert client.post("/v1/identity/entry-pass", json={"owner": owner}).status_code == 200
+    assert client.post("/v1/identity/entry-pass", json={"owner": other}).status_code == 409

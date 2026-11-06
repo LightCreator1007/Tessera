@@ -15,6 +15,7 @@ if key.address != net["roles"]["coordinator"]:
     sys.exit(f"dev coordinator key is {key.address}, but the deploy made {net['roles']['coordinator']} the coordinator")
 c = net["contracts"]
 os.environ.update(CHAIN_ID=str(net["chainId"]), JOB_MARKET=c["market"], NODE_REGISTRY=c["registry"], TOKEN=c["token"],
+                  COMPETITIONS=c.get("competitions", ""),
                   VERIFIERS=",".join(net["roles"]["verifiers"]), COORDINATOR_PRIVATE_KEY="0x" + bytes(key.key).hex())
 # The round driver runs inside the API process whenever TOD_NETWORK is set, which compose.dev.yml does.
 os.execvp("uvicorn", ["uvicorn", "api.app:app", "--app-dir", "/app/services/coordinator", "--host", "0.0.0.0",
