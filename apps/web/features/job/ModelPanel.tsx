@@ -1,6 +1,7 @@
 "use client";
 // A job's model: the latest accepted weights, a keccak-checked download, and where the final model is indexed (Arkiv) and stored (Swarm).
 import { useState } from "react";
+import Link from "next/link";
 import { keccak256 } from "viem";
 import { Box, Download, ExternalLink } from "lucide-react";
 import { isDemo, modelUrl } from "@/lib/api/client";
@@ -99,7 +100,7 @@ export function ModelPanel({ job }: { job: Job }) {
           </Banner>
         )}
       </Card>
-      {pub && <Card className="p-6"><SectionTitle title="Published model" sub="a public record anyone can find without this coordinator" /><div className="mt-4"><ArkivRecord p={pub} /></div></Card>}
+      {pub && <Card className="p-6"><SectionTitle title="Published model" sub="a public record anyone can find without this coordinator"><Link href={`/stack?job=${job.id}`} className="text-xs text-ink underline underline-offset-4">See its chunks and record</Link></SectionTitle><div className="mt-4"><ArkivRecord p={pub} /></div></Card>}
     </div>
   );
 }
