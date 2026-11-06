@@ -13,12 +13,12 @@ import { formatToken } from "@/lib/money";
 import { More, Sequence, StepPanel, TxButton, TxStatus, WizardProgress, type StepState } from "@/components/flow";
 import { openConnect } from "@/components/connect";
 import { WorkloadArt } from "@/components/pixel";
-import { Banner, Button, Money, SourceBadge, cx, short } from "@/components/primitives";
+import { Banner, Button, HashChip, Money, SourceBadge, cx, short } from "@/components/primitives";
 import type { Draft } from "@/lib/api/types";
-import { DATASET_HASH, DraftStep, WORKLOAD_ID } from "./DraftStep";
+import { draftRounds } from "@/lib/api/draft";
+import { DATASET_HASH, DraftStep, WORKLOAD_ID, formatGops } from "./DraftStep";
 
 const TOD = 1_000_000;
-const MIN_STAKE = 15 * TOD;
 
 const DATASETS = [
   { id: "mnist", name: "MNIST digits", size: "11 MB", rows: "70k images", fits: ["mlp-exact", "cnn-torch"] },
@@ -28,10 +28,10 @@ const WORKLOADS = [
   { id: "mlp-exact", name: "MLP, exact replay", note: "Replays bit for bit. A mismatch slashes the cheater's full stake." },
   { id: "cnn-torch", name: "CNN, PyTorch", note: "Replays within tolerance. Drift is flagged, not slashed." },
 ];
-const STEPS = [{ key: "data", label: "Data" }, { key: "model", label: "Model" }, { key: "budget", label: "Budget" }, { key: "review", label: "Review" }];
+const STEPS = [{ key: "data", label: "Data" }, { key: "model", label: "Model" }, { key: "price", label: "Price" }, { key: "review", label: "Review" }];
 
-type Form = { dataset: string | null; workload: string | null; epochs: string; budget: string; rounds: string; stake: string; quorum: string; maxPerRound: string };
-const EMPTY: Form = { dataset: null, workload: null, epochs: "3", budget: "60", rounds: "10", stake: "15", quorum: "3", maxPerRound: "6" };
+type Form = { dataset: string | null; workload: string | null; epochs: string; quorum: string; maxPerRound: string };
+const EMPTY: Form = { dataset: null, workload: null, epochs: "3", quorum: "3", maxPerRound: "6" };
 const KEY = "post-job-draft";
 
 export function PostJob() {
@@ -51,7 +51,7 @@ export function PostJob() {
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem(KEY);
-      if (raw) setF({ ...EMPTY, ...JSON.parse(raw) });
+      if (raw) { const saved = JSON.parse(raw) as Partial<Form>; setF({ dataset: saved.dataset ?? null, workload: saved.workload ?? null, epochs: saved.epochs ?? EMPTY.epochs, quorum: saved.quorum ?? EMPTY.quorum, maxPerRound: saved.maxPerRound ?? EMPTY.maxPerRound }); }
     } catch {
       sessionStorage.removeItem(KEY);
     }
@@ -59,39 +59,40 @@ export function PostJob() {
   useEffect(() => sessionStorage.setItem(KEY, JSON.stringify(f)), [f]);
   const set = (k: keyof Form) => (v: string | null) => setF((x) => ({ ...x, [k]: v }));
   /** Every step change goes through here, so the progress bar knows how far you have been. */
-  const go = (i: number) => { setStep(i); setReach((r) => Math.max(r, i)); };
+  const go = (to: number) => {
+    const i = to === 3 && !priced ? 2 : to; // review needs a price
+    setStep(i);
+    setReach((r) => Math.max(r, i));
+  };
 
   const n = (s: string) => (s.trim() === "" ? NaN : Number(s));
-  const budget = Math.round(n(f.budget) * TOD);
-  const rounds = Math.floor(n(f.rounds));
   const quorum = Math.floor(n(f.quorum));
   const maxPer = Math.floor(n(f.maxPerRound));
-  const stake = Math.round(n(f.stake) * TOD);
-  const perRound = budget > 0 && rounds > 0 ? budget / rounds : null;
-  const minStake = perRound !== null && quorum > 0 ? Math.max(MIN_STAKE, Math.ceil((2 * perRound) / quorum)) : MIN_STAKE;
   const errors = {
-    budget: !(budget > 0) ? "Enter a budget" : null,
-    rounds: !(rounds >= 1 && rounds <= 200) ? "Between 1 and 200 rounds" : null,
     quorum: !(quorum >= 2 && quorum <= 32) ? "Between 2 and 32" : null,
     maxPerRound: !(maxPer >= quorum && maxPer <= 32) ? `Between the quorum (${Number.isFinite(quorum) ? quorum : "?"}) and 32` : null,
-    stake: !(stake >= minStake) ? `At least ${formatToken(minStake)} TOD for this budget` : null,
   };
-  const budgetOk = Object.values(errors).every((e) => e === null);
-  const advancedErr = !!(errors.stake || errors.quorum || errors.maxPerRound);
-  const perNode = perRound !== null && quorum > 0 ? perRound / Math.max(quorum, maxPer || quorum) : null;
+  const advancedErr = !!(errors.quorum || errors.maxPerRound);
+  const ds = DATASETS.find((d) => d.id === f.dataset);
+  const wl = WORKLOADS.find((x) => x.id === f.workload);
+  const req = ds && wl && n(f.epochs) >= 1 && !advancedErr
+    ? { workload: WORKLOAD_ID[wl.id], datasetHash: DATASET_HASH[ds.id], epochs: Math.floor(n(f.epochs)), minQuorum: quorum, maxPerRound: maxPer }
+    : null;
+  // Every money figure comes from the priced draft. Until it lands there is no number to show.
+  const budget = drafted ? drafted.budget : null;
+  const rounds = drafted ? draftRounds(drafted) : null;
+  const priced = drafted !== null && req !== null;
   const online = (nodes.data?.data ?? []).filter((x) => x.online && f.workload !== null && x.workloads.includes(f.workload));
-  const cap = w.connected && budget > 0 ? Math.min(w.claimable, budget) : 0;
+  const cap = w.connected && budget !== null ? Math.min(w.claimable, budget) : 0;
   const typed = earnStr === null ? cap : Math.round(n(earnStr) * TOD);
   const fromBalance = Number.isFinite(typed) ? Math.max(0, Math.min(cap, typed)) : 0;
   const earnErr = earnStr !== null && Number.isFinite(typed) && typed > cap ? `At most ${formatToken(cap)} TOD` : null;
-  const need = budget - fromBalance;
-  const shortBy = need - w.usdc;
+  const need = budget === null ? null : budget - fromBalance;
+  const shortBy = need === null ? null : need - w.usdc;
   const ready = w.connected && !w.wrongNetwork;
   const posted = create.phase === "confirmed";
 
   const progress = STEPS.map((x, i) => ({ ...x, state: (i === step ? "current" : i <= reach ? "done" : "todo") as StepState }));
-  const ds = DATASETS.find((d) => d.id === f.dataset);
-  const wl = WORKLOADS.find((x) => x.id === f.workload);
 
   const post = () =>
     drafted && need !== null && rounds !== null && create.send(() => calls.createJob(drafted.createJobCalldata, fromBalance), () => {
@@ -100,7 +101,7 @@ export function PostJob() {
         usdc: x.usdc - need,
         claimable: x.claimable - fromBalance,
         allowance: 0,
-        postedJobs: [...x.postedJobs, { id, workload: f.workload ?? "", dataset: ds?.name ?? "", budget, rounds, stakePerNode: stake, minQuorum: quorum, postedAt: Date.now(), fromEarnings: fromBalance }],
+        postedJobs: [...x.postedJobs, { id, workload: f.workload ?? "", dataset: ds?.name ?? "", budget: drafted.budget, rounds, stakePerNode: drafted.minStake, minQuorum: quorum, postedAt: Date.now(), fromEarnings: fromBalance }],
       }));
       sessionStorage.removeItem(KEY);
       setTimeout(() => router.push("/jobs?scope=yours"), 900);
@@ -131,7 +132,7 @@ export function PostJob() {
               </Choice>
             ))}
           </div>
-          <p className="text-sm text-muted">Nodes and verifiers read this data to train and check it. The platform stores it encrypted, but don&apos;t upload anything you can&apos;t share.</p>
+          <p className="text-sm text-muted">Training data is public. Every node and verifier downloads it to train and to check the work, so only use data anyone may see.</p>
           <More label="Can I use my own data?">
             <p>Not yet. Uploads need a store every node can fetch the same bytes from, which comes after the preset datasets.</p>
           </More>
@@ -165,46 +166,38 @@ export function PostJob() {
 
       {step === 2 && (
         <StepPanel
-          key="budget"
-          title="How much will you pay?"
-          lede="The budget locks in the contract and pays out round by round to nodes whose work passes replay."
-          footer={<><Button variant="ghost" onClick={() => go(1)}>Back</Button><Button variant="primary" disabled={!budgetOk} onClick={() => go(3)}>Review</Button></>}
+          key="price"
+          title="What it costs"
+          lede="The price comes from the work in the spec, not from a number you pick. It locks in the contract and pays out round by round to nodes whose work passes replay."
+          footer={<><Button variant="ghost" onClick={() => go(1)}>Back</Button><Button variant="primary" disabled={!priced} onClick={() => go(3)}>Review</Button></>}
         >
-          <div className="grid gap-6 sm:grid-cols-2">
-            <Field label="Budget (TOD)" value={f.budget} onChange={set("budget")} error={errors.budget} big />
-            <Field label="Rounds" value={f.rounds} onChange={set("rounds")} error={errors.rounds} big hint={perRound !== null ? `${formatToken(perRound)} TOD per round` : undefined} />
-          </div>
-          <EarningsRow connected={w.connected} claimable={w.claimable} cap={cap} value={earnStr ?? (cap ? String(cap / TOD) : "")} onChange={setEarnStr} error={earnErr} fromBalance={fromBalance} budget={budget} />
-          {budgetOk && f.workload && online.length < quorum && (
+          <DraftStep req={req} onDraft={setDrafted} />
+          {priced && <EarningsRow connected={w.connected} claimable={w.claimable} cap={cap} value={earnStr ?? (cap ? String(cap / TOD) : "")} onChange={setEarnStr} error={earnErr} fromBalance={fromBalance} budget={drafted.budget} />}
+          {priced && f.workload && online.length < quorum && (
             <Banner tone="warn" title={`Only ${online.length} online nodes run ${f.workload}.`}>You can still post. The job waits until {quorum} are free; the matcher retries every 10 seconds.</Banner>
           )}
-          {budgetOk && perNode !== null && perNode < 0.01 * TOD && <Banner tone="warn" title="Under 0.01 TOD per node per round.">Few nodes will find that worth their time. Raise the budget or cut rounds.</Banner>}
-          <More label={`Stake and nodes per round: ${f.stake || "?"} TOD, ${f.quorum || "?"} to ${f.maxPerRound || "?"} nodes`} open={advancedErr}>
+          <More label={`Nodes per round: ${f.quorum || "?"} to ${f.maxPerRound || "?"}`} open={advancedErr}>
             <div className="grid gap-5 sm:grid-cols-2">
-              <Field label="Stake per node (TOD)" value={f.stake} onChange={set("stake")} error={errors.stake} hint={`Floor is ${formatToken(minStake)}: the larger of 15 and twice one node's round pay`} />
-              <Field label="Nodes needed per round" value={f.quorum} onChange={set("quorum")} error={errors.quorum} hint="A round opens only with this many free nodes" />
-              <Field label="Most nodes per round" value={f.maxPerRound} onChange={set("maxPerRound")} error={errors.maxPerRound} />
+              <Field label="Nodes needed per round" value={f.quorum} onChange={set("quorum")} error={errors.quorum} hint="A round opens only with this many free nodes. The price assumes this many" />
+              <Field label="Most nodes per round" value={f.maxPerRound} onChange={set("maxPerRound")} error={errors.maxPerRound} hint="Extra nodes share the same round pay" />
             </div>
           </More>
         </StepPanel>
       )}
 
-      {step === 3 && (
+      {step === 3 && drafted && need !== null && shortBy !== null && (
         <StepPanel key="review" title="Review and post" lede="Nothing locks until the last step. After that there is no cancel: if the job stalls, rounds that never opened come back to you." footer={<Button variant="ghost" onClick={() => go(2)} disabled={create.busy || posted}>Back</Button>}>
-          {!isDemo && <Banner tone="pending" title="Posting needs a wallet">Freezing the spec is live. Locking the budget and posting is signed in your wallet, which this app doesn&apos;t send yet.</Banner>}
+          {!isDemo && <Banner tone="pending" title="Posting needs a wallet">Pricing the job is live. Locking the budget and posting is signed in your wallet, which this app doesn&apos;t send yet.</Banner>}
           <dl className="flex flex-col">
             <Recap label="Data" onEdit={() => go(0)}>{ds?.name}</Recap>
             <Recap label="Model" onEdit={() => go(1)}><span className="font-mono">{wl?.id}</span>, {f.epochs} epochs</Recap>
-            <Recap label="Budget" onEdit={() => go(2)}><Money units={budget} /> over {rounds} rounds</Recap>
-            <Recap label="Each node" onEdit={() => go(2)}>stakes <Money units={stake} />, {f.quorum} to {f.maxPerRound} per round</Recap>
+            <Recap label="Price" onEdit={() => go(2)}><Money units={drafted.budget} /> for {formatGops(drafted.computeOps)} Gops{rounds ? `, over ${rounds} rounds` : ""}</Recap>
+            <Recap label="Each node" onEdit={() => go(2)}>stakes <Money units={drafted.minStake} />, {f.quorum} to {f.maxPerRound} per round</Recap>
+            <Recap label="Spec" onEdit={() => go(2)}><HashChip value={drafted.modelSpecHash} label="spec hash" /></Recap>
             <Recap label="Paid with" onEdit={() => go(2)}>{fromBalance > 0 ? <><Money units={fromBalance} /> from earnings + <Money units={need} /> from wallet</> : <><Money units={need} /> from wallet</>}</Recap>
           </dl>
           <Sequence
             items={[
-              {
-                key: "draft", title: "Freeze the spec", done: drafted !== null, note: drafted ? short(drafted.modelSpecHash) : "spec hash ready",
-                body: <DraftStep stake={stake} onDraft={setDrafted} req={ds && wl && budget > 0 && n(f.epochs) >= 1 ? { workload: WORKLOAD_ID[wl.id], datasetHash: DATASET_HASH[ds.id], budget, epochs: Math.floor(n(f.epochs)), minQuorum: quorum, maxPerRound: maxPer } : null} />,
-              },
               {
                 key: "wallet", title: "Connect the wallet that pays", done: ready, note: w.address ? short(w.address) : undefined,
                 body: <><p className="text-sm text-muted">The budget is locked in the contract, not sent to anyone.</p><Button variant="primary" onClick={openConnect}>{w.wrongNetwork ? "Switch network" : "Connect wallet"}</Button></>,
