@@ -2,6 +2,7 @@
 import json
 import logging
 import os
+import time
 import urllib.error
 from collections.abc import Callable
 from pathlib import Path
@@ -10,6 +11,8 @@ from tod_core import encodings as enc
 from tod_core.ledger import Phase, Reverted, RoundStatus
 
 log = logging.getLogger(__name__)
+
+AT_RISK = 0.2  # warn once less than this share of the reveal window is left and the reveal still hasn't landed
 
 # (ChainState, job, round) -> checkpoint hashes h_0..h_K, where h_0 is the round's startWeightsHash.
 Trainer = Callable[[object, int, int], list[bytes]]
@@ -60,13 +63,17 @@ def _noop(type_: str, **fields) -> None:
 
 
 class RoundLoop:
-    def __init__(self, market, operator: str, chain_id: int, store: RoundStore, train: Trainer, emit=_noop):
-        self.market, self.store, self.train, self.emit = market, store, train, emit
+    def __init__(self, market, operator: str, chain_id: int, store: RoundStore, train: Trainer, emit=_noop,
+                 clock: Callable[[], float] = time.time):
+        self.market, self.store, self.train, self.emit, self.clock = market, store, train, emit, clock
         self.operator = operator.lower()
         self.dom = enc.domain(chain_id, market.address)
         self.accepting = True  # False once a stop is requested: finish reveals, start nothing new
         self.skipped: set[tuple[int, int]] = set()
         self.waiting: set[tuple[int, int]] = set()  # rounds whose inputs the coordinator refused so far
+        self.at_risk: set[tuple[int, int]] = set()  # rounds already warned about, so the log gets one line each
+        self.sent: set[tuple[int, int]] = set()  # reveals sent but not yet seen on chain by the last sync
+        self.owed: list[dict] = []  # committed, unrevealed rounds as of the last tick; GET /v1/status serves it
 
     def _mine(self, state):
         """(job, round, round, our nodeRound) for every open round this node is on, oldest first."""
@@ -79,8 +86,39 @@ class RoundLoop:
         """Rounds where we committed but haven't revealed: leaving now would cost a no-reveal penalty."""
         return [(job, rnd) for job, rnd, _, nr in self._mine(state) if nr["committed"]]
 
+    def owed_reveals(self, state) -> list[dict]:
+        """What stopping now would put at risk: each owed reveal, its deadline, and the stake a miss there would cost."""
+        out = []
+        for job, rnd, r, nr in self._mine(state):
+            if not nr["committed"] or (job, rnd) in self.sent:
+                continue
+            params = state.jobs[job]["params"]
+            stake = getattr(params, "stakePerNode", None)
+            # The contract counts misses per job; the next one costs 1%, 10%, then 50% of the job's stake.
+            missed = sum(1 for (j, _), o in state.rounds.items() if j == job
+                         and any(op.lower() == self.operator and v.get("noRevealReported") for op, v in o["nodeRounds"].items()))
+            bps = 100 if missed == 0 else 1000 if missed == 1 else 5000
+            out.append({"job": job, "round": rnd, "commitDeadline": r.get("commitDeadline"),
+                        "revealDeadline": r.get("revealDeadline"), "missed": missed,
+                        "penalty": stake * bps // 10_000 if stake is not None else None})
+        return out
+
+    def _warn_at_risk(self, owed: list[dict]) -> None:
+        now = self.clock()
+        for o in owed:
+            key, start, end = (o["job"], o["round"]), o["commitDeadline"], o["revealDeadline"]
+            if key in self.at_risk or start is None or end is None or end <= start:
+                continue
+            left = end - now
+            if left < (end - start) * AT_RISK:
+                self.at_risk.add(key)
+                log.warning("job %s round %s: reveal still not in with %ds left", o["job"], o["round"], max(0, left))
+                self.emit("reveal.at_risk", job=o["job"], round=o["round"], secondsLeft=max(0, int(left)),
+                          revealDeadline=end, penalty=o["penalty"])
+
     def tick(self, state) -> None:
         """Act on every open round this node is in; safe to call as often as you like."""
+        self.owed = self.owed_reveals(state)
         for job, rnd, r, nr in self._mine(state):
             if (job, rnd) in self.skipped:
                 continue
@@ -94,6 +132,9 @@ class RoundLoop:
             except Reverted as e:
                 log.warning("job %s round %s: %s reverted with %s", job, rnd, phase.name.lower(), e)
                 self.emit("tx.reverted", job=job, round=rnd, kind=phase.name.lower(), revert=str(e))
+        # After acting, so a reveal that just landed this tick isn't reported as at risk.
+        self.owed = [o for o in self.owed if (o["job"], o["round"]) not in self.sent]
+        self._warn_at_risk(self.owed)
 
     def _skip(self, job: int, rnd: int, reason: str) -> None:
         log.error("job %s round %s: skipped, %s", job, rnd, reason)
@@ -133,5 +174,6 @@ class RoundLoop:
             self.emit("error", job=job, round=rnd, code="salt_lost")
             return
         self.market.reveal(job, rnd, rec["hashes"], rec["salt"])
+        self.sent.add((job, rnd))
         log.info("job %s round %s: revealed", job, rnd)
         self.emit("round.revealed", job=job, round=rnd, updateHash="0x" + rec["hashes"][-1].hex())

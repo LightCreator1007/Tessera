@@ -16,6 +16,7 @@ import { CompetitionNudge } from "@/features/competitions/Nudge";
 import { DemoChip, MIN_STAKE } from "./JoinFlow";
 import { LocalNode } from "./LocalNode";
 import { SlashHistory } from "./SlashHistory";
+import { ExcludedNotice } from "./Excluded";
 
 const TOD = 1_000_000;
 const PROBATION_HOURS = 5;
@@ -95,6 +96,7 @@ export function OwnerNode() {
         </div>
       )}
 
+      <ExcludedNotice owner={w.address} on="node" />
       <CompetitionNudge />
       {lowStake && <Banner tone="danger" title={`Stake is ${formatToken(node.stake)} TOD, under the ${formatToken(MIN_STAKE)} minimum.`}>Rounds stop drawing this node until you add stake below.</Banner>}
 

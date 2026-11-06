@@ -256,3 +256,17 @@ def test_stop_sends_the_bearer_token(tmp_path, monkeypatch):
     src = LiveSource("http://node", "http://coord", data_dir=str(tmp_path))
     assert asyncio.run(src.stop_node()).startswith("Stopping")
     assert got["auth"] == "Bearer " + "cd" * 32
+
+
+def test_late_reveal_is_the_first_problem_until_it_lands():
+    from tod_tui.live import NodeLog, map_event, map_problems
+    log = NodeLog()
+    late = {"seq": 2, "ts": 1085, "type": "reveal.at_risk", "job": 7, "round": 4,
+            "data": {"secondsLeft": 15, "revealDeadline": 1100}}
+    log.fold(late)
+    st = {"initialized": True, "daemon": {"state": "running"}}
+    [p, *_] = map_problems(st, log, None, None, 1085)
+    assert p.code == "reveal_at_risk" and "job 7 round 4 is due in 15 s" in p.message
+    assert map_event(late).kind == "danger"
+    log.fold({"seq": 3, "ts": 1090, "type": "round.revealed", "job": 7, "round": 4, "data": {}})
+    assert all(p.code != "reveal_at_risk" for p in map_problems(st, log, None, None, 1090))

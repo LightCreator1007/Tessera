@@ -217,3 +217,42 @@ def test_inputs_refused_for_now_are_retried_not_skipped(store):
     node.tick(state())
     assert (1, 1) in market.commits and events == ["round.waiting", "round.committed"]
     assert (1, 1) not in node.skipped
+
+
+def owed_state(missed_before=0, revealed=False):
+    st = state(committed=True, revealed=revealed)
+    st.rounds[(1, 1)].update(commitDeadline=1000, revealDeadline=1100)
+    st.jobs[1]["params"] = SimpleNamespace(segments=4, stakePerNode=10_000_000)
+    for i in range(missed_before):
+        st.rounds[(1, 10 + i)] = {"status": RoundStatus.SETTLED, "nodeRounds": {ME: {"noRevealReported": True}}}
+    return st
+
+
+@pytest.mark.parametrize("missed,penalty", [(0, 100_000), (1, 1_000_000), (2, 5_000_000), (5, 5_000_000)])
+def test_owed_reveal_prices_the_next_miss_on_the_contract_ladder(store, missed, penalty):
+    node = RoundLoop(FakeMarket(store), ME, 31337, store, lambda *a: list(HS))
+    [o] = node.owed_reveals(owed_state(missed))
+    assert (o["job"], o["round"], o["missed"], o["penalty"], o["revealDeadline"]) == (1, 1, missed, penalty, 1100)
+
+
+def test_reveal_at_risk_fires_once_late_in_the_window(store):
+    market, events, now = FakeMarket(store), [], [1050.0]
+    market.phases[(1, 1)] = Phase.VERIFY  # the reveal isn't being sent, so it stays owed
+    node = RoundLoop(market, ME, 31337, store, lambda *a: list(HS), emit=lambda t, **k: events.append((t, k)),
+                     clock=lambda: now[0])
+    node.tick(owed_state())
+    assert events == [] and len(node.owed) == 1  # half the window left: no warning yet
+    now[0] = 1085.0
+    node.tick(owed_state())
+    node.tick(owed_state())
+    assert [(t, k["secondsLeft"], k["penalty"]) for t, k in events] == [("reveal.at_risk", 15, 100_000)]
+
+
+def test_a_reveal_sent_this_tick_is_not_owed_or_at_risk(store):
+    market, events = FakeMarket(store), []
+    node = RoundLoop(market, ME, 31337, store, lambda *a: list(HS), emit=lambda t, **k: events.append((t, k)),
+                     clock=lambda: 1095.0)
+    node.tick(state())  # commit first
+    market.phases[(1, 1)] = Phase.REVEAL
+    node.tick(owed_state())
+    assert market.reveals == [(1, 1)] and node.owed == [] and "reveal.at_risk" not in [t for t, _ in events]

@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { Activity, CirclePause, CircleStop, Laptop, PlugZap, TriangleAlert } from "lucide-react";
 import { node, NodeError } from "@/lib/api/client";
 import { useNodeHealth, useNodeStatus } from "@/lib/api/hooks";
-import type { NodeEvent, NodeStatus } from "@/lib/api/types";
+import type { NodeEvent, NodeStatus, OwedReveal } from "@/lib/api/types";
+import { formatToken } from "@/lib/money";
 import { Command } from "@/components/flow";
 import { AddressChip, Banner, Button, Card, EmptyState, Eyebrow, Pill, SectionTitle, Skeleton, cx } from "@/components/primitives";
 
@@ -58,12 +59,42 @@ export function describe(e: NodeEvent): { text: string; tone: "ok" | "warn" | "d
     case "api.listening": return { text: `Local API listening on ${d.bind}`, tone: "neutral" };
     case "round.committed": return { text: `Committed its update for ${ROUND(e)}`, tone: "ok" };
     case "round.revealed": return { text: `Revealed its update for ${ROUND(e)}`, tone: "ok" };
+    case "reveal.at_risk": return { text: `The reveal for ${ROUND(e)} is running late, ${d.secondsLeft ?? "?"} s left`, tone: "danger" };
     case "round.skipped": return { text: `Skipped ${ROUND(e)}: ${d.reason ?? "no reason given"}`, tone: "warn" };
     case "tx.reverted": return { text: `The ${d.kind ?? ""} transaction for ${ROUND(e)} reverted${d.revert ? `: ${d.revert}` : ""}`, tone: "danger" };
     case "gas.topup": return { text: "The coordinator topped up its gas", tone: "ok" };
     case "error": return { text: `Error${d.what ? ` in ${d.what}` : ""}${d.code ? ` (${d.code})` : ""}${d.reason ? `: ${d.reason}` : ""}`, tone: "danger" };
     default: return { text: `${e.type}${ROUND(e) ? ` for ${ROUND(e)}` : ""}`, tone: "neutral" };
   }
+}
+
+/** Late-reveal warnings the node raised that no later reveal or skip for the same round has answered. */
+export function lateReveals(events: NodeEvent[]): NodeEvent[] {
+  const late = new Map<string, NodeEvent>();
+  for (const e of events) {
+    const k = `${e.job}:${e.round}`;
+    if (e.type === "reveal.at_risk") late.set(k, e);
+    else if (e.type === "round.revealed" || e.type === "round.skipped" || e.type === "node.started") late.delete(k);
+  }
+  // A restart clears everything the old process was tracking.
+  const restart = [...events].reverse().find((e) => e.type === "node.started");
+  return [...late.values()].filter((e) => !restart || e.seq > restart.seq);
+}
+
+const where = (o: { job: number | null; round: number | null }) => `job ${o.job}, round ${o.round}`;
+const due = (deadline: number | null | undefined) => {
+  if (!deadline) return null;
+  const s = Math.round(deadline - Date.now() / 1000);
+  return s > 0 ? `due in about ${s} s` : "past its deadline by this machine's clock";
+};
+
+/** The stop confirm's line: what stopping now waits for, and what a forced stop would cost. */
+function stopLine(owed: OwedReveal[] | null | undefined) {
+  if (!owed) return "Stop after owed reveals?";
+  if (owed.length === 0) return "No reveal owed right now, so stopping costs nothing.";
+  const cost = owed.reduce((sum, o) => (o.penalty === null || sum === null ? null : sum + o.penalty), 0 as number | null);
+  const when = owed.map((o) => [where(o), due(o.revealDeadline)].filter(Boolean).join(", ")).join("; ");
+  return `Your node owes a reveal in ${when}. Stop waits for it to land. A forced stop from the terminal would be slashed ${cost === null ? "for a missed reveal" : `${formatToken(cost)} TOD`}.`;
 }
 
 const TONE_DOT = { ok: "bg-ok", warn: "bg-warn", danger: "bg-danger", neutral: "bg-band" } as const;
@@ -117,6 +148,7 @@ export function LocalNode({ compact }: { compact?: boolean }) {
   const draining = running && lastStop?.type === "node.stopping";
   const s = stateOf(st, health.data?.ok, draining);
   const testMode = !!started.mode && started.mode !== "honest";
+  const late = running ? lateReveals(events) : [];
   const shown = showAll ? [...events].reverse() : [...events].reverse().slice(0, SHOW);
 
   async function stop() {
@@ -145,9 +177,9 @@ export function LocalNode({ compact }: { compact?: boolean }) {
           </div>
           {running && !draining && (
             confirm ? (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted">Stop after owed reveals?</span>
-                <Button variant="primary" icon={CircleStop} onClick={stop}>Stop</Button>
+              <div className="flex max-w-md flex-wrap items-center justify-end gap-2">
+                <span className={cx("text-sm", st.owed?.length ? "text-warn" : "text-muted")}>{stopLine(st.owed)}</span>
+                <Button variant="primary" icon={CircleStop} onClick={stop}>{st.owed?.length ? "Stop after the reveal" : "Stop"}</Button>
                 <Button onClick={() => setConfirm(false)}>Keep running</Button>
               </div>
             ) : (
@@ -160,6 +192,14 @@ export function LocalNode({ compact }: { compact?: boolean }) {
             It runs in {started.mode} mode, which only test chains allow. Verifiers should catch it and slash its stake. That is the point of the demo.
           </Banner>
         )}
+        {late.map((e) => {
+          const d = e.data as { secondsLeft?: number; revealDeadline?: number; penalty?: number | null };
+          return (
+            <Banner key={e.seq} tone="danger" title={`The reveal for ${where(e)} is running late`}>
+              It still hasn&apos;t landed{due(d.revealDeadline) ? `, and it is ${due(d.revealDeadline)}` : ""}. Keep this machine awake and online until it does. Missing it costs {d.penalty != null ? `${formatToken(d.penalty)} TOD of stake` : "stake"}.
+            </Banner>
+          );
+        })}
         {typeof stopping === "object" && (
           <Banner tone="warn" title="The console couldn't stop the node">
             {stopping.error === "token_unreadable"

@@ -5,7 +5,7 @@ import { JoinBuild } from "@/components/mosaic/isoScenes";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Clock, Cpu, HardDrive, Laptop, Wallet } from "lucide-react";
-import { useConfig, useJobs } from "@/lib/api/hooks";
+import { useConfig, useJobs, useOwnerIdentity } from "@/lib/api/hooks";
 import { isDemo } from "@/lib/api/client";
 import { setWallet, useWallet } from "@/lib/wallet";
 import { useTx } from "@/lib/tx";
@@ -16,6 +16,7 @@ import { NodeArt } from "@/components/pixel";
 import { Button, DocsLink, Money, Segmented, SourceBadge, cx, short } from "@/components/primitives";
 import { INSTALL, PAIR_PREFIX, PAIR_TTL_MIN, SETUP, pairCommand } from "@/features/docs/cli";
 import { SIMULATED, SelfTestCard } from "./SelfTestCard";
+import { ExcludedNotice } from "./Excluded";
 
 const TOD = 1_000_000;
 
@@ -64,6 +65,8 @@ function demoCode(f: PairFields) {
 
 export function JoinFlow() {
   const w = useWallet();
+  // An excluded owner stops at the connect step: staking and pairing would only fail at admission.
+  const excluded = !!useOwnerIdentity(w.address ?? null).data?.data.excluded;
   const cfg = useConfig();
   const jobs = useJobs();
   const [started, setStarted] = useState(false);
@@ -177,7 +180,8 @@ export function JoinFlow() {
 
   return (
     <Frame progress={<div className="flex flex-col gap-6"><div className="h-56 overflow-hidden border border-rule bg-surface"><JoinBuild done={current} /></div><WizardProgress steps={progress} shown={Math.min(wiz.shown, 5)} onPick={wiz.go} aside={<SourceBadge source={isDemo ? "demo" : "live"} />} /></div>}>
-      {wiz.shown === 1 && (
+      <ExcludedNotice owner={w.address} on="join" />
+      {wiz.shown === 1 && !excluded && (
         <StepPanel
           key="install"
           title="Install the node"
@@ -212,7 +216,7 @@ export function JoinFlow() {
         </StepPanel>
       )}
 
-      {wiz.shown === 2 && (
+      {wiz.shown === 2 && !excluded && (
         <StepPanel key="pair" title="Pair the laptop with your wallet" lede={`The laptop signs a short consent naming your wallet as its owner. Codes last ${PAIR_TTL_MIN} minutes.`} footer={back}>
           {reviewing && node ? (
             <p className="text-sm text-muted">Paired as operator <span className="font-mono text-ink">{short(node.operator)}</span>.</p>
@@ -256,7 +260,7 @@ export function JoinFlow() {
         </StepPanel>
       )}
 
-      {wiz.shown === 3 && (
+      {wiz.shown === 3 && !excluded && (
         <StepPanel
           key="human"
           title="Prove you're one person"
@@ -271,7 +275,7 @@ export function JoinFlow() {
         </StepPanel>
       )}
 
-      {wiz.shown === 4 && (
+      {wiz.shown === 4 && !excluded && (
         <StepPanel
           key="stake"
           title={!amountSet && !reviewing ? "Choose your stake" : "Bond the stake"}
@@ -363,7 +367,7 @@ export function JoinFlow() {
         </StepPanel>
       )}
 
-      {wiz.shown === 5 && (
+      {wiz.shown === 5 && !excluded && (
         <StepPanel key="run" title="Start the node" lede="Run this on the laptop. It goes online and waits for idle time." footer={back}>
           <Command cmd="tod-node run" />
           <div className="flex items-center gap-4 py-2" role="status">
