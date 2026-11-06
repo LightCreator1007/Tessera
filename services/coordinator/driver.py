@@ -124,6 +124,23 @@ class Driver:
                     doc = self.store.get(_hex(ev)) if ev != ZERO32 else None
                     if doc is not None:
                         _loss(job, rnd, doc, None)
+            if r["status"] in (RoundStatus.SETTLED, RoundStatus.REVERTED):
+                self.publish_evidence(job, rnd, r)
+
+    def publish_evidence(self, job: int, rnd: int, r: dict):
+        """After finalize, open the round's evidence and weights to everyone, and rebuild its evidence entry from
+        the chain when a restart lost the one prepare() made."""
+        agg_ev, pay_ev = bytes(r.get("aggEvidenceHash", ZERO32)), bytes(r.get("payEvidenceHash", ZERO32))
+        hashes = [agg_ev, pay_ev, bytes(r["aggregateHash"]), bytes(r["startWeightsHash"])]
+        hashes += [bytes(nr["updateHash"]) for nr in r["nodeRounds"].values() if nr["revealed"]]
+        for h in hashes:
+            if h != ZERO32:
+                tables.PUBLIC[_hex(h)] = (job, rnd)
+        if (job, rnd) not in tables.EVIDENCE and agg_ev != ZERO32 and pay_ev != ZERO32:
+            tables.EVIDENCE[(job, rnd)] = Evidence(
+                job=job, round=rnd, reports=[],
+                aggregate=EvidenceRef(hash=_hex(agg_ev), url=f"/v1/blobs/{_hex(agg_ev)}"),
+                pay=EvidenceRef(hash=_hex(pay_ev), url=f"/v1/blobs/{_hex(pay_ev)}"))
 
     def advance(self, job: int, rnd: int, ph: Phase):
         r, quorum = self.state.rounds[(job, rnd)], self.state.jobs[job]["params"].minQuorum

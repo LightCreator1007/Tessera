@@ -1,4 +1,5 @@
-"""Blob routes. Every PUT and GET carries a BlobAccess signature from someone with a role in that job and round."""
+"""Blob routes. Every PUT and GET carries a BlobAccess signature from someone with a role in that job and round,
+except a GET of a finalized round's evidence or weights, which is public so anyone can check the payouts."""
 import re
 import time
 
@@ -55,7 +56,18 @@ async def put(h: str, request: Request, x_job: int = Header(), x_round: int = He
 
 
 @router.get("/{h}")
-def get(h: str, x_job: int = Header(), x_round: int = Header(), x_expiry: int = Header(), x_signature: str = Header()):
+def get(h: str, x_job: int | None = Header(None), x_round: int | None = Header(None),
+        x_expiry: int | None = Header(None), x_signature: str | None = Header(None)):
+    signed = None not in (x_job, x_round, x_expiry, x_signature)
+    if not signed:
+        if h not in tables.PUBLIC:
+            raise HTTPException(401, "this blob needs a BlobAccess signature until its round is finalized")
+        data = store.get(h)
+        if data is None:
+            raise HTTPException(404, "finalized on chain, but this coordinator doesn't hold the blob")
+        # Content-addressed, so it can never change under the same URL.
+        return Response(data, media_type="application/octet-stream",
+                        headers={"Cache-Control": "public, max-age=31536000, immutable"})
     authorize(h, "GET", x_job, x_round, x_expiry, x_signature)
     data = store.get(h)
     if data is None:
