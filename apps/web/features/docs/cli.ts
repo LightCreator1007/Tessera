@@ -24,9 +24,9 @@ export const COMMANDS: CliCommand[] = [
   { name: "pair", args: "--owner <0x..> --chain-id <id> --registry <0x..>", does: `Signs the owner's consent and prints a pairing code to paste into the web. The code expires after ${PAIR_TTL_MIN} minutes.`, ships: true },
   { name: "status", does: "Prints the data directory, whether the node is initialized, and the operator address.", ships: true },
   { name: "doctor", does: "Checks the key, the data folder, the self-test and the coordinator, and says which one needs fixing.", ships: true },
-  { name: "run", args: "[--mode honest]", does: "Starts the node as a background container that restarts after a crash or reboot. Sends a signed heartbeat every 15 s.", ships: false },
-  { name: "logs", does: "Follows the running node's log.", ships: false },
-  { name: "stop", does: "Stops the node. Stake stays in the registry until you withdraw it on the web.", ships: false },
+  { name: "run", args: "[--poll <s>]", does: "Runs the node: watches the chain, trains, commits and reveals. The Docker wrapper restarts it after a crash or reboot, and it serves the local API on 127.0.0.1:7777.", ships: true },
+  { name: "logs", args: "[--follow] [--since <seq>]", does: "Prints the node's event log. With --json, one event per line.", ships: true },
+  { name: "stop", args: "[--wait]", does: "Asks the node to stop. It finishes any reveal it owes first, so stopping never costs stake. Stake stays in the registry until you withdraw it on the web.", ships: true },
 ];
 
 export const EXIT_CODES: [number, string][] = [
