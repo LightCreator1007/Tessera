@@ -124,20 +124,17 @@
 /* The round */
 .ld-round { position: relative; border-top: 1px solid var(--rule-row); }
 .ld-round-stick {
-  position: sticky;
-  top: 0;
-  height: 100svh;
   display: grid;
   grid-template-rows: auto 1fr;
   gap: 16px;
-  padding: 80px 24px 24px;
+  padding: 96px 24px 96px;
   max-width: 1340px;
   margin: 0 auto;
 }
-.ld-round-art { position: relative; min-height: 0; order: -1; }
+.ld-round-art { position: relative; height: 56svh; min-height: 320px; order: -1; }
 @media (min-width: 900px) {
-  .ld-round-stick { grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); grid-template-rows: none; align-items: center; gap: 32px; padding: 64px 32px 24px 48px; max-width: 1480px; }
-  .ld-round-art { order: 0; height: 84svh; }
+  .ld-round-stick { grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); grid-template-rows: none; align-items: center; gap: 32px; padding: 120px 32px 120px 48px; max-width: 1480px; }
+  .ld-round-art { order: 0; height: min(78svh, 720px); }
 }
 .ld-steps { list-style: none; margin: 32px 0 0; padding: 0; }
 .ld-steps li { border-top: 1px solid var(--rule-row); }

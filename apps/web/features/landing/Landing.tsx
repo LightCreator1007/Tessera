@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Mosaic } from "@/components/mosaic/Mosaic";
 import { VOCAB, VOCAB_SHORT, type FieldFn } from "@/components/mosaic/engine";
 import { coverById, figureField, sampler, subjectFit, useGray } from "@/components/mosaic/figures";
-import { clamp, dissolve, tone } from "@/components/mosaic/fields";
+import { dissolve, tone } from "@/components/mosaic/fields";
 import { useTextGray } from "@/components/mosaic/type";
 import { BrandMark } from "@/components/brand";
 import { reducedMotion } from "@/lib/prefs";
@@ -117,50 +117,18 @@ const STEPS = [
 ];
 
 function RoundStory() {
-  const ref = useRef<HTMLElement>(null);
-  const stepRef = useRef(0);
+  // An accordion: one step open at a time, Train first; the diagram follows the open step.
   const [step, setStep] = useState(0);
 
-  useEffect(() => {
-    let raf = 0;
-    const on = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        const el = ref.current;
-        if (!el) return;
-        const r = el.getBoundingClientRect();
-        const p = clamp(-r.top / Math.max(1, r.height - window.innerHeight));
-        const s = Math.min(STEPS.length - 1, Math.floor(p * STEPS.length));
-        if (s !== stepRef.current) {
-          stepRef.current = s;
-          setStep(s);
-        }
-      });
-    };
-    on();
-    window.addEventListener("scroll", on, { passive: true });
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("scroll", on);
-    };
-  }, []);
-
-  const go = (i: number) => {
-    const el = ref.current;
-    if (!el) return;
-    const top = el.getBoundingClientRect().top + window.scrollY;
-    window.scrollTo({ top: top + ((i + 0.5) / STEPS.length) * (el.offsetHeight - window.innerHeight), behavior: reducedMotion() ? "auto" : "smooth" });
-  };
-
   return (
-    <section id="round" ref={ref} className="ld-round" style={{ height: `${STEPS.length * 85 + 40}svh` }}>
+    <section id="round" className="ld-round">
       <div className="ld-round-stick">
         <div className="ld-round-copy">
           <h2 className="ld-h2">How a round works</h2>
           <ol className="ld-steps">
             {STEPS.map((s, i) => (
               <li key={s.name} className={i === step ? "is-on" : i < step ? "is-past" : ""}>
-                <button type="button" onClick={() => go(i)} aria-current={i === step ? "step" : undefined}>
+                <button type="button" onClick={() => setStep(i)} aria-expanded={i === step} aria-current={i === step ? "step" : undefined}>
                   <span className="ld-step-n">{String(i + 1).padStart(2, "0")}</span>
                   <span className="ld-step-name">{s.name}</span>
                 </button>
