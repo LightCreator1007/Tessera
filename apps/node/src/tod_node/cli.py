@@ -253,8 +253,10 @@ def run(
     events.append("node.started", version=version("tod-node"), network=net.name, chainId=net.chain_id,
                   operator=account.address, mode=mode)
     api, server = _start_api(events, stop)
+    beat = _heartbeat(coordinator, account, events) if coordinator else (lambda state: None)
     try:
-        run_daemon(ledger, loop, stop, poll=poll, emit=events.append, on_tick=api.tick)
+        run_daemon(ledger, loop, stop, poll=poll, emit=events.append,
+                   on_tick=lambda state: (api.tick(), beat(state)))
     finally:
         if server:
             server.shutdown()
@@ -283,6 +285,19 @@ def _start_api(events, stop: threading.Event):
         return api, None
     events.append("api.listening", bind=f"{server.server_address[0]}:{server.server_address[1]}")
     return api, server
+
+
+def _heartbeat(coordinator: str, account, events):
+    """The matcher seats only nodes whose heartbeat says the job's workload passed the self-test, so run it once here."""
+    from .heartbeat import Heartbeat
+
+    vec = json.loads(SELFTEST_VECTOR.read_text())
+    t0 = time.perf_counter()
+    got = mlp_selftest()
+    result = {vec["workload"]: {"hash": got, "seconds": round(time.perf_counter() - t0, 3), "ok": got == vec["hash"]}}
+    if not result[vec["workload"]]["ok"]:
+        events.append("error", what="selftest", reason=f"{vec['workload']} does not reproduce its vector here")
+    return Heartbeat(coordinator, account.key, account.address, version("tod-node"), result, emit=events.append)
 
 
 @app.command()
