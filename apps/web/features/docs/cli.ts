@@ -1,0 +1,37 @@
+// The node CLI as the web shows it: install lines for the Docker wrapper and every command, mirroring docker/tod-node and apps/node/src/tod_node/cli.py.
+
+const WRAPPER = "https://raw.githubusercontent.com/LightCreator1007/ToD/main/docker";
+
+export const INSTALL = {
+  unix: `mkdir -p ~/.local/bin\ncurl -fsSL ${WRAPPER}/tod-node -o ~/.local/bin/tod-node\nchmod +x ~/.local/bin/tod-node`,
+  windows: `New-Item -ItemType Directory -Force $HOME\\bin | Out-Null\nInvoke-WebRequest ${WRAPPER}/tod-node.ps1 -OutFile $HOME\\bin\\tod-node.ps1`,
+};
+
+export const SETUP = "tod-node init\ntod-node selftest";
+
+export function pairCommand(owner: string, chainId: number, registry: string) {
+  return `tod-node pair --owner ${owner} --chain-id ${chainId} --registry ${registry}`;
+}
+
+/** Pairing code printed by `pair`: the prefix, then unpadded base64url JSON of the consent fields (cli.py, PAIR_PREFIX). */
+export const PAIR_PREFIX = "tod-pair:";
+export const PAIR_TTL_MIN = 30;
+
+export type CliCommand = { name: string; args?: string; does: string; ships: boolean };
+export const COMMANDS: CliCommand[] = [
+  { name: "init", does: "Creates this node's operator key in the data volume (mode 0600) and prints its address. Later runs print the existing address.", ships: true },
+  { name: "selftest", does: "Trains the mlp-exact self-test vector and checks the result hash byte for byte. Exits 3 on a mismatch, so a drifted machine never joins.", ships: true },
+  { name: "pair", args: "--owner <0x..> --chain-id <id> --registry <0x..>", does: `Signs the owner's consent and prints a pairing code to paste into the web. The code expires after ${PAIR_TTL_MIN} minutes.`, ships: true },
+  { name: "status", does: "Prints the data directory, whether the node is initialized, and the operator address.", ships: true },
+  { name: "doctor", does: "Checks the key, the data folder, the self-test and the coordinator, and says which one needs fixing.", ships: true },
+  { name: "run", args: "[--mode honest]", does: "Starts the node as a background container that restarts after a crash or reboot. Sends a signed heartbeat every 15 s.", ships: false },
+  { name: "logs", does: "Follows the running node's log.", ships: false },
+  { name: "stop", does: "Stops the node. Stake stays in the registry until you withdraw it on the web.", ships: false },
+];
+
+export const EXIT_CODES: [number, string][] = [
+  [0, "ok"],
+  [2, "bad input, for example an address that is not 0x"],
+  [3, "not eligible: not initialized, or the self-test failed"],
+  [4, "unreachable: the coordinator or the chain did not answer"],
+];
