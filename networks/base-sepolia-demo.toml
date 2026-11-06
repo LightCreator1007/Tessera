@@ -27,6 +27,7 @@ market = "0xa4acE0e126B0B3b021f501DDE6a506cafDdA1581"
 faucet = "0x85359b52D9705F835C57591C7337B0C2e60B55fA"
 exchange = "0xBC202C5B2c239298041f191Bc90cBBC25Ec17Aa8"
 testUSDC = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+competitions = "0xE12b72Be73a68811f118AB246044C773241EECBB"
 # Where chain scans start. The real deploy block is 55089330, but the only event before this one is MarketSet, which
 # nothing reads, and scanning that gap took every node and service over 1,400 pages on each start.
 deployBlock = 55377000
