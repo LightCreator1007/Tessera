@@ -9,6 +9,10 @@ if [ -t 0 ] && [ -t 1 ]; then TTY="-t"; fi
 ENVS="-e TOD_NETWORK -e TOD_COORDINATOR -e BASE_SEPOLIA_RPC_URL -e ANVIL_RPC_URL -e NO_COLOR"
 # Lets a local chain or coordinator on the host be reached as host.docker.internal on Linux too.
 HOST="--add-host host.docker.internal:host-gateway"
+# A ceiling for a shared laptop: a full MNIST round peaks near 300 MB on one core, CIFAR-10's data is ~740 MB.
+# Swap equal to memory means a runaway process is killed instead of paging the machine to a halt.
+MEM="${TOD_MEMORY:-2g}"
+LIMITS="--cpus ${TOD_CPUS:-2} --memory $MEM --memory-swap $MEM --pids-limit 256"
 running() { [ "$(docker inspect -f '{{.State.Running}}' "$NAME" 2>/dev/null)" = true ]; }
 
 case "$1" in
@@ -16,7 +20,7 @@ case "$1" in
     if running; then echo "tod-node is already running" >&2; exit 6; fi
     docker rm "$NAME" >/dev/null 2>&1 || true  # a stopped container with this name would block docker run
     # --init forwards signals; 240 s covers the commit and reveal windows, so a stop can finish an owed reveal.
-    exec docker run -d --init --restart unless-stopped --stop-timeout 240 --name "$NAME" $HOST \
+    exec docker run -d --init --restart unless-stopped --stop-timeout 240 --name "$NAME" $HOST $LIMITS \
       -p 127.0.0.1:7777:7777 -v tod-data:/data $ENVS "$IMAGE" "$@" ;;
   stop)
     if ! running; then echo "tod-node is not running" >&2; exit 3; fi
@@ -25,4 +29,4 @@ case "$1" in
 esac
 # While the daemon runs, commands go into its container so status and logs see the real node.
 if running; then exec docker exec -i $TTY "$NAME" tod-app "$@"; fi
-exec docker run --rm -i $TTY $HOST -v tod-data:/data $ENVS "$IMAGE" "$@"
+exec docker run --rm -i $TTY $HOST $LIMITS -v tod-data:/data $ENVS "$IMAGE" "$@"
