@@ -10,3 +10,4 @@ node_modules
 runs
 store
 *.zip
+signing-key-*.json

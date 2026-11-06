@@ -21,6 +21,7 @@ REGISTRY = "0x" + "22" * 20
 @pytest.fixture
 def run(tmp_path, monkeypatch):
     monkeypatch.setenv("TOD_DATA", str(tmp_path))
+    monkeypatch.setenv("TOD_SANDBOX", "off")  # test_sandbox covers the Docker path
     return lambda *args: CliRunner().invoke(app, list(args))
 
 

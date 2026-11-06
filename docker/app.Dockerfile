@@ -19,6 +19,8 @@ ENV TOD_DATA=/data
 ENV OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 # The wrapper publishes 7777 on the host's 127.0.0.1 only, so the node's local API listens on every interface in here.
 ENV TOD_API_BIND=0.0.0.0:7777
+# Already a container, so train in-process; a node installed on the host trains in a container instead.
+ENV TOD_SANDBOX=off
 WORKDIR /app
 COPY . .
 COPY --from=abi /abi packages/abi/json

@@ -21,7 +21,7 @@ from eth_utils import is_address, to_checksum_address
 from tod_core import encodings as enc
 from tod_workloads.mlp_exact import selftest as mlp_selftest
 
-from . import config
+from . import config, sandbox
 
 # Agents and the web app branch on these exit codes, so they are part of the CLI contract.
 OK, BAD_INPUT, NOT_ELIGIBLE, UNREACHABLE = 0, 2, 3, 4
@@ -138,18 +138,29 @@ def pair(
 @app.command()
 def selftest(as_json: JsonOpt = False) -> None:
     """Check that this machine reproduces the mlp-exact self-test vector byte for byte."""
-    fields = selftest_fields()
+    fields = selftest_fields(sandbox_or_none(as_json))
     emit(as_json, fields, f"{fields['workload']} on {fields['arch']}: {'ok' if fields['ok'] else 'MISMATCH'}")
     if not fields["ok"]:
         raise typer.Exit(NOT_ELIGIBLE)
 
 
-def selftest_fields() -> dict:
-    """The `selftest --json` object; GET /v1/selftest returns the same one."""
+def selftest_fields(sb=None) -> dict:
+    """The `selftest --json` object; GET /v1/selftest returns the same one. Runs where training runs: in sb if given."""
     vec = json.loads(SELFTEST_VECTOR.read_text())
-    got = mlp_selftest()
+    got = sb.selftest() if sb else mlp_selftest()
     return {"arch": platform.machine(), "expected": vec["hash"], "got": got, "ok": got == vec["hash"],
             "workload": vec["workload"]}
+
+
+def sandbox_or_none(as_json: bool = False):
+    """The Docker sandbox rounds train in, or None when TOD_SANDBOX=off. Exits with a hint if Docker isn't usable."""
+    if not sandbox.enabled():
+        return None
+    sb = sandbox.DockerSandbox(data_dir() / "sandbox")
+    if problem := sb.check():
+        fail(as_json, UNREACHABLE, problem, "docker_unavailable",
+             "start Docker, or set TOD_SANDBOX=off to train without it (job code then runs on this machine directly)")
+    return sb
 
 
 def pid_path() -> Path:
@@ -233,10 +244,13 @@ def run(
         sender = TxManager(ledger.w3, LocalSigner(account.key), data_dir() / "journal")
     except Exception as e:  # RPC down or on the wrong chain: nothing this node can do until that is fixed
         fail(as_json, UNREACHABLE, f"chain {net.name}: {e}", "rpc_unreachable")
+    sb = sandbox_or_none(as_json) if mode == "honest" else None  # fake:lazy never trains
     pid_path().write_text(str(os.getpid()))
     events = events_log()
 
     coordinator = config.resolve(data_dir())["coordinator"][0]
+    if sb:
+        events.append("sandbox.ready", image=sb.image)
     if coordinator:
         from .gas import ensure_gas
         ensure_gas(coordinator, account.key, emit=events.append)
@@ -244,7 +258,7 @@ def run(
         from .trainer import Coordinator, LazyTrainer, Trainer, dataset_cache, preset_datasets
         prewarm = Prewarm(preset_datasets(dataset_cache(data_dir() / "datasets")), emit=events.append)
         train = (LazyTrainer if mode == "fake:lazy" else Trainer)(Coordinator(coordinator, account.key, net.chain_id, net.market),
-                        prewarm.datasets, account.address, net.chain_id, net.market)
+                        prewarm.datasets, account.address, net.chain_id, net.market, sb)
     else:
         prewarm = None
         def train(state, job, rnd):
@@ -264,8 +278,8 @@ def run(
         signal.signal(sig, on_signal)
     events.append("node.started", version=version("tod-node"), network=net.name, chainId=net.chain_id,
                   operator=account.address, mode=mode)
-    api, server = _start_api(events, stop, loop)
-    beat = _heartbeat(coordinator, account, events, prewarm) if coordinator else (lambda state: None)
+    api, server = _start_api(events, stop, loop, sb)
+    beat = _heartbeat(coordinator, account, events, prewarm, sb) if coordinator else (lambda state: None)
     try:
         run_daemon(ledger, loop, stop, poll=poll, emit=events.append,
                    on_tick=lambda state: (api.tick(), prewarm and prewarm(state), beat(state)))
@@ -277,7 +291,7 @@ def run(
         lock.release()
 
 
-def _start_api(events, stop: threading.Event, loop=None):
+def _start_api(events, stop: threading.Event, loop=None, sb=None):
     """Serve the local API unless TOD_API_BIND is "off". A busy port is logged, not fatal: the node matters more."""
     from .api import Api, load_token
 
@@ -293,7 +307,7 @@ def _start_api(events, stop: threading.Event, loop=None):
 
     def selftest():
         with lock:  # run once; a page polling while the hash is computed waits for that run
-            result or result.update(selftest_fields())
+            result or result.update(selftest_fields(sb))
             return result
 
     api = Api(status, events, api_stop, load_token(data_dir()), selftest)
@@ -309,13 +323,13 @@ def _start_api(events, stop: threading.Event, loop=None):
     return api, server
 
 
-def _heartbeat(coordinator: str, account, events, prewarm=None):
+def _heartbeat(coordinator: str, account, events, prewarm=None, sb=None):
     """The matcher seats only nodes whose heartbeat says the job's workload passed the self-test, so run it once here."""
     from .heartbeat import Heartbeat
 
     vec = json.loads(SELFTEST_VECTOR.read_text())
     t0 = time.perf_counter()
-    got = mlp_selftest()
+    got = selftest_fields(sb)["got"]
     result = {vec["workload"]: {"hash": got, "seconds": round(time.perf_counter() - t0, 3), "ok": got == vec["hash"]}}
     if not result[vec["workload"]]["ok"]:
         events.append("error", what="selftest", reason=f"{vec['workload']} does not reproduce its vector here")
@@ -374,7 +388,7 @@ def doctor(
     chain_id: Annotated[int | None, typer.Option("--chain-id", help="Fail if the coordinator is on another chain.")] = None,
     as_json: JsonOpt = False,
 ) -> None:
-    """Check that this node is ready to train: key, data folder, self-test and coordinator."""
+    """Check that this node is ready to train: key, data folder, Docker, self-test and coordinator."""
     path, checks = key_path(), {}
     if not path.exists():
         checks["key"] = (False, "missing; run `tod-node init`")
@@ -385,7 +399,15 @@ def doctor(
     data_dir().mkdir(parents=True, exist_ok=True)
     checks["dataDir"] = (os.access(data_dir(), os.W_OK), str(data_dir()))
     expected = json.loads(SELFTEST_VECTOR.read_text())["hash"]
-    checks["selftest"] = (mlp_selftest() == expected, platform.machine())
+    sb, checks["docker"] = None, (None, "TOD_SANDBOX=off, so jobs train on this machine directly")
+    if sandbox.enabled():
+        sb = sandbox.DockerSandbox(data_dir() / "sandbox")
+        problem = sb.check()
+        checks["docker"] = (problem is None, problem or sb.image)
+    if checks["docker"][0] is False:
+        checks["selftest"] = (False, "needs Docker")
+    else:
+        checks["selftest"] = (selftest_fields(sb)["got"] == expected, platform.machine())
     url = config.resolve(data_dir())["coordinator"][0]
     coord = _coordinator_check(url, chain_id) if url else (None, "no coordinator set (init --coordinator), skipped")
     checks["coordinator"] = coord
@@ -393,7 +415,7 @@ def doctor(
     fields = {k: {"ok": ok, "detail": d} for k, (ok, d) in checks.items()}
     marks = {True: "ok  ", False: "FAIL", None: "skip"}
     emit(as_json, fields, "\n".join(f"{marks[ok]} {k}: {d}" for k, (ok, d) in checks.items()))
-    if not all(checks[k][0] for k in ("key", "dataDir", "selftest")):
+    if not all(checks[k][0] for k in ("key", "dataDir", "selftest")) or checks["docker"][0] is False:
         raise typer.Exit(NOT_ELIGIBLE)
     if coord[0] is False:
         raise typer.Exit(UNREACHABLE)
