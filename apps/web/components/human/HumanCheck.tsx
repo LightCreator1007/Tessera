@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import QRCode from "qrcode";
 import { CredentialRequest, any, useIDKitRequest, type IDKitResult } from "@worldcoin/idkit/hooks";
-import { ArrowUpRight, Check, RotateCcw, ScanFace, Smartphone } from "lucide-react";
+import { ArrowUpRight, Check, Copy, RotateCcw, ScanFace, Smartphone } from "lucide-react";
 import { More } from "@/components/flow";
-import { Button, Pill, cx, short } from "@/components/primitives";
+import { Button, Pill, cx, short, useCopy } from "@/components/primitives";
 import { Mosaic } from "@/components/mosaic/Mosaic";
 import { PosterThumb } from "@/components/mosaic/PosterCard";
 import { VOCAB_SHORT, type FieldFn } from "@/components/mosaic/engine";
@@ -21,6 +21,8 @@ type Stage = "idle" | "signing" | "scan" | "confirm" | "submitting" | "verified"
 type Fail = { kind: FailKind | "replayed" | "no_credential"; detail: string; ref?: string };
 
 const WORLD_APP = "https://world.org/download";
+// Staging requests are answered only by World's simulator; the real World App ignores them.
+const SIMULATOR = "https://simulator.worldcoin.org";
 
 const PLACEHOLDER_RP: RpContext = { rp_id: "", nonce: "", created_at: 0, expires_at: 0, signature: "" };
 
@@ -63,6 +65,7 @@ export function HumanCheck({ onVerified, intro, split }: { onVerified?: (v: Veri
   const human = useHuman();
   const cfgQ = useIdentityConfig();
   const cfg: IdentityConfig = cfgQ.data ?? DEMO_CONFIG;
+  const staging = cfg.mode === "worldid" && cfg.environment !== "production" && cfg.environment !== "sandbox";
   const owner = human.owner;
   const submitProof = useSubmitProof();
   const [stage, setStage] = useState<Stage>("idle");
@@ -174,7 +177,10 @@ export function HumanCheck({ onVerified, intro, split }: { onVerified?: (v: Veri
     if (!owner) return { title: "Connect a wallet first", body: <>The proof is tied to one wallet, so World ID needs to know which.</> };
     switch (shownStage) {
       case "signing": return { title: "Getting a code", body: <TileScanner label="Asking the coordinator to sign a World ID request" count={20} /> };
-      case "scan": return {
+      case "scan": return staging ? {
+        title: "Approve in the World ID simulator",
+        body: <>This pool runs World ID staging, so World App on a phone can&apos;t answer it. Open the simulator, scan this code or paste the copied request, and approve Proof of Human. No Orb or selfie needed.</>,
+      } : {
         title: "Scan with World App",
         body: <><span className="hidden md:inline">Open World App on your phone and scan this code. </span><span className="md:hidden">Open World App to continue. </span>It takes a quick selfie, or uses your Orb verification if you have one. Your face never leaves your phone.</>,
       };
@@ -187,7 +193,7 @@ export function HumanCheck({ onVerified, intro, split }: { onVerified?: (v: Veri
       case "failed": return fail ? { title: COPY[fail.kind].title, body: COPY[fail.kind].body(fail.detail) } : { title: "", body: null };
       default: return {
         title: "Prove you're one person",
-        body: intro ?? <>One person, one seat. World ID proves you&apos;re a unique human without telling Tessera who you are, so nobody can run a fleet of fake laptops or enter a competition twice. A selfie in World App is enough; an Orb verification works too.</>,
+        body: intro ?? <>One person, one seat. World ID proves you&apos;re a unique human without telling Tessera who you are, so nobody can run a fleet of fake laptops or enter a competition twice. {staging ? <>This pool runs World ID staging: you approve in World&apos;s simulator in your browser, no phone needed.</> : <>A selfie in World App is enough; an Orb verification works too.</>}</>,
       };
     }
   })();
@@ -197,6 +203,7 @@ export function HumanCheck({ onVerified, intro, split }: { onVerified?: (v: Veri
     if (shownStage === "idle") return (
       <Button variant="primary" icon={ScanFace} onClick={start}>{cfg.mode === "dev" ? "Verify with dev identity" : "Verify with World ID"}</Button>
     );
+    if (shownStage === "scan" && uri && staging) return <SimulatorActions uri={uri} />;
     // On a phone the code is useless to the phone itself: the connector link opens World App directly and returns here.
     if (shownStage === "scan" && uri) return (
       <a href={uri} className="inline-flex h-9 items-center gap-2 rounded-md bg-ink px-3 text-sm text-brand-ink transition-opacity duration-150 ease-out hover:opacity-90 md:hidden">
@@ -244,7 +251,7 @@ export function HumanCheck({ onVerified, intro, split }: { onVerified?: (v: Veri
         </div>
       )}
       {actions && <div className="flex flex-wrap items-center gap-3">{actions}</div>}
-      {owner && cfg.mode !== "dev" && (shownStage === "idle" || shownStage === "scan" || (shownStage === "failed" && fail?.kind === "no_credential")) && <GetWorldApp />}
+      {owner && cfg.mode !== "dev" && (shownStage === "idle" || shownStage === "scan" || (shownStage === "failed" && fail?.kind === "no_credential")) && !staging && <GetWorldApp />}
       {shownStage !== "verified" && (
         <More label="What does World ID see?">
           <p>World learns that a verified person approved a request from Tessera. Tessera learns one number that is the same every time you prove yourself here, and different in every other app. No name, no face, no address.</p>
@@ -348,6 +355,19 @@ function Chip({ children, onClick }: { children: ReactNode; onClick: () => void 
     <button type="button" onClick={onClick} className="inline-flex h-7 items-center rounded-md border border-dashed border-demo px-2 font-mono text-xs text-demo hover:bg-hover">
       demo: {children}
     </button>
+  );
+}
+
+/** Staging: open the simulator and hand it the request, since a laptop can't scan its own screen. */
+function SimulatorActions({ uri }: { uri: string }) {
+  const { copied, copy } = useCopy();
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <a href={SIMULATOR} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-md bg-ink px-3 text-sm text-brand-ink transition-opacity duration-150 ease-out hover:opacity-90">
+        Open the simulator <ArrowUpRight className="size-4" strokeWidth={1.5} aria-hidden />
+      </a>
+      <Button variant="ghost" icon={copied ? Check : Copy} onClick={() => copy(uri)}>{copied ? "Copied" : "Copy request"}</Button>
+    </div>
   );
 }
 
