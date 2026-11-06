@@ -71,3 +71,12 @@ def test_inactive_and_unrevealed_nodes_are_not_paid():
 def test_missing_weights_refuse_to_settle():
     with pytest.raises(ValueError, match="no final weights"):
         settle(chain(), 7, 3, SPEC, SPEC_HASH, G, {OPS[0]: G}, val, lambda o: 0, 0, 1000)
+
+
+def test_a_confirmed_node_needs_no_weights():
+    """A cheat's claimed final hash may name no blob at all; it is excluded, so settling must not need it."""
+    from tod_core.settle import needs_weights
+    state = chain(confirmed={OPS[3]: Kind.REPLAY_MISMATCH})
+    assert needs_weights(state, 7, 3) == OPS[:3]
+    f = settle(state, 7, 3, SPEC, SPEC_HASH, G, {op: G + HONEST for op in OPS[:3]}, val, lambda o: 0, 0, 1000)
+    assert [op for op, _ in f.settlement["payouts"]] == OPS[:3]
