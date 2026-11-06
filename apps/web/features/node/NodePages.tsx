@@ -5,10 +5,11 @@ import { StatePoster } from "@/components/mosaic/StatePoster";
 import { NumberLoader } from "@/components/mosaic/NumberLoader";
 import { ConnectGate } from "@/components/mosaic/ConnectGate";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Cpu, Filter, Laptop, ShieldAlert, Wallet } from "lucide-react";
 import { openConnect } from "@/components/connect";
 import { OwnerNode } from "./OwnerNode";
+import { NodeSettings } from "./NodeSettings";
 import { useNodeChain, useNodes } from "@/lib/api/hooks";
 import { useWallet } from "@/lib/wallet";
 import type { Node, NodeChain, NodeRoundResult } from "@/lib/api/types";
@@ -275,6 +276,7 @@ export function NodePage({ op }: { op: string }) {
               </div>
             )}
           </section>
+          {mine && <OwnSettings />}
         </div>
         <PropsRail>
           <PropRow label="Standing"><Pill tone={STANDING[s].tone}>{STANDING[s].label}</Pill></PropRow>
@@ -288,6 +290,18 @@ export function NodePage({ op }: { op: string }) {
         </PropsRail>
       </div>
     </div>
+  );
+}
+
+/** Your laptop's schedule, pause and limits, on its own page. Links from Settings land here with #node-settings (#settings would open the modal), which arrives before the section renders, so scroll once it does. */
+function OwnSettings() {
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => { if (location.hash === "#node-settings") { ref.current?.scrollIntoView({ block: "start" }); window.scrollTo(0, 0); } }, []); // the frame itself must not scroll, only the main panel
+  return (
+    <section ref={ref} id="node-settings" className="flex scroll-mt-4 flex-col gap-3 border-t border-rule pt-6">
+      <SectionTitle title="Settings" sub="when this laptop takes rounds, and what it runs" />
+      <NodeSettings />
+    </section>
   );
 }
 

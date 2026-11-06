@@ -267,7 +267,7 @@ export function CompetitionDetail({ id }: { id: string }) {
             <div className="flex justify-between gap-3"><dt className="text-muted">Compute budget</dt><dd><Money units={c.budget} /></dd></div>
             <div className="flex justify-between gap-3"><dt className="text-muted">Entry fee</dt><dd>{c.fee === 0 ? <span className="text-ink">Free</span> : <Money units={c.fee} />}</dd></div>
             <div className="flex justify-between gap-3"><dt className="text-muted">Entries</dt><dd className="tabular text-ink">{c.entries.length}</dd></div>
-            <div className="flex items-center justify-between gap-3"><dt className="text-muted">Host</dt><dd><AddressChip value={c.host} you={rel === "host"} /></dd></div>
+            <div className="flex items-center justify-between gap-3"><dt className="text-muted">Host</dt><dd><AddressChip value={c.host} href={`/u/${c.host}`} you={rel === "host"} /></dd></div>
           </dl>
         </aside>
       </div>

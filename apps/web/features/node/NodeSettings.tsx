@@ -1,5 +1,5 @@
 "use client";
-// Node section of Settings (UX-PHASE-2 §4): availability mode, pause after this round or stop now with its exact cost, the weekly schedule painter, resource limits and workloads, and the Requested, Applied, Rejected state of a change sent to the laptop. Runs on demo data until C1 to C5 land.
+// A laptop's settings on its node page (UX-PHASE-2 §4): availability mode, pause after this round or stop now with its exact cost, the weekly schedule painter, resource limits and workloads, and the Requested, Applied, Rejected state of a change sent to the laptop. Runs on demo data until C1 to C5 land.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CirclePause, CirclePlay, CircleStop, Laptop, Lock } from "lucide-react";
 import { useWallet } from "@/lib/wallet";

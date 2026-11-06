@@ -1,23 +1,25 @@
 "use client";
-// Settings as a near-full-page modal (master-detail): Wallet, Node, Notifications, Display and, in demo mode, Demo. Opened from the sidebar row under Activity or by openSettings(section); the section is kept in the URL hash so a link can open it.
+// Settings as a near-full-page modal (master-detail), preferences only: Wallet, Nodes (each laptop's settings live on its node page), Notifications, Display and, in demo mode, Demo. Opened from the sidebar row under Activity or by openSettings(section); the section is kept in the URL hash so a link can open it.
 import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
-import { Bell, FlaskConical, Laptop, MonitorCog, UserRound, Wallet, X, type LucideIcon } from "lucide-react";
-import { useWallet, resetWallet } from "@/lib/wallet";
-import { applyMotion, applyTxOutcome, isAddress, setPrefs, usePrefs, type Channel, type Motion, type NotifyEvent, type TxOutcome } from "@/lib/prefs";
+import { ArrowRight, Bell, FlaskConical, Laptop, MonitorCog, UserRound, Wallet, X, type LucideIcon } from "lucide-react";
+import { setWallet, useWallet, resetWallet } from "@/lib/wallet";
+import { calls } from "@/lib/chain";
+import { useTx } from "@/lib/tx";
+import { applyMotion, applyTxOutcome, setPrefs, usePrefs, type Motion, type NotifyEvent, type TxOutcome } from "@/lib/prefs";
 import { resetNodeSettings } from "@/lib/node-settings";
 import { isDemo } from "@/lib/api/client";
 import { formatToken, TOKEN_SYMBOL } from "@/lib/money";
-import { NodeSettings } from "@/features/node/NodeSettings";
 import { openConnect } from "./connect";
-import { Checkbox, SettingRow, TextField } from "./fields";
+import { Checkbox, SettingRow } from "./fields";
+import { TxButton } from "./flow";
 import { StatePoster } from "./mosaic/StatePoster";
-import { Banner, Button, Identicon, Pill, Segmented, cx, short } from "./primitives";
+import { Button, EmptyState, Identicon, Pill, Segmented, cx, short } from "./primitives";
 
 type Section = "wallet" | "node" | "notifications" | "display" | "demo";
 const SECTIONS: { key: Section; label: string; icon: LucideIcon; hint: string }[] = [
-  { key: "wallet", label: "Wallet", icon: Wallet, hint: "Network, payout address" },
-  { key: "node", label: "Node", icon: Laptop, hint: "Pause, schedule, limits" },
+  { key: "wallet", label: "Wallet", icon: Wallet, hint: "Network, token approvals" },
+  { key: "node", label: "Nodes", icon: Laptop, hint: "Your laptops and their settings" },
   { key: "notifications", label: "Notifications", icon: Bell, hint: "What tells you, and where" },
   { key: "display", label: "Display", icon: MonitorCog, hint: "Motion, start screen" },
   { key: "demo", label: "Demo", icon: FlaskConical, hint: "Simulated outcomes, reset" },
@@ -115,7 +117,7 @@ export function SettingsDialog() {
           <div key={active.key} className="animate-step-in relative min-h-0 flex-1 overflow-y-auto px-6 pt-5">
             <div className="mx-auto max-w-3xl pb-6">
               {section && active.key === "wallet" && <WalletSection />}
-              {section && active.key === "node" && <NodeSettings />}
+              {section && active.key === "node" && <Nodes />}
               {section && active.key === "notifications" && <Notifications />}
               {section && active.key === "display" && <Display />}
               {section && active.key === "demo" && <Demo />}
@@ -153,7 +155,6 @@ function Group({ title, children }: { title?: string; children: ReactNode }) {
 
 function WalletSection() {
   const w = useWallet();
-  const p = usePrefs();
   if (!w.connected || !w.address) {
     return (
       <div className="flex flex-col items-center gap-3 py-10 text-center">
@@ -164,8 +165,6 @@ function WalletSection() {
       </div>
     );
   }
-  const claimTo = p.claimTo ?? "";
-  const badClaim = claimTo !== "" && !isAddress(claimTo);
   return (
     <div className="flex flex-col gap-8">
       <Group>
@@ -179,14 +178,9 @@ function WalletSection() {
             <span className="flex flex-wrap items-center gap-2"><Pill tone="warn">Wrong network</Pill><Button onClick={w.switchNetwork}>Switch to Base Sepolia</Button></span>
           ) : <Pill tone="neutral">Base Sepolia</Pill>}
         </SettingRow>
-        <SettingRow
-          label="Pay earnings to"
-          htmlFor="claim-to"
-          hint="Claims go to this address instead of the connected wallet, for example a hardware wallet. Leave empty to use the connected one."
-          note={badClaim ? undefined : claimTo ? "Mocked: the contract's claimTo isn't deployed yet, so claims still go to the connected wallet." : undefined}
-        >
-          <TextField id="claim-to" mono value={claimTo} invalid={badClaim} placeholder={w.address} onChange={(v) => setPrefs({ claimTo: v.trim() || null })} />
-          {badClaim && <p className="text-xs text-danger">That isn&apos;t an address. It should be 0x and 40 hex characters.</p>}
+        <SettingRow label="Token approvals" hint="What the contracts may move from this wallet. Posting a job or adding stake asks for the exact amount; anything left over can be revoked here.">
+          <Approval spender="market" label="Job market" />
+          <Approval spender="registry" label="Node registry" />
         </SettingRow>
         <SettingRow label="Disconnect" hint="Your node keeps running on the laptop. Reconnect the same wallet to manage it.">
           <Button onClick={w.disconnect}>Disconnect</Button>
@@ -205,56 +199,22 @@ const EVENTS: { key: NotifyEvent; label: string; hint: string; who: "node" | "jo
   { key: "jobDone", label: "Your job finished", hint: "Model and receipts ready", who: "job" },
   { key: "refund", label: "Refund available", hint: "Unspent budget came back", who: "job" },
 ];
-const CHANNELS: { key: Channel; label: string }[] = [{ key: "inApp", label: "Activity" }, { key: "email", label: "Email" }, { key: "webhook", label: "Webhook" }];
-
 function Notifications() {
   const p = usePrefs();
-  const toggle = (e: NotifyEvent, c: Channel, on: boolean) => setPrefs((x) => ({ notify: { ...x.notify, [e]: on ? [...x.notify[e], c] : x.notify[e].filter((y) => y !== c) } }));
-  const badEmail = p.email !== "" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.email);
-  const badHook = p.webhook !== "" && !/^https:\/\/\S+$/.test(p.webhook);
+  const toggle = (e: NotifyEvent, on: boolean) => setPrefs((x) => ({ notify: { ...x.notify, [e]: on ? [...new Set([...x.notify[e], "inApp" as const])] : x.notify[e].filter((y) => y !== "inApp") } }));
   return (
     <div className="flex flex-col gap-8">
-      <Banner tone="demo" title="Email and webhooks are mocked">There is no notification service yet. Choices are saved in this browser; only Activity is real today.</Banner>
-      <Group title="Where">
-        <SettingRow label="Email" htmlFor="notify-email" hint="One address for alerts. Nothing is sent until the service exists.">
-          <TextField id="notify-email" type="email" value={p.email} invalid={badEmail} placeholder="you@example.com" onChange={(v) => setPrefs({ email: v.trim() })} />
-          {badEmail && <p className="text-xs text-danger">That doesn&apos;t look like an email address.</p>}
-        </SettingRow>
-        <SettingRow label="Webhook" htmlFor="notify-hook" hint="We POST a JSON event to this URL. HTTPS only.">
-          <TextField id="notify-hook" mono value={p.webhook} invalid={badHook} placeholder="https://" onChange={(v) => setPrefs({ webhook: v.trim() })} />
-          {badHook && <p className="text-xs text-danger">Use an https:// URL.</p>}
-        </SettingRow>
+      <Group title="In Activity">
+        <ul className="flex flex-col">
+          {EVENTS.map((e) => (
+            <li key={e.key} className="flex items-center justify-between gap-4 border-b border-rule-row py-3 last:border-b-0">
+              <span className="flex flex-col gap-0.5 text-sm"><span className="text-ink">{e.label}</span><span className="text-xs text-muted">{e.who === "node" ? "Node" : "Job"} · {e.hint}</span></span>
+              <Checkbox label={<span className="sr-only">{`${e.label} in Activity`}</span>} checked={p.notify[e.key].includes("inApp")} onChange={(on) => toggle(e.key, on)} />
+            </li>
+          ))}
+        </ul>
       </Group>
-      <Group title="What">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-rule text-left text-xs text-muted">
-                <th className="py-2 pr-4 font-normal">Event</th>
-                {CHANNELS.map((c) => <th key={c.key} className="w-24 px-2 py-2 font-normal">{c.label}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {EVENTS.map((e) => (
-                <tr key={e.key} className="border-b border-rule-row last:border-b-0">
-                  <td className="py-3 pr-4">
-                    <span className="flex flex-col gap-0.5"><span className="text-ink">{e.label}</span><span className="text-xs text-muted">{e.who === "node" ? "Node" : "Job"} · {e.hint}</span></span>
-                  </td>
-                  {CHANNELS.map((c) => {
-                    const off = (c.key === "email" && !p.email) || (c.key === "webhook" && !p.webhook);
-                    return (
-                      <td key={c.key} className="px-2 py-3">
-                        <Checkbox label={<span className="sr-only">{`${e.label} by ${c.label}`}</span>} checked={!off && p.notify[e.key].includes(c.key)} disabled={off} onChange={(on) => toggle(e.key, c.key, on)} />
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {(!p.email || !p.webhook) && <p className="pt-2 text-xs text-muted">Add an {!p.email ? "email" : "webhook URL"} above to turn on that column.</p>}
-      </Group>
+      <p className="text-xs text-muted">Browser push and signed webhooks come next, then email. They need a notification service that doesn&apos;t exist yet, so they aren&apos;t offered here until it does.</p>
     </div>
   );
 }
@@ -270,9 +230,6 @@ function Display() {
         <SettingRow label="Start screen" hint="Once per browser session the app opens on the crow developing while it checks the chain, the coordinator and the blob store.">
           <Checkbox label="Show it" checked={p.splash} onChange={(on) => setPrefs({ splash: on })} />
           {p.splash && p.motion === "reduced" && <p className="text-xs text-muted">Hidden while motion is reduced.</p>}
-        </SettingRow>
-        <SettingRow label="Theme" hint="Tessera is dark only: black, white and the mosaic's reds.">
-          <Pill tone="neutral">Dark</Pill>
         </SettingRow>
       </Group>
     </div>
@@ -290,5 +247,40 @@ function Demo() {
         <Button onClick={() => { resetWallet(); resetNodeSettings(); }}>Reset</Button>
       </SettingRow>
     </Group>
+  );
+}
+
+/** This wallet's laptops. Schedule, pause and limits are per laptop, so each one's settings live on its node page. */
+function Nodes() {
+  const w = useWallet();
+  if (!w.node) return <EmptyState icon={Laptop} poster="EMPTY" title="No node on this wallet" action={<Link href="/nodes/add" onClick={closeSettings} className="text-sm text-ink underline decoration-subtle underline-offset-4">Add a node</Link>}>A laptop&apos;s schedule, pause and limits appear on its node page once it&apos;s paired.</EmptyState>;
+  const n = w.node;
+  return (
+    <ul className="flex flex-col divide-y divide-rule-row rounded-xl border border-rule">
+      <li>
+        <Link href={n.joined ? `/nodes/${n.operator}#node-settings` : "/nodes/add"} onClick={closeSettings} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-hover">
+          <Identicon value={n.operator} className="size-5" />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="font-mono text-sm text-ink">{short(n.operator, 6, 4)}</span>
+            <span className="text-xs text-muted">{n.joined ? "Schedule, pause, limits and workloads" : "Paired, not joined. Finish setup first."}</span>
+          </span>
+          {n.joined ? <Pill tone={n.running ? "ok" : "neutral"} live={n.running}>{n.running ? "running" : "paused"}</Pill> : <Pill tone="warn">setup</Pill>}
+          <ArrowRight className="size-4 text-subtle" aria-hidden />
+        </Link>
+      </li>
+    </ul>
+  );
+}
+
+/** One contract's allowance with a revoke. Revoking sets it to zero; the next job or stake asks again. */
+function Approval({ spender, label }: { spender: "market" | "registry"; label: string }) {
+  const w = useWallet();
+  const tx = useTx();
+  const left = w.allowanceTo[spender];
+  return (
+    <span className="flex flex-wrap items-center justify-between gap-3 text-sm">
+      <span className="flex flex-col"><span className="text-ink">{label}</span><span className="font-mono text-xs text-muted">{left > 0 ? `${formatToken(left)} ${TOKEN_SYMBOL} allowed` : "nothing allowed"}</span></span>
+      {left > 0 && <TxButton tx={tx} variant="secondary" label="Revoke" onRun={() => tx.send(() => calls.approve(spender, 0), () => setWallet({ allowance: 0 }))} />}
+    </span>
   );
 }

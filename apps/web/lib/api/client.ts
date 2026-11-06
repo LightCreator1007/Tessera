@@ -4,7 +4,7 @@ import { keccak256 } from "viem";
 import * as fx from "@/mocks/fixtures";
 import type {
   Draft, DraftRequest, LiveCompetition, ModelRecord, NodeEvent, NodeHealth, NodeStatus, Spec, Workload,
-  Config, Evidence, Health, Job, JobState, Node, NodeChain, Pool, Round, RoundSummary, RoundVerdicts, Settlement, Sourced, OwnerHistory, OwnerIdentity } from "./types";
+  Config, Evidence, Health, Job, JobState, Node, NodeChain, Pool, Round, RoundSummary, RoundVerdicts, Settlement, Sourced, OwnerHistory, OwnerIdentity, OwnerRecord } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_COORDINATOR_URL ? "/api/coord" : undefined;
 export const isDemo = !BASE;
@@ -114,6 +114,8 @@ export const api = {
   /** Live only: demo keeps its own fixture ledger. Coordinators without the history route answer 404. */
   // Demo owners are never excluded; the exclusion list lives only on a live coordinator.
   identity: (owner: string) => (BASE ? get<OwnerIdentity>(`/v1/identity/owners/${owner}`) : demo(() => ({ owner, joined: true, credential: null, excluded: null }), "identity")),
+  /** Demo has no indexer: the record is the jobs this address posted, and the page adds the demo wallet's own state. */
+  record: (owner: string) => (BASE ? get<OwnerRecord>(`/v1/owners/${owner}`) : demo<OwnerRecord>(() => ({ owner, operators: [], rounds: 0, ops: 0, jobs: fx.jobs.filter((j) => j.requester.toLowerCase() === owner.toLowerCase()).map((j) => j.id), kinds: {}, firstAt: null, indexedTo: null }), "owner")),
   history: (owner: string) => get<OwnerHistory>(`/v1/owners/${owner}/history?limit=200`),
   // Per-verifier verdicts have no coordinator route. Live, they are derived from the round itself: its status, the
   // threshold, and confirmed cheats. Demo uses fixtures. Either way the receipt labels them as derived, not signed.

@@ -61,6 +61,11 @@ export type OwnerIdentity = {
   credential: string | null;
   excluded: { reason: string; evidence: { job: number; round: number; operator: string; kind: string }[]; at: number } | null;
 };
+/** GET /v1/owners/{owner}: an address's nodes, verified work, posted jobs and a per-kind tally of its history. */
+export type OwnerRecord = {
+  owner: string; operators: string[]; rounds: number; ops: number; jobs: number[];
+  kinds: Partial<Record<OwnerEvent["kind"], { count: number; amount: number }>>; firstAt: number | null; indexedTo: number | null;
+};
 export type OwnerHistory = { owner: string; operators: string[]; events: OwnerEvent[]; next: string | null; indexedTo: number | null };
 export type Published = {
   round: number;
