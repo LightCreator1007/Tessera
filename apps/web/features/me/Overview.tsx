@@ -6,7 +6,8 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Coins, Download, ArrowDownLeft, ArrowUpRight, Laptop, LayoutDashboard, Layers, Lock, Plus, Wallet } from "lucide-react";
 import { isDemo } from "@/lib/api/client";
-import { useNodeChain } from "@/lib/api/hooks";
+import { useNodeChain, useOwnerHistory } from "@/lib/api/hooks";
+import type { OwnerEvent } from "@/lib/api/types";
 import { WithdrawButton, WithdrawDialog } from "@/features/balance/Withdraw";
 import { Term } from "@/components/term";
 import { setWallet, useWallet } from "@/lib/wallet";
@@ -36,6 +37,19 @@ function demoHistory(now: number): Movement[] {
   ];
 }
 
+/** Chain history events that move the balance. Stake, slashes and joins move the stake, not the balance, so they stay off this ledger. */
+function fromChain(e: OwnerEvent): Movement | null {
+  const base = { key: `${e.block}:${e.logIndex}`, at: e.at, amount: e.amount === null ? 0 : e.amount, job: e.job === null ? undefined : e.job }; // rails-allow: these kinds always carry an amount
+  switch (e.kind) {
+    case "paid": return { ...base, kind: "payout", round: e.round === null ? undefined : e.round, note: "Round paid your node" };
+    case "leftover": return { ...base, kind: "payout", note: "Leftover pay from a finished job" };
+    case "claimed": return { ...base, kind: "claim", note: "Claimed to wallet" };
+    case "budget": return { ...base, kind: "budget", fromEarnings: typeof e.detail?.fromBalance === "number" ? e.detail.fromBalance : undefined, note: `Posted job #${e.job}` };
+    case "refund": return { ...base, kind: "refund", note: "Refund for rounds that never opened" };
+    default: return null;
+  }
+}
+
 const KIND: Record<Kind, { label: string; tone: "ok" | "neutral" | "pending" | "brand"; dir: "in" | "out" }> = {
   payout: { label: "Earned", tone: "ok", dir: "in" },
   refund: { label: "Refund", tone: "pending", dir: "in" },
@@ -47,17 +61,20 @@ const KIND: Record<Kind, { label: string; tone: "ok" | "neutral" | "pending" | "
 export function useLedger() {
   const w = useWallet();
   const [now] = useState(() => Date.now() / 1000);
+  const hist = useOwnerHistory(w.address, !isDemo && w.connected);
+  const chain = hist.data?.data ?? null;
   const rows = useMemo<Movement[]>(() => {
+    if (chain) return chain.events.map(fromChain).filter((m): m is Movement => m !== null);
     const local: Movement[] = [
       ...w.postedJobs.map((p) => ({ key: `pj${p.id}`, at: p.postedAt / 1000, kind: "budget" as const, amount: p.budget, fromEarnings: p.fromEarnings ?? 0, job: p.id, note: `Posted ${p.workload} #${p.id}` })), // rails-allow: jobs posted before the split existed were paid fully from the wallet
       ...w.claims.map((c, i) => ({ key: `lc${i}`, at: c.at / 1000, kind: "claim" as const, amount: c.amount, note: "Claimed to wallet" })),
     ];
     return [...(isDemo ? demoHistory(now) : []), ...local].sort((a, b) => b.at - a.at);
-  }, [w.postedJobs, w.claims, now]);
+  }, [w.postedJobs, w.claims, now, chain]);
   const sum = (k: Kind) => rows.filter((r) => r.kind === k).reduce((s, r) => s + r.amount, 0);
   const spent = sum("budget");
   const recycled = rows.reduce((s, r) => s + (r.fromEarnings ?? 0), 0); // rails-allow: no split recorded means nothing came from earnings
-  return { now, rows, earned: sum("payout"), spent, recycled, claimed: sum("claim"), refunds: sum("refund"), share: spent > 0 ? recycled / spent : null };
+  return { now, rows, earned: sum("payout"), spent, recycled, claimed: sum("claim"), refunds: sum("refund"), share: spent > 0 ? recycled / spent : null, source: isDemo ? "demo" as const : chain ? "chain" as const : "browser" as const, indexedTo: chain ? chain.indexedTo : null };
 }
 
 export function Overview() {
@@ -66,7 +83,7 @@ export function Overview() {
   const [filter, setFilter] = useState<"all" | "in" | "out">("all");
   const [withdrawing, setWithdrawing] = useState(false);
   const [dust, setDust] = useState(false);
-  const { now, rows, earned, spent, recycled, claimed, share } = useLedger();
+  const { now, rows, earned, spent, recycled, claimed, share, source, indexedTo } = useLedger();
   const op = w.node?.operator ?? "";
   const chain = useNodeChain(op, Boolean(w.node?.joined));
   const penalties = chain.data?.data.penalties ?? null;
@@ -132,7 +149,7 @@ export function Overview() {
         {spent === 0 && earned > 0 && <Invite href="/jobs/new" icon={Layers} title="Train something with what you earned" hint={`${formatToken(w.claimable)} TOD is ready to use as a job budget.`} />}
 
         <section className="flex flex-col gap-3">
-          <SectionTitle title="Movements" sub={isDemo ? "demo history plus anything you did in this browser" : "from this browser; full history needs the indexer"}>
+          <SectionTitle title="Movements" sub={source === "demo" ? "demo history plus anything you did in this browser" : source === "chain" ? (indexedTo === null ? "from the chain, still indexing" : `from the chain, up to block ${indexedTo.toLocaleString("en-US")}`) : "from this browser; this coordinator doesn't serve chain history yet"}>
             <span className="flex items-center gap-3">
               <TextTabs label="Filter movements" value={filter} onChange={setFilter} items={[{ key: "all", label: "All", count: rows.length }, { key: "in", label: "In" }, { key: "out", label: "Out" }]} />
               <Button variant="ghost" icon={Download} onClick={() => exportCsv(rows)} disabled={rows.length === 0}>CSV</Button>
