@@ -1,16 +1,9 @@
 "use client";
-// Three takes on a round's progress for the Live rounds card: segmented phases, a station rail, and the roster grid. All read the same round, so switching compares form, not data.
-import { useEffect, useState } from "react";
+// A round's progress for the Live rounds card. Segments is the shipped form; rail and roster stay as variants of the same round.
 import type { Round, RoundStatus } from "@/lib/api/types";
 import { ROUND_LABEL, cx, short } from "./primitives";
 
 export type ProgressStyle = "segments" | "rail" | "roster";
-export const PROGRESS_STYLES: { key: ProgressStyle; label: string }[] = [
-  { key: "segments", label: "Segments" },
-  { key: "rail", label: "Rail" },
-  { key: "roster", label: "Roster" },
-];
-
 const PHASES: { key: RoundStatus; label: string }[] = [
   { key: "open", label: "Open" },
   { key: "committing", label: "Commit" },
@@ -125,43 +118,6 @@ function Roster({ round, r }: { round: Round; r: Read }) {
         <span className="flex items-center gap-1"><span className="size-2 rounded-xs bg-mosaic" aria-hidden />committed</span>
         <span className="flex items-center gap-1"><span className="size-2 rounded-xs bg-brand-cream" aria-hidden />revealed</span>
       </p>
-    </div>
-  );
-}
-
-const KEY = "tod.progress-style";
-
-/** The chosen variant, remembered per browser so a refresh keeps the comparison. */
-export function useProgressStyle(): [ProgressStyle, (s: ProgressStyle) => void] {
-  const [v, setV] = useState<ProgressStyle>("segments");
-  useEffect(() => {
-    try {
-      const s = localStorage.getItem(KEY);
-      if (s === "segments" || s === "rail" || s === "roster") setV(s);
-    } catch { /* storage blocked: stay on the default */ }
-  }, []);
-  const set = (s: ProgressStyle) => {
-    setV(s);
-    try { localStorage.setItem(KEY, s); } catch { /* storage blocked: the choice lasts this visit */ }
-  };
-  return [v, set];
-}
-
-export function ProgressSwitch({ value, onChange }: { value: ProgressStyle; onChange: (s: ProgressStyle) => void }) {
-  return (
-    <div role="radiogroup" aria-label="Progress style" className="inline-flex rounded-md border border-rule p-0.5">
-      {PROGRESS_STYLES.map((s) => (
-        <button
-          key={s.key}
-          type="button"
-          role="radio"
-          aria-checked={value === s.key}
-          onClick={() => onChange(s.key)}
-          className={cx("h-6 rounded-sm px-2 text-xs transition-colors duration-150", value === s.key ? "bg-active text-ink" : "text-muted hover:text-ink")}
-        >
-          {s.label}
-        </button>
-      ))}
     </div>
   );
 }

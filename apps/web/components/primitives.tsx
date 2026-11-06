@@ -2,6 +2,7 @@
 // Core primitives in the Neatlogs language (REVAMP-2 section 6): tinted pill badges, hairline cards, 32px controls, 40px table header, text tabs, steps, popovers, code panel, page states.
 import { StatePoster } from "@/components/mosaic/StatePoster";
 import { Flap } from "@/components/mosaic/Flap";
+import { Typer } from "@/components/mosaic/widgets";
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, ArrowUpRight, Check, ChevronDown, ChevronRight, CircleDashed, Copy, FlaskConical, Hash, ShieldCheck, type LucideIcon } from "lucide-react";
@@ -94,8 +95,30 @@ export function useCopy() {
   };
 }
 
-export function HashChip({ value, label }: { value: string | null; label?: string }) {
+/**
+ * Plays when a hash lands while you watch: a new value replacing an old one, or the first value arriving well after
+ * the chip mounted. A page that loads with its hashes already there stays still.
+ */
+function useLanded(value: string | null, land: boolean) {
+  const [play, setPlay] = useState(land && value ? 1 : 0);
+  const prev = useRef(value);
+  const mounted = useRef(0);
+  useEffect(() => {
+    mounted.current = performance.now();
+  }, []);
+  useEffect(() => {
+    const was = prev.current;
+    prev.current = value;
+    if (!value || was === value) return;
+    if (was !== null || performance.now() - mounted.current > 1500) setPlay((p) => p + 1);
+  }, [value]);
+  return play;
+}
+
+/** `land`: the chip mounts because its value just arrived (a frozen spec, a returned commit), so it types in on mount too. */
+export function HashChip({ value, label, land = false }: { value: string | null; label?: string; land?: boolean }) {
   const { copied, copy } = useCopy();
+  const landed = useLanded(value, land);
   if (value === null) return <Null>{label ? `No ${label} yet` : "Not set yet"}</Null>;
   return (
     <button
@@ -105,7 +128,7 @@ export function HashChip({ value, label }: { value: string | null; label?: strin
       aria-label={`Copy ${label ?? "hash"} ${value}`}
       className="group inline-flex h-6 items-center gap-1.5 rounded-md px-1.5 font-mono text-xs text-muted transition-colors hover:bg-band hover:text-ink"
     >
-      {short(value, 8, 6)}
+      <Typer text={short(value, 8, 6)} play={landed} per={22} />
       {copied ? <Check className="size-3 text-ok" aria-hidden /> : <Copy className="size-3 text-subtle group-hover:text-muted" aria-hidden />}
     </button>
   );

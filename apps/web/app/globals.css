@@ -646,3 +646,14 @@ details.more > summary::-webkit-details-marker { display: none; }
   &[data-dragging] { cursor: grabbing; }
   &:focus-visible { outline-offset: -2px; }
 }
+
+/* Typer (components/mosaic/widgets): a value landing letter by letter, each letter rolling through tile states first. */
+.mz-typer {
+  white-space: pre;
+  & > span { display: inline-block; border-radius: 2px; }
+  & > [data-s="wait"] { color: transparent; }
+  & > [data-s="pill"] { background: var(--mz-l4); color: var(--mz-l7); border-radius: 999px; }
+  & > [data-s="inverse"] { background: var(--mz-l7); color: var(--mz-ground); }
+  & > [data-s="accent"] { color: var(--mz-l5); }
+  & > [data-s="outline"] { box-shadow: inset 0 0 0 1px var(--mz-l5); color: var(--mz-l7); border-radius: 999px; }
+}

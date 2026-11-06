@@ -14,7 +14,7 @@ import { TxButton, TxStatus } from "@/components/flow";
 import { RoundTrack, WorkloadArt } from "@/components/pixel";
 import { Sparkline, toPoints } from "@/components/charts";
 import { HeroBanner } from "@/components/hero";
-import { ProgressSwitch, RoundProgress, useProgressStyle, type ProgressStyle } from "@/components/round-progress";
+import { RoundProgress } from "@/components/round-progress";
 import { useLedger } from "@/features/me/Overview";
 import type { Job, Round } from "@/lib/api/types";
 import {
@@ -287,7 +287,7 @@ function NetworkStrip({ withRecycled = false }: { withRecycled?: boolean }) {
         <dl className="grid grid-cols-2 gap-x-6 gap-y-5 md:grid-stats md:items-end md:divide-x md:divide-rule-row">
           {/* Lead figure: who is online is the network's pulse, so it is the one big number. */}
           <div className="col-span-2 flex flex-col gap-2 md:col-span-1">
-            <dt className="text-xs text-muted">Nodes online</dt>
+            <dt className="text-sm text-muted">Nodes online</dt>
             <dd className="flex items-baseline gap-2 font-mono text-2xl tabular text-ink">
               {pool.data ? pool.data.data.online : <Null>Unknown</Null>}
               {pool.data && <span className="text-sm text-subtle">{pool.data.data.online - pool.data.data.idle} training · {pool.data.data.idle} idle</span>}
@@ -307,12 +307,12 @@ function NetworkStrip({ withRecycled = false }: { withRecycled?: boolean }) {
   );
 }
 
-/** A secondary figure in the network strip. "lg" is the money line, one step under the lead; the rest sit at body-title size. */
+/** A secondary figure in the network strip. "lg" is the money line, at the lead's size; the rest sit one step under. */
 function Stat({ label, value, size = "md" }: { label: string; value: React.ReactNode; size?: "md" | "lg" }) {
   return (
     <div className="flex flex-col gap-1.5 md:pl-6">
-      <dt className="text-xs text-muted">{label}</dt>
-      <dd className={cx("font-mono tabular text-ink", size === "lg" ? "text-xl" : "text-lg")}>{value}</dd>
+      <dt className="text-sm text-muted">{label}</dt>
+      <dd className={cx("font-mono tabular text-ink", size === "lg" ? "text-2xl" : "text-xl")}>{value}</dd>
     </div>
   );
 }
@@ -335,11 +335,9 @@ function NodeTiles({ online, idle }: { online: number; idle: number }) {
 function LiveRounds() {
   const jobs = useJobs();
   const running = (jobs.data?.data ?? []).filter((j) => j.status === "running");
-  const [style, setStyle] = useProgressStyle();
   return (
     <Card className="flex flex-col gap-5 p-5">
       <SectionTitle title="Live rounds" sub={`${running.length} jobs training now`}>
-        <ProgressSwitch value={style} onChange={setStyle} />
         <Link href="/jobs?scope=all" className="inline-flex min-h-6 items-center gap-1 text-sm text-muted hover:text-ink">all jobs <ArrowRight className="size-3.5" /></Link>
       </SectionTitle>
       {jobs.isPending ? (
@@ -348,14 +346,14 @@ function LiveRounds() {
         <EmptyState icon={Layers} poster="IDLE" title="No rounds running">When a job draws its roster, the round shows up here.</EmptyState>
       ) : (
         <ul className="flex flex-col divide-y divide-rule">
-          {running.map((j) => <LiveRow key={j.id} job={j} style={style} />)}
+          {running.map((j) => <LiveRow key={j.id} job={j} />)}
         </ul>
       )}
     </Card>
   );
 }
 
-function LiveRow({ job, style }: { job: Job; style: ProgressStyle }) {
+function LiveRow({ job }: { job: Job }) {
   const r = useRound(job.id, job.currentRound);
   const rd = r.data?.data;
   return (
@@ -367,8 +365,8 @@ function LiveRow({ job, style }: { job: Job; style: ProgressStyle }) {
         </Link>
         {rd && <RoundStatusPill status={rd.status} />}
       </div>
-      {r.isPending ? <Skeleton className="h-6 w-full" /> : <RoundProgress round={rd ?? null} variant={style} />}
-      {rd && style !== "roster" && (
+      {r.isPending ? <Skeleton className="h-6 w-full" /> : <RoundProgress round={rd ?? null} variant="segments" />}
+      {rd && (
         <p className="font-mono text-xs text-subtle">
           {rd.committed.length}/{rd.roster.length} committed · {rd.revealed.length}/{rd.roster.length} revealed
         </p>

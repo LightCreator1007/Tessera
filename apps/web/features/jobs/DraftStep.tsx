@@ -5,7 +5,7 @@ import { useMutation } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/api/client";
 import type { Draft, DraftRequest } from "@/lib/api/types";
 import { draftRounds } from "@/lib/api/draft";
-import { Banner, Button, Money, PropRow } from "@/components/primitives";
+import { Banner, Button, HashChip, Money, PropRow } from "@/components/primitives";
 import { More } from "@/components/flow";
 import { TileScanner } from "@/components/mosaic/widgets";
 
@@ -72,6 +72,7 @@ export function DraftStep({ req, onDraft }: { req: DraftRequest | null; onDraft:
         {rounds ? <PropRow label="Each round pays"><Money units={Math.floor(d.budget / rounds)} /></PropRow> : null}
         {rounds ? <PropRow label="Each node, per round">up to <Money units={Math.floor(d.budget / rounds / quorum)} /></PropRow> : null}
         <PropRow label="Each node stakes"><Money units={d.minStake} /></PropRow>
+        <PropRow label="Frozen spec"><HashChip value={d.modelSpecHash} label="spec hash" land /></PropRow>
       </dl>
       <More label="Why this price?">
         <p>1 TOD pays for at least 1 Gop, a billion float operations of training that verifiers replay. The coordinator counts the operations from the spec, so nobody types a budget and nobody can underpay. With more nodes than {quorum} in a round, each one is paid less, and a TOD still buys at least a Gop.</p>
