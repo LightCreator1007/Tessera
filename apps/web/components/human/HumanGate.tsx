@@ -21,7 +21,7 @@ export function HumanGate({ intro }: { intro: string }) {
     <div className="flex flex-col items-start gap-3">
       <p className="max-w-md text-sm leading-relaxed text-muted">{intro}</p>
       <ButtonLink variant="primary" icon={ScanFace} href={`/join/verify?next=${encodeURIComponent(here)}`}>Verify with World ID</ButtonLink>
-      <span className="text-xs text-subtle">A selfie in World App, about a minute. You come back here after.</span>
+      <span className="text-xs text-subtle">Approve the World ID request on your phone, then return here.</span>
     </div>
   );
 }
