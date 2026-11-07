@@ -51,3 +51,9 @@ The public coordinator (`docker/compose.prod.yml`) runs World ID Sandbox for the
   - Our first invite failed onchain with `BadSignature`, because the coordinator's admitter key didn't match the one the registry was deployed with. That one was ours, so the coordinator now refuses to start with the wrong admitter.
 - **Missing:** a server-side verify example in Python (ours was written from the HTTP docs), and a clear table of which credentials the staging simulator can actually produce.
 - **Highest-impact improvement:** have the simulator produce every credential the docs offer, or say up front which ones it can't, so teams don't build around a credential they can't test.
+
+## Demo bypass
+
+With `WALLET_BYPASS=on` the coordinator adds `POST /v1/identity/bypass`, and `/v1/identity/config` reports `walletBypass: true`. The verify page then shows "Skip World ID (demo)" next to the World ID button. It records the wallet as one person with the `dev` credential (the same record `/v1/identity/admit` writes), so joining and entering competitions read it like any other verified wallet. World ID itself is unchanged and still works for anyone who uses it.
+
+It is weaker than World ID: it doesn't prove the caller owns the address, one person can use several wallets, and a wallet bypassed this way can't later link a World ID (409). Leave it `off` outside demos.
