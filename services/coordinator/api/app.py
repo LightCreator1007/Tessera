@@ -85,7 +85,8 @@ def health():
 def get_config():
     return Config(chainId=config.CHAIN_ID, jobMarket=config.JOB_MARKET, nodeRegistry=config.NODE_REGISTRY,
                   token=config.TOKEN, coordinator=config.COORDINATOR, verifiers=config.VERIFIERS,
-                  threshold=config.THRESHOLD, competitions=config.COMPETITIONS or None)
+                  threshold=config.THRESHOLD, competitions=config.COMPETITIONS or None,
+                  rlCompetitions=config.RL_COMPETITIONS or None)
 
 
 @v1.get("/workloads", response_model=list[Workload])
