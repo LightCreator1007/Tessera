@@ -96,11 +96,11 @@ export function HumanCheck({ onVerified, intro, split }: { onVerified?: (v: Veri
   useEffect(() => { if (opening) idk.open(); }, [opening]);
 
   const failWith = (f: Fail) => { setFail(f); setStage("failed"); };
-  const submit = async (proof: unknown, demoFail?: FailKind) => {
+  const submit = async (proof: unknown, demoFail?: FailKind, bypass?: boolean) => {
     if (!owner) return;
     setStage("submitting");
     try {
-      const v = await submitProof(owner, proof, demoFail);
+      const v = await submitProof(owner, proof, demoFail, bypass);
       setDone(v);
       setStage("verified");
       onVerified?.(v);
@@ -222,6 +222,11 @@ export function HumanCheck({ onVerified, intro, split }: { onVerified?: (v: Veri
     return null;
   })();
 
+  // Demo switch: the coordinator lets this wallet skip World ID. The World ID path above stays as it is.
+  const skip = cfg.walletBypass && owner && (shownStage === "idle" || shownStage === "scan" || shownStage === "failed") ? (
+    <Button variant="ghost" onClick={() => { idk.reset(); void submit({}, undefined, true); }}>Skip World ID (demo)</Button>
+  ) : null;
+
   const demo = cfg.mode === "demo" && owner && (shownStage === "scan" || shownStage === "idle") && (
     <div className="flex flex-wrap items-center gap-2 border-t border-dashed border-rule pt-4">
       {shownStage === "idle" && <Chip onClick={() => failWith({ kind: "no_credential", detail: "" })}>no World ID yet</Chip>}
@@ -257,7 +262,7 @@ export function HumanCheck({ onVerified, intro, split }: { onVerified?: (v: Veri
           <Pill tone="neutral">{CREDENTIAL_LABEL[credential]}</Pill>
         </div>
       )}
-      {actions && <div className="flex flex-wrap items-center gap-3">{actions}</div>}
+      {(actions || skip) && <div className="flex flex-wrap items-center gap-3">{actions}{skip}</div>}
       {owner && cfg.mode !== "dev" && (shownStage === "idle" || shownStage === "scan" || (shownStage === "failed" && fail?.kind === "no_credential")) && !staging && <GetWorldApp sandbox={sandbox} />}
       {shownStage !== "verified" && (
         <More label="What does World ID see?">

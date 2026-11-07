@@ -31,6 +31,8 @@ PASS_TTL = 24 * 3600  # s; an EntryPass is reused for every competition the wall
 DEV_CHAIN = 31337
 
 MODE = os.environ.get("IDENTITY_MODE", "dev")
+# Demo switch: lets a wallet skip World ID. World ID stays on for anyone who wants it. Off unless set to "on".
+BYPASS = os.environ.get("WALLET_BYPASS", "off") == "on"
 # Same name as .env.example. On anvil the deploy script registers dev_key("admitter"), so that is the fallback;
 # anywhere else a missing key would sign Invites the registry rejects.
 _admitter_key = os.environ.get("ADMITTER_PRIVATE_KEY")
@@ -137,6 +139,7 @@ class IdentityConfig(BaseModel):
     rpId: str
     action: str
     environment: str
+    walletBypass: bool = False  # the site offers "skip World ID" when this is on
 
 
 class EntryPassRequest(BaseModel):
@@ -192,7 +195,7 @@ def verify_human(owner: str, proof: dict) -> tuple[str, str]:
 def identity_config():
     """What the web join page needs to open IDKit (none of it is secret)."""
     return IdentityConfig(mode=MODE, appId=worldid.APP_ID, rpId=worldid.RP_ID, action=worldid.ACTION,
-                          environment=worldid.ENVIRONMENT)
+                          environment=worldid.ENVIRONMENT, walletBypass=BYPASS)
 
 
 @router.get("/test", response_class=HTMLResponse, include_in_schema=False)
@@ -486,16 +489,33 @@ class AdmitRequest(BaseModel):
     owner: str
 
 
+def admit_wallet(owner: str) -> str:
+    """Records a wallet as one person without a World ID proof, under the same one-wallet-one-person rules. Returns its nullifier."""
+    exclusions.refuse(owner)
+    nullifier = "0x" + k256(b"tod-admit" + bytes.fromhex(owner[2:])).hex()
+    record_human(owner, nullifier, "dev", joined=False)
+    return nullifier
+
+
 @router.post("/admit", status_code=201, dependencies=[Depends(auth.admin)])
 def admit(req: AdmitRequest):
     """Team action for a demo: record a wallet as one person without World ID, e.g. a teammate the simulator can't
     tell apart. It takes the same one-wallet-one-person rules, shows as a dev identity, and World ID stays on for
     everyone else."""
     owner = checked_owner(req.owner)
-    exclusions.refuse(owner)
-    nullifier = "0x" + k256(b"tod-admit" + bytes.fromhex(owner[2:])).hex()
-    record_human(owner, nullifier, "dev", joined=False)
+    admit_wallet(owner)
     return {"owner": owner, "verified": True, "credential": "dev"}
+
+
+@router.post("/bypass", response_model=VerifyResponse)
+def bypass(req: AdmitRequest):
+    """Demo only (WALLET_BYPASS=on): the wallet's owner skips World ID from the site. It shows as a dev identity, and a
+    wallet already tied to a World ID is refused. It doesn't prove the caller owns the address, so keep it off outside demos."""
+    if not BYPASS:
+        raise HTTPException(403, "wallet bypass is off on this coordinator")
+    owner = checked_owner(req.owner)
+    nullifier = admit_wallet(owner)
+    return VerifyResponse(owner=owner, nullifier=nullifier, credential="dev", sybilScore=None)
 
 
 class ExclusionRequest(BaseModel):

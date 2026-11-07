@@ -5,7 +5,8 @@ import { ApiError, COORD_BASE, isDemo, request } from "@/lib/api/client";
 import { setWallet, useWallet } from "@/lib/wallet";
 
 export type IdentityMode = "dev" | "worldid" | "demo";
-export type IdentityConfig = { mode: IdentityMode; appId: string; rpId: string; action: string; environment: string };
+/** `walletBypass`: the coordinator lets a wallet skip World ID (a demo switch). */
+export type IdentityConfig = { mode: IdentityMode; appId: string; rpId: string; action: string; environment: string; walletBypass?: boolean };
 export type Credential = "orb" | "selfie" | "dev";
 export type HumanStatus = {
   owner: string;
@@ -126,7 +127,7 @@ export type Verified = { owner: string; nullifier: string; credential: Credentia
 /** Hands the IDKit result to the coordinator, which checks it with World and records one human for this wallet. */
 export function useSubmitProof() {
   const qc = useQueryClient();
-  return async (owner: string, proof: unknown, demoFail?: FailKind): Promise<Verified> => {
+  return async (owner: string, proof: unknown, demoFail?: FailKind, bypass?: boolean): Promise<Verified> => {
     let out: Verified;
     if (isDemo) {
       await wait(1100);
@@ -134,7 +135,7 @@ export function useSubmitProof() {
       const picked = (proof as { demoCredential?: Credential } | null)?.demoCredential ?? "orb";
       out = { owner, nullifier: "0x" + "d3".repeat(32), credential: picked, sybilScore: picked === "selfie" ? 1 : null };
     } else {
-      out = await call<Verified>("/verify", { owner, proof: proof ?? {} });
+      out = bypass ? await call<Verified>("/bypass", { owner }) : await call<Verified>("/verify", { owner, proof: proof ?? {} });
     }
     setWallet({ personVerified: true, personCredential: out.credential === "selfie" ? "selfie" : "orb" });
     qc.setQueryData(["identity", "owner", owner.toLowerCase()], (s: HumanStatus | undefined) => ({
