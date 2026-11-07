@@ -479,6 +479,22 @@ class Evidence(BaseModel):
     operator: str
 
 
+class AdmitRequest(BaseModel):
+    owner: str
+
+
+@router.post("/admit", status_code=201, dependencies=[Depends(auth.admin)])
+def admit(req: AdmitRequest):
+    """Team action for a demo: record a wallet as one person without World ID, e.g. a teammate the simulator can't
+    tell apart. It takes the same one-wallet-one-person rules, shows as a dev identity, and World ID stays on for
+    everyone else."""
+    owner = checked_owner(req.owner)
+    exclusions.refuse(owner)
+    nullifier = "0x" + k256(b"tod-admit" + bytes.fromhex(owner[2:])).hex()
+    record_human(owner, nullifier, "dev", joined=False)
+    return {"owner": owner, "verified": True, "credential": "dev"}
+
+
 class ExclusionRequest(BaseModel):
     owner: str
     reason: str  # shown to the owner and in status; link the confirmed rounds here
