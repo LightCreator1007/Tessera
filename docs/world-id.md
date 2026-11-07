@@ -40,7 +40,7 @@ The client never decides anything. Its result only counts after the coordinator 
 
 The coordinator side is complete and tested (`services/coordinator/identity/test_worldid.py` and `services/coordinator/identity/test_identity.py`). On World ID staging it was verified live on 6 November with the simulator's Proof of Human: the coordinator verified the proof with World and signed an invite. The coordinator's `/v1/identity/test` page runs the whole join with IDKit, or gets a competition entry pass (see docs/competitions.md). On 7 November an entry pass from the simulator's Proof of Human entered competition 3 on the local chain: the contract bound that World ID nullifier to the entrant's wallet, and the same pass from another wallet reverted `BadPass`. IDKit in the main web app's join flow is in progress (#119). For a local demo, `docker/compose.worldid.yml` switches the dev stack from dev mode to World ID staging.
 
-The public coordinator (`docker/compose.prod.yml`) now runs with `IDENTITY_MODE=wallet`: any wallet joins the pool or enters a competition without World ID, and the coordinator derives a nullifier from the wallet address. That ties each wallet to one identity, not each person. Set `IDENTITY_MODE=worldid` to turn World ID back on.
+The public coordinator (`docker/compose.prod.yml`) now runs with `IDENTITY_MODE=wallet`: any wallet joins the pool or enters a competition without World ID, and the coordinator derives a nullifier from the wallet address. That keeps one seat per wallet but not one per person. Set `IDENTITY_MODE=worldid` to turn World ID back on.
 
 ## Integration debrief
 
