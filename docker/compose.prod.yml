@@ -17,18 +17,20 @@ services:
     environment:
       TOD_NETWORK: base-sepolia-demo
       CHAIN_ID: "84532"
-      JOB_MARKET: "0xa4acE0e126B0B3b021f501DDE6a506cafDdA1581"
-      NODE_REGISTRY: "0x09570EEa33b199aC6C5Ce5d6f2934eA6EfFadC34"
+      JOB_MARKET: "0xC012B85B927b131f1c2ed754A9D94Ba251646832"
+      NODE_REGISTRY: "0xcd7ebaa5754829514EcE6AEc0DC32a822DcDBa68"
       TOKEN: "0xfFa825C3C07B2B334D80aa730100c3D9320AE44b"
       COMPETITIONS: "0xE12b72Be73a68811f118AB246044C773241EECBB"
+      RL_COMPETITIONS: "0x1795996474Efbec26B82EDa26804CCf68c926E03"
       VERIFIERS: "0x2bf8af09b6c43D1b58A9c5f764DF402239b34E21,0x5500a0eb5C940d2227232f2B4Bcde7F4B4D3DD77"
       IDENTITY_MODE: worldid
       WORLD_ID_ENV: production  # real World App proofs; the staging simulator gives every identity one nullifier
       PUBLIC_URL: "https://${SITE:?run docker/prod-up.sh, which sets this}"
       STORE_DIR: /data/store
-      DB_PATH: /data/coordinator.db
+      # Keep simulator identities and old job IDs out of the replacement market; retain the old database for rollback.
+      DB_PATH: /data/coordinator-c012b85b.db
       DATASET_CACHE: /data/datasets
-      DRIVER_JOURNAL_DIR: /data/journal-driver
+      DRIVER_JOURNAL_DIR: /data/journal-driver-c012b85b
       TOPUP_JOURNAL_DIR: /data/journal-topup
       # About 8M gas at 0.006 gwei. The faucet wallet can't cover the 0.001 ETH default.
       TOPUP_TARGET_WEI: "50000000000000"
@@ -46,7 +48,7 @@ services:
     build: {context: .., dockerfile: docker/app.Dockerfile, args: {APP: verifier}}
     command: [run, --key-env, VERIFIER_A_PRIVATE_KEY]
     env_file: ["${TESSERA_ENV:-/etc/tessera}/verifier-a.env"]
-    environment: {TOD_NETWORK: base-sepolia-demo, TOD_COORDINATOR: "http://coordinator:8000", TOD_VERIFIER_DATA: /data}
+    environment: {TOD_NETWORK: base-sepolia-demo, TOD_COORDINATOR: "http://coordinator:8000", TOD_VERIFIER_DATA: /data/c012b85b}
     volumes: [verifier-a-data:/data]
     depends_on: {coordinator: {condition: service_healthy}}
 

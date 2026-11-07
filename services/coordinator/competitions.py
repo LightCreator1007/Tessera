@@ -4,6 +4,8 @@ import threading
 import time
 from dataclasses import dataclass, field
 
+from requests import HTTPError
+
 from api import config
 
 TTL = 5  # s; a page polls every few seconds, and there are only ever a handful of competitions
@@ -136,13 +138,28 @@ def _block_time(w3, block: int) -> int:
     return _block_times[block]
 
 
+def event_logs(ledger, con, event: str):
+    """Keep competition scans within the network RPC's block range limit."""
+    end = ledger.w3.eth.block_number
+    span = max(1, ledger.net.log_span)
+    for start in range(ledger.net.deploy_block, end + 1, span):
+        for attempt in range(5):
+            try:
+                page = getattr(con.events, event)().get_logs(from_block=start, to_block=min(start + span - 1, end))
+                break
+            except HTTPError as e:
+                if getattr(e.response, "status_code", None) != 429 or attempt == 4:
+                    raise
+                time.sleep(0.5 * 2 ** attempt)
+        yield from page
+
+
 def build(ledger) -> list[dict]:
     con = _contract(ledger)
     w3 = ledger.w3
-    start = ledger.net.deploy_block
 
     def logs(ev, timed=False) -> list[Log]:
-        found = sorted(getattr(con.events, ev)().get_logs(from_block=start), key=lambda e: (e.blockNumber, e.logIndex))
+        found = sorted(event_logs(ledger, con, ev), key=lambda e: (e.blockNumber, e.logIndex))
         return [Log(dict(e.args), e.blockNumber, e.logIndex, "0x" + bytes(e.transactionHash).hex(),
                     _block_time(w3, e.blockNumber) if timed else None) for e in found]
 

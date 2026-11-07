@@ -4,7 +4,7 @@ chainId = 84532
 rpc = "https://sepolia.base.org"
 rpcEnv = "BASE_SEPOLIA_RPC_URL"
 verifierUrl = "https://base-sepolia.blockscout.com/api/"
-logSpan = 200
+logSpan = 10000
 probationSeconds = 0
 threshold = 2
 
@@ -22,12 +22,12 @@ verifiers = ["0x2bf8af09b6c43D1b58A9c5f764DF402239b34E21", "0x5500a0eb5C940d2227
 
 [contracts]
 token = "0xfFa825C3C07B2B334D80aa730100c3D9320AE44b"
-registry = "0x09570EEa33b199aC6C5Ce5d6f2934eA6EfFadC34"
-market = "0xa4acE0e126B0B3b021f501DDE6a506cafDdA1581"
+registry = "0xcd7ebaa5754829514EcE6AEc0DC32a822DcDBa68"
+market = "0xC012B85B927b131f1c2ed754A9D94Ba251646832"
 faucet = "0x85359b52D9705F835C57591C7337B0C2e60B55fA"
 exchange = "0xBC202C5B2c239298041f191Bc90cBBC25Ec17Aa8"
 testUSDC = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
 competitions = "0xE12b72Be73a68811f118AB246044C773241EECBB"
-# Where chain scans start. The real deploy block is 55089330, but the only event before this one is MarketSet, which
-# nothing reads, and scanning that gap took every node and service over 1,400 pages on each start.
-deployBlock = 55377000
+rlCompetitions = "0x1795996474Efbec26B82EDa26804CCf68c926E03"
+# The new registry's deployment block. No competitions existed when this market replaced the old one.
+deployBlock = 55469058
