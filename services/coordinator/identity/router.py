@@ -170,6 +170,8 @@ class JoinResponse(BaseModel):
 
 
 def decode_pairing_code(code: str) -> dict:
+    # A long code copied from a wrapped terminal line picks up newlines or spaces; base64 would count them as padding.
+    code = "".join(code.split())
     if not code.startswith(PAIR_PREFIX):
         raise ValueError("not a tod pairing code")
     body = code[len(PAIR_PREFIX):]

@@ -79,6 +79,12 @@ def test_one_nullifier_per_human_but_many_operators(owner, monkeypatch):
     assert join(other, pairing_code(Account.create(), other, now + 1800)).status_code == 409
 
 
+def test_a_code_pasted_with_line_breaks_and_spaces_still_joins(owner):
+    code = pairing_code(Account.create(), owner, int(time.time()) + 1800)
+    wrapped = " " + code[:40] + "\n" + code[40:90] + "\r\n  " + code[90:] + " \n"
+    assert join(owner, wrapped).status_code == 200
+
+
 def test_dev_mode_refused_off_local_chain(owner, monkeypatch):
     monkeypatch.setattr(config, "CHAIN_ID", 84532)
     assert join(owner, pairing_code(Account.create(), owner, int(time.time()) + 1800)).status_code == 403
