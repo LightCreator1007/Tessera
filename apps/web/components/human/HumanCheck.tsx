@@ -82,9 +82,10 @@ export function HumanCheck({ onVerified, intro, split }: { onVerified?: (v: Veri
     app_id: (cfg.appId || "app_unset") as `app_${string}`,
     action: cfg.action,
     rp_context: rp ?? PLACEHOLDER_RP,
-    // Keep one World ID 4.0 nullifier scheme. The team's Sandbox app has no Selfie Check enabled.
+    // Either credential counts: an Orb proof if the person has one, else a Selfie Check (no Orb needed), Sandbox included.
+    // Selfie Check is a World ID 4.0 credential, so legacy 3.0 proofs are off (World's docs require this for selfie).
     allow_legacy_proofs: false,
-    constraints: sandbox ? humanProof : any(
+    constraints: any(
       humanProof,
       CredentialRequest("selfie", { signal: owner ? signalFor(owner) : "" }),
     ),
@@ -183,7 +184,7 @@ export function HumanCheck({ onVerified, intro, split }: { onVerified?: (v: Veri
         body: <>This pool runs World ID staging, so World App on a phone can&apos;t answer it. Open the simulator, scan this code or paste the copied request, and approve Proof of Human. No Orb or selfie needed.</>,
       } : sandbox ? {
         title: "Scan with World ID Sandbox",
-        body: <>Open the Sandbox app on your phone, scan this code, and approve Proof of Human (Orb) with your test credential.</>,
+        body: <>Open the Sandbox app on your phone, scan this code, and approve Proof of Human (Orb) or Selfie Check with your test credential.</>,
       } : {
         title: "Scan with World App",
         body: <><span className="hidden md:inline">Open World App on your phone and scan this code. </span><span className="md:hidden">Open World App to continue. </span>It takes a quick selfie, or uses your Orb verification if you have one. Your face never leaves your phone.</>,
@@ -195,12 +196,12 @@ export function HumanCheck({ onVerified, intro, split }: { onVerified?: (v: Veri
         body: <>This wallet is the only one tied to you. You won&apos;t be asked again: joining the pool and entering competitions both read this.</>,
       };
       case "failed": return sandbox && fail?.kind === "no_credential" ? {
-        title: "Proof of Human isn't available in this Sandbox account",
-        body: <>Set up the test Proof of Human (Orb) credential in World ID Sandbox, then return and scan a fresh code.</>,
+        title: "No Proof of Human or Selfie Check in this Sandbox account",
+        body: <>Set up a test Proof of Human (Orb) or Selfie Check credential in World ID Sandbox, then return and scan a fresh code.</>,
       } : fail ? { title: COPY[fail.kind].title, body: COPY[fail.kind].body(fail.detail) } : { title: "", body: null };
       default: return {
         title: "Prove you're one person",
-        body: intro ?? (sandbox ? <>This test pool uses Proof of Human (Orb) from your World ID Sandbox account. Approve the request on your phone to link the test credential to this wallet.</> : <>One person, one seat. World ID proves you&apos;re a unique human without telling Tessera who you are, so nobody can run a fleet of fake laptops or enter a competition twice. {staging ? <>This pool runs World ID staging: you approve in World&apos;s simulator in your browser, no phone needed.</> : <>A selfie in World App is enough; an Orb verification works too.</>}</>),
+        body: intro ?? (sandbox ? <>This test pool accepts Proof of Human (Orb) or Selfie Check from your World ID Sandbox account. Approve the request on your phone to link the test credential to this wallet.</> : <>One person, one seat. World ID proves you&apos;re a unique human without telling Tessera who you are, so nobody can run a fleet of fake laptops or enter a competition twice. {staging ? <>This pool runs World ID staging: you approve in World&apos;s simulator in your browser, no phone needed.</> : <>A selfie in World App is enough; an Orb verification works too.</>}</>),
       };
     }
   })();
@@ -391,7 +392,7 @@ function GetWorldApp({ sandbox }: { sandbox: boolean }) {
       <div className="flex items-start gap-4">
         <div className="hidden size-24 shrink-0 md:block"><TileQR value={url} /></div>
         <div className="flex flex-col gap-2">
-          <p>{sandbox ? "Install World ID Sandbox through your tester invitation and set up its test Proof of Human (Orb) credential. Then return here and start a new request." : "World App is free on iPhone and Android. Install it, set up World ID with a selfie (about a minute, no Orb needed), then come back to this page. It keeps your place."}</p>
+          <p>{sandbox ? "Install World ID Sandbox through your tester invitation and set up a test Proof of Human (Orb) or Selfie Check credential. Then return here and start a new request." : "World App is free on iPhone and Android. Install it, set up World ID with a selfie (about a minute, no Orb needed), then come back to this page. It keeps your place."}</p>
           <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 self-start text-ink underline decoration-subtle underline-offset-4 hover:decoration-ink">
             {sandbox ? "Sandbox setup" : "Get World App"} <ArrowUpRight className="size-3.5" aria-hidden />
           </a>
