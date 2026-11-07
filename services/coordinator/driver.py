@@ -53,10 +53,10 @@ class Driver:
     market and registry are tod_core.ledger bindings that send from the coordinator key.
     """
 
-    def __init__(self, ledger, store, datasets, fleet=nodes.heartbeats, credentials=identity.credentials,
+    def __init__(self, ledger, store, datasets, fleet=nodes.heartbeats, excluded=identity.exclusions.owners,
                  now=time.time):
         self.l, self.store, self.datasets = ledger, store, datasets
-        self.fleet, self.credentials, self.now = fleet, credentials, now
+        self.fleet, self.excluded, self.now = fleet, excluded, now
         self.state = ChainState()
         self._data: dict[str, tuple] = {}
 
@@ -233,7 +233,7 @@ class Driver:
         workloads = {job: spec["workload"]["id"] for job in self.state.jobs if (spec := self.spec(job))}
         now, stalled = int(self.now()), {}
         rosters = scheduler.queue(self.state, scheduler.rebuild(self.state), self.fleet(), now, workloads,
-                                  tables.CONTROL, self.credentials(), stalled)
+                                  tables.CONTROL, self.excluded(), stalled)
         # Keep the first time each job was seen stuck, so "waiting since" doesn't reset every tick.
         for job, d in stalled.items():
             if job not in tables.STALLED:

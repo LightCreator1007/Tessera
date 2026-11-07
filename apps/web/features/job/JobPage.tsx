@@ -185,7 +185,7 @@ const BLOCKED: Record<BlockReason, (n: number) => string> = {
   notJoined: (n) => `${n} not joined yet`,
   selftest: (n) => `${n} without a passing self-test`,
   benched: (n) => `${n} benched after missed rounds`,
-  credential: (n) => `${n} missing a credential this workload needs`,
+  excluded: (n) => `${n} from owners excluded for cheating`,
   sameOwner: (n) => `${n} sharing an owner with a counted node`,
 };
 

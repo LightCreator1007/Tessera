@@ -2,13 +2,13 @@
 from types import SimpleNamespace as NS
 
 from api import tables
-from scheduler import ORB_MIN_BUDGET, diagnose, pick, queue, rebuild
+from scheduler import diagnose, pick, queue, rebuild
 from tod_core.ledger import ChainState, JobStatus, RoundStatus
 
 NOW = 1000
 OPS = ["0x" + f"{i:02x}" * 20 for i in range(1, 7)]
 P = NS(stakePerNode=15, minQuorum=2, maxPerRound=3, shards=5, budget=100 * 10**6)
-CREDS = dict.fromkeys(OPS, "selfie")  # each test node is its own owner
+NONE: set[str] = set()  # no excluded owners
 
 
 def state(rounds=()):
@@ -28,8 +28,8 @@ def fleet(**changes):
     return f
 
 
-def match(s, f=None, creds=CREDS):
-    return pick(s, rebuild(s), 1, fleet() if f is None else f, NOW, "w", creds)
+def match(s, f=None, excluded=NONE):
+    return pick(s, rebuild(s), 1, fleet() if f is None else f, NOW, "w", excluded)
 
 
 def test_idle_nodes_go_first_sorted_by_address_on_the_least_recent_shards():
@@ -51,11 +51,11 @@ def test_two_missed_commits_bench_a_node_until_rearm(monkeypatch):
     s = state([(OPS[0:3], [0, 1, 2], OPS[1:3], b"\0" * 32), (OPS[0:3], [3, 4, 0], OPS[1:3], b"\0" * 32)])
     sc = rebuild(s)
     assert tables.MISSED[OPS[0]] == 2
-    assert OPS[0] not in pick(s, sc, 1, fleet(), NOW, "w", CREDS)[0]
+    assert OPS[0] not in pick(s, sc, 1, fleet(), NOW, "w", NONE)[0]
     monkeypatch.setitem(tables.REARMED, OPS[0], 2)  # POST /v1/admin/nodes/{op}/rearm after both rounds opened
     sc = rebuild(s)  # the driver rebuilds every tick, and the re-arm must survive that
     two = {op: v for op, v in fleet().items() if op in OPS[:2]}  # two nodes online, quorum 2: OPS[0] must be seated
-    assert OPS[0] in pick(s, sc, 1, two, NOW, "w", CREDS)[0]
+    assert OPS[0] in pick(s, sc, 1, two, NOW, "w", NONE)[0]
 
 
 def test_rebuild_after_a_restart_picks_the_same_roster():
@@ -71,7 +71,7 @@ def test_queue_serves_the_best_price_first_and_a_node_works_one_job():
                         "status": RoundStatus.OPEN}  # job 4 has a round in flight
     s.jobs[4]["nextRound"] = 2
     s.jobs[5]["roundsOpened"] = 4  # job 5 has used all its rounds
-    out = queue(s, rebuild(s), fleet(), NOW, dict.fromkeys(s.jobs, "w"), {3: {"auto": True, "paused": True}}, CREDS)
+    out = queue(s, rebuild(s), fleet(), NOW, dict.fromkeys(s.jobs, "w"), {3: {"auto": True, "paused": True}}, NONE)
     assert [j for j, *_ in out] == [2, 1]  # 3 paused, 4 in flight, 5 done; six nodes fill two rosters of three
     assert not set(out[0][1]) & set(out[1][1])
 
@@ -80,17 +80,15 @@ def test_equal_price_goes_to_the_older_job():
     s = state()
     s.jobs = {j: {"params": NS(**{**vars(P), "rounds": 4}), "status": JobStatus.ACTIVE, "remaining": 800,
                   "roundsOpened": 0, "nextRound": 1} for j in (7, 3)}
-    out = queue(s, rebuild(s), fleet(), NOW, dict.fromkeys(s.jobs, "w"), {}, CREDS)
+    out = queue(s, rebuild(s), fleet(), NOW, dict.fromkeys(s.jobs, "w"), {}, NONE)
     assert [j for j, *_ in out] == [3, 7]
 
 
-def test_big_jobs_need_an_orb_credential():
+def test_any_joined_owner_is_seated_except_an_excluded_one():
     s = state()
-    s.jobs[1] = {"params": NS(**{**vars(P), "budget": ORB_MIN_BUDGET})}
-    assert match(s) is None  # selfie only
-    assert match(s, creds={**CREDS, OPS[0]: "orb", OPS[1]: "orb"})[0] == OPS[:2]
-    s.jobs[1] = {"params": P}
-    assert match(s, creds={}) is None  # no recorded World ID is never matched
+    roster, _ = match(s)
+    assert OPS[0] in roster  # no World ID on record for anyone, still seated
+    assert OPS[0] not in match(s, excluded={OPS[0].lower()})[0]
 
 
 def test_one_seat_per_owner_so_open_round_cannot_revert():
@@ -115,7 +113,7 @@ def test_diagnose_counts_each_node_by_the_first_rule_it_fails():
     s.nodes[OPS[1]]["busyJob"] = 7
     s.nodes[OPS[5]]["joined"] = False
     f = fleet(**{OPS[2]: {"seen": NOW - 61}, OPS[3]: {"busy": True}, OPS[4]: {"selftest": {}}})
-    d = diagnose(s, rebuild(s), 1, f, NOW, "w", CREDS)
+    d = diagnose(s, rebuild(s), 1, f, NOW, "w", NONE)
     assert d == {"eligible": 0, "quorum": 2,
                  "blocked": {"stake": 1, "busy": 2, "offline": 1, "selftest": 1, "notJoined": 1}}
 
@@ -124,7 +122,7 @@ def test_diagnose_counts_one_seat_per_owner():
     s = state()
     for op in OPS[1:]:
         s.nodes[op]["owner"] = OPS[0]  # one person runs all six
-    d = diagnose(s, rebuild(s), 1, fleet(), NOW, "w", CREDS)
+    d = diagnose(s, rebuild(s), 1, fleet(), NOW, "w", NONE)
     assert d == {"eligible": 1, "quorum": 2, "blocked": {"sameOwner": 5}}
 
 
@@ -133,5 +131,5 @@ def test_queue_reports_the_jobs_it_could_not_seat():
     s.jobs[1].update(status=JobStatus.ACTIVE, roundsOpened=0, nextRound=1, remaining=100)
     s.jobs[1]["params"] = NS(**vars(P), rounds=4)
     stalled = {}
-    assert queue(s, rebuild(s), fleet(**{op: {"busy": True} for op in OPS[1:]}), NOW, {1: "w"}, {}, CREDS, stalled) == []
+    assert queue(s, rebuild(s), fleet(**{op: {"busy": True} for op in OPS[1:]}), NOW, {1: "w"}, {}, NONE, stalled) == []
     assert stalled == {1: {"eligible": 1, "quorum": 2, "blocked": {"busy": 5}}}

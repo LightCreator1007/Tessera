@@ -9,10 +9,6 @@ from tod_core.ledger import ChainState, JobStatus, RoundStatus
 ONLINE_WITHIN = 60  # s since the last heartbeat
 BENCH_AFTER = 2  # missed commits in a row before a node sits out until rearmed
 ZERO32 = b"\0" * 32
-# World ID credential strength. "dev" owners exist on the local chain, or were admitted by the team (/v1/identity/admit).
-CREDENTIAL_RANK = {"selfie": 1, "orb": 2, "dev": 2}
-# ponytail: provisional threshold (token units, 6 decimals); jobs at or above it need an Orb-verified owner
-ORB_MIN_BUDGET = 500 * 10**6
 
 
 @dataclass
@@ -45,8 +41,8 @@ def rebuild(state: ChainState) -> Sched:
     return s
 
 
-def _blocker(n: dict, hb: dict | None, p, sched: Sched, op: str, now: int, workload: str, credentials: dict,
-             need: int) -> str | None:
+def _blocker(n: dict, hb: dict | None, p, sched: Sched, op: str, now: int, workload: str,
+             excluded: set[str]) -> str | None:
     """Why this node can't be seated in the job's next round, or None if it can. The first failing rule wins."""
     if not n["joined"]:
         return "notJoined"
@@ -60,27 +56,22 @@ def _blocker(n: dict, hb: dict | None, p, sched: Sched, op: str, now: int, workl
         return "selftest"
     if sched.missed.get(op.lower(), 0) >= BENCH_AFTER:
         return "benched"
-    if CREDENTIAL_RANK.get(credentials.get(n["owner"].lower()), 0) < need:
-        return "credential"
+    if n["owner"].lower() in excluded:
+        return "excluded"
     return None
 
 
-def _need(p) -> int:
-    return CREDENTIAL_RANK["orb" if p.budget >= ORB_MIN_BUDGET else "selfie"]
-
-
-def pick(state: ChainState, sched: Sched, job_id: int, fleet: dict, now: int, workload: str, credentials: dict):
+def pick(state: ChainState, sched: Sched, job_id: int, fleet: dict, now: int, workload: str, excluded: set[str]):
     """Return (nodes, shards) for the job's next round, or None if fewer than minQuorum nodes qualify.
 
     fleet:       lowercase operator -> {"seen", "busy", "selftest": {workloadId: {"ok": bool}}}, from heartbeats
-    credentials: lowercase owner -> World ID credential, from the identity table
+    excluded:    lowercase owners caught cheating, from the identity exclusions; any other joined owner is seated
     ponytail: no speed gate until selftest seconds have a reference time to compare against
     """
     p = state.jobs[job_id]["params"]
     prev = sched.prev_seed.get(job_id, ZERO32)
-    need = _need(p)
     ok = [op for op, n in state.nodes.items()
-          if _blocker(n, fleet.get(op.lower()), p, sched, op, now, workload, credentials, need) is None]
+          if _blocker(n, fleet.get(op.lower()), p, sched, op, now, workload, excluded) is None]
     # Longest-idle first; the previous seed breaks ties so no operator is always first.
     ok.sort(key=lambda op: (sched.last_assigned.get(op, 0), Web3.keccak(prev + bytes.fromhex(op[2:]))))
     # openRound reverts on two seats for one owner, and on more nodes than shards.
@@ -99,17 +90,16 @@ def pick(state: ChainState, sched: Sched, job_id: int, fleet: dict, now: int, wo
 
 
 def diagnose(state: ChainState, sched: Sched, job_id: int, fleet: dict, now: int, workload: str,
-             credentials: dict) -> dict:
+             excluded: set[str]) -> dict:
     """Why pick found no roster: how many nodes could take a seat against the quorum, and what held the rest back.
 
     Seats count one per owner, the way openRound does, so a second node of the same owner shows as "sameOwner".
     """
     p = state.jobs[job_id]["params"]
-    need = _need(p)
     blocked: dict[str, int] = {}
     owners = set()
     for op, n in state.nodes.items():
-        why = _blocker(n, fleet.get(op.lower()), p, sched, op, now, workload, credentials, need)
+        why = _blocker(n, fleet.get(op.lower()), p, sched, op, now, workload, excluded)
         if why is None and n["owner"].lower() in owners:
             why = "sameOwner"
         if why is None:
@@ -120,7 +110,7 @@ def diagnose(state: ChainState, sched: Sched, job_id: int, fleet: dict, now: int
 
 
 def queue(state: ChainState, sched: Sched, fleet: dict, now: int, workloads: dict[int, str], control: dict,
-          credentials: dict, stalled: dict | None = None):
+          excluded: set[str], stalled: dict | None = None):
     """Rosters for every job that can open a round now, as [(job, nodes, shards)], best-paying job first.
 
     A job's price is its next round budget as the contract computes it; ties go to the older job.
@@ -140,10 +130,10 @@ def queue(state: ChainState, sched: Sched, fleet: dict, now: int, workloads: dic
         ready.append((-(j["remaining"] // (p.rounds - j["roundsOpened"])), job))
     out = []
     for _, job in sorted(ready):
-        if match := pick(state, sched, job, fleet, now, workloads[job], credentials):
+        if match := pick(state, sched, job, fleet, now, workloads[job], excluded):
             out.append((job, *match))
             for op in match[0]:
                 fleet[op.lower()] = {**fleet[op.lower()], "busy": True}  # a node works one job at a time
         elif stalled is not None:
-            stalled[job] = diagnose(state, sched, job, fleet, now, workloads[job], credentials)
+            stalled[job] = diagnose(state, sched, job, fleet, now, workloads[job], excluded)
     return out
