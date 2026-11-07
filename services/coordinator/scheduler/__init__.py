@@ -9,7 +9,7 @@ from tod_core.ledger import ChainState, JobStatus, RoundStatus
 ONLINE_WITHIN = 60  # s since the last heartbeat
 BENCH_AFTER = 2  # missed commits in a row before a node sits out until rearmed
 ZERO32 = b"\0" * 32
-# World ID credential strength. "dev" owners only exist on the local chain.
+# World ID credential strength. "dev" owners exist on the local chain, or were admitted by the team (/v1/identity/admit).
 CREDENTIAL_RANK = {"selfie": 1, "orb": 2, "dev": 2}
 # ponytail: provisional threshold (token units, 6 decimals); jobs at or above it need an Orb-verified owner
 ORB_MIN_BUDGET = 500 * 10**6
