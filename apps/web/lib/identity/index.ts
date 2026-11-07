@@ -4,9 +4,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, COORD_BASE, isDemo, request } from "@/lib/api/client";
 import { setWallet, useWallet } from "@/lib/wallet";
 
-export type IdentityMode = "dev" | "worldid" | "demo";
+export type IdentityMode = "dev" | "wallet" | "worldid" | "demo";
 export type IdentityConfig = { mode: IdentityMode; appId: string; rpId: string; action: string; environment: string };
-export type Credential = "orb" | "selfie" | "dev";
+export type Credential = "orb" | "selfie" | "dev" | "wallet";
 export type HumanStatus = {
   owner: string;
   verified: boolean;
@@ -25,7 +25,7 @@ export const DEMO_CONFIG: IdentityConfig = { mode: "demo", appId: "app_demo", rp
 /** Must match the coordinator's worldid.signal_for: the proof is only good for this wallet. */
 export const signalFor = (owner: string) => "tod-owner:" + owner.toLowerCase();
 
-export const CREDENTIAL_LABEL: Record<Credential, string> = { orb: "Orb", selfie: "Selfie Check", dev: "Dev identity" };
+export const CREDENTIAL_LABEL: Record<Credential, string> = { orb: "Orb", selfie: "Selfie Check", dev: "Dev identity", wallet: "Wallet" };
 
 export type FailKind =
   | "cancelled"

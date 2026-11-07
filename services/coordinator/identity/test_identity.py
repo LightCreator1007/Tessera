@@ -84,6 +84,18 @@ def test_dev_mode_refused_off_local_chain(owner, monkeypatch):
     assert join(owner, pairing_code(Account.create(), owner, int(time.time()) + 1800)).status_code == 403
 
 
+def test_wallet_mode_joins_any_wallet_without_a_proof(owner, monkeypatch):
+    monkeypatch.setattr(config, "CHAIN_ID", 84532)
+    monkeypatch.setattr(identity, "MODE", "wallet")
+    s = client.get(f"/v1/identity/owners/{owner}").json()
+    assert s["verified"] and s["credential"] == "wallet" and not s["joined"]
+    r = join(owner, pairing_code(Account.create(), owner, int(time.time()) + 1800))
+    assert r.status_code == 200 and r.json()["credential"] == "wallet"
+    other = Account.create().address  # a second wallet gets its own nullifier, so it joins too
+    r2 = join(other, pairing_code(Account.create(), other, int(time.time()) + 1800))
+    assert r2.status_code == 200 and r2.json()["nullifier"] != r.json()["nullifier"]
+
+
 def test_worldid_mode_records_credential_and_rejects_bad_proofs(owner, monkeypatch):
     from identity import worldid
 
