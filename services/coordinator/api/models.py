@@ -25,6 +25,7 @@ class Config(BaseModel):
     verifiers: list[Address]
     threshold: int
     competitions: Address | None = None  # None on a network with no Competitions contract
+    rlCompetitions: Address | None = None  # None on a network with no RLCompetitions contract
 
 
 class Workload(BaseModel):

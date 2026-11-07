@@ -22,7 +22,7 @@ from publish import shards as publish_shards
 from tod_core import encodings
 from tod_core.finalize import message
 
-from . import admin, auth, blobs, config, listing, nodes, notebooks, persist
+from . import admin, auth, blobs, config, listing, nodes, notebooks, persist, rl
 from .draft import build as build_draft
 from .models import (OwnerHistory, OwnerRecord, Collected, Config, Dispute, DisputeIn, Draft, DraftRequest, Evidence, Health, Job, JobState,
                      ModelRecord, Payout, ProviderCompute, Published, Round, RoundSummary, Selftest, SettlementOut,
@@ -85,7 +85,8 @@ def health():
 def get_config():
     return Config(chainId=config.CHAIN_ID, jobMarket=config.JOB_MARKET, nodeRegistry=config.NODE_REGISTRY,
                   token=config.TOKEN, coordinator=config.COORDINATOR, verifiers=config.VERIFIERS,
-                  threshold=config.THRESHOLD, competitions=config.COMPETITIONS or None)
+                  threshold=config.THRESHOLD, competitions=config.COMPETITIONS or None,
+                  rlCompetitions=config.RL_COMPETITIONS or None)
 
 
 @v1.get("/workloads", response_model=list[Workload])
@@ -350,5 +351,5 @@ def signatures(job: int, r: int, body: SignatureIn, op: str = Depends(auth.node)
     return Collected(collected=len(pending["sigs"]), threshold=config.THRESHOLD)
 
 
-for router in (v1, blobs.router, nodes.router, notebooks.router, listing.router, admin.router, identity.router):
+for router in (v1, blobs.router, nodes.router, notebooks.router, listing.router, rl.router, admin.router, identity.router):
     app.include_router(router)

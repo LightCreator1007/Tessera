@@ -186,6 +186,16 @@ def test_entry_pass_is_signed_for_this_wallet_and_competitions(owner, monkeypatc
     assert again["nullifier"] == out["nullifier"]  # the same person, so the contract sees one entrant
 
 
+def test_entry_pass_for_rl_competitions_names_that_contract(owner, monkeypatch):
+    rl = "0x" + "dd" * 20
+    monkeypatch.setattr(config, "COMPETITIONS", "0x" + "cc" * 20)
+    assert client.post("/v1/identity/entry-pass", json={"owner": owner, "contract": "rl"}).status_code == 503
+    monkeypatch.setattr(config, "RL_COMPETITIONS", rl)
+    out = client.post("/v1/identity/entry-pass", json={"owner": owner, "contract": "rl"}).json()
+    msg = {"wallet": owner, "nullifier": bytes.fromhex(out["nullifier"][2:]), "deadline": out["deadline"]}
+    assert enc.recover("EntryPass", config.CHAIN_ID, rl, msg, bytes.fromhex(out["signature"][2:])) ==         identity.ADMITTER.address
+
+
 def test_entry_pass_keeps_one_wallet_per_person(owner, monkeypatch):
     monkeypatch.setattr(config, "COMPETITIONS", "0x" + "cc" * 20)
     other = Account.create().address

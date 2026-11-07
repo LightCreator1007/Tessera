@@ -14,7 +14,8 @@ from .hashing import k256
 EIP712_NAME = "ToD"
 EIP712_VERSION = "1"
 
-# Invite and Consent are checked by NodeRegistry, FinalizeRound by JobMarket, EntryPass by Competitions.
+# Invite and Consent are checked by NodeRegistry, FinalizeRound by JobMarket, EntryPass by Competitions (and
+# RLCompetitions), EvalResult by RLCompetitions.
 # BlobAccess is checked by the coordinator off-chain and names JobMarket as verifyingContract, because job ids belong to it.
 TYPES = {
     "Invite": [("operator", "address"), ("owner", "address"), ("nullifier", "bytes32"), ("deadline", "uint64")],
@@ -25,6 +26,7 @@ TYPES = {
         ("payoutsHash", "bytes32"),
     ],
     "EntryPass": [("wallet", "address"), ("nullifier", "bytes32"), ("deadline", "uint64")],
+    "EvalResult": [("competition", "uint256"), ("entrant", "address"), ("policy", "bytes32"), ("score", "int64")],
     "BlobAccess": [
         ("jobId", "uint256"), ("roundId", "uint256"), ("blobHash", "bytes32"), ("method", "string"),
         ("expiry", "uint256"),

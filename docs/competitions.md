@@ -70,4 +70,4 @@ The web wallet signs everything: create (after approving the exact prize), enter
 
 ## Limits
 
-Scoring is classification accuracy on one byte per item, so up to 256 classes. AUC, regression and other metrics would need a different scoring rule. There's no entry fee or compute budget yet. RL environments can be published and downloaded, but scoring RL entries needs the evaluator in `docs/rl-competitions.md`. Labels and predictions are revealed onchain, so they're public after the deadline. Don't host a competition on data you can't publish.
+Scoring is classification accuracy on one byte per item, so up to 256 classes. AUC, regression and other metrics would need a different scoring rule. There's no entry fee or compute budget yet. For RL, where verifiers run each policy and the contract pays the best return, see `docs/rl-competitions.md`. Labels and predictions are revealed onchain, so they're public after the deadline. Don't host a competition on data you can't publish.

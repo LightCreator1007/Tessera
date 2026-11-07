@@ -97,6 +97,8 @@ def plan_deploy(w3: Web3, sender: str, roles: dict, cfg: dict) -> tuple[list[str
         ("JobMarket", creation(w3, "JobMarket", stand_in, stand_in, roles["coordinator"], roles["verifiers"],
                                cfg["threshold"])[0]),
         ("Competitions", creation(w3, "Competitions", stand_in, roles["admitter"])[0]),
+        ("RLCompetitions", creation(w3, "RLCompetitions", stand_in, roles["admitter"], roles["verifiers"],
+                                    cfg["threshold"])[0]),
     ]
     lines, spend, hold = [], 0, 0
     for name, data in items:
@@ -292,6 +294,8 @@ def main() -> None:
     wire = tm.transact(registry, reg.encode_abi("setMarket", args=[market]), timeout=300)
     # Last, so the earlier contracts keep the addresses they have on a fresh Anvil.
     competitions = create("Competitions", token, roles["admitter"])["contractAddress"]
+    rl_competitions = create("RLCompetitions", token, roles["admitter"], roles["verifiers"],
+                             cfg["threshold"])["contractAddress"]
     if not dev:
         record.update(status="deployed", setMarketTxHash=Web3.to_hex(wire["transactionHash"]))
         save_progress(progress, record)
@@ -299,7 +303,8 @@ def main() -> None:
     # [contracts] is always the file's last section, so everything above it survives a redeploy.
     head = text.split("[contracts]")[0].rstrip()
     out.write_text(f'{head}\n\n[contracts]\ntoken = "{token}"\nregistry = "{registry}"\nmarket = "{market}"\n'
-                   f'competitions = "{competitions}"\ndeployBlock = {token_receipt["blockNumber"]}\n')
+                   f'competitions = "{competitions}"\nrlCompetitions = "{rl_competitions}"\n'
+                   f'deployBlock = {token_receipt["blockNumber"]}\n')
 
     verified = None
     if not dev and not args.no_verify:
@@ -307,7 +312,8 @@ def main() -> None:
     if not dev:
         record.update(status="complete", verification=verified)
         save_progress(progress, record)
-    print(json.dumps({"token": token, "registry": registry, "market": market, "competitions": competitions, "out": str(out),
+    print(json.dumps({"token": token, "registry": registry, "market": market, "competitions": competitions,
+                      "rlCompetitions": rl_competitions, "out": str(out),
                       "verified": verified}))
 
 

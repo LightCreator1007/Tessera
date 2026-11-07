@@ -142,6 +142,7 @@ class IdentityConfig(BaseModel):
 class EntryPassRequest(BaseModel):
     owner: str
     proof: dict = {}  # the IDKit result, forwarded unchanged; ignored in dev mode
+    contract: str = "competitions"  # or "rl": the pass names its contract, so one for Competitions is no good elsewhere
 
 
 class EntryPassResponse(BaseModel):
@@ -298,8 +299,10 @@ def verify(req: VerifyRequest, request: Request):
 def entry_pass(req: EntryPassRequest):
     """One person, one wallet, one entry per competition: the admitter vouches for this wallet's human after World ID.
     Hosts need one too, which is how the contract stops a host entering their own competition."""
-    if not config.COMPETITIONS:
-        raise HTTPException(503, "this network has no Competitions contract")
+    rl = req.contract == "rl"
+    target = config.RL_COMPETITIONS if rl else config.COMPETITIONS
+    if not target:
+        raise HTTPException(503, f"this network has no {'RLCompetitions' if rl else 'Competitions'} contract")
     owner = checked_owner(req.owner)
     exclusions.refuse(owner)
     # World ID 4.0 proofs are one per person per action, so a wallet verified at sign-up reuses that record.
@@ -313,7 +316,7 @@ def entry_pass(req: EntryPassRequest):
     # One wallet per person, the same rule as joining the pool.
     record_human(owner, nullifier, credential, joined=False, sybil_score=score)
     deadline = int(time.time()) + PASS_TTL
-    sig = enc.sign(ADMITTER.key, "EntryPass", config.CHAIN_ID, config.COMPETITIONS,
+    sig = enc.sign(ADMITTER.key, "EntryPass", config.CHAIN_ID, target,
                    {"wallet": owner, "nullifier": bytes.fromhex(nullifier[2:]), "deadline": deadline})
     return EntryPassResponse(wallet=owner, nullifier=nullifier, deadline=deadline, signature="0x" + sig.hex(),
                              credential=credential)

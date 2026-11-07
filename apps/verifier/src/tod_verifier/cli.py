@@ -127,5 +127,10 @@ def run(
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: stop.set())
     events.append("verifier.started", version=version("tod-verifier"), network=net.name, verifier=signer.address)
+    if net.rl_competitions:
+        from .evaluate import Evaluator
+
+        rl = Evaluator(ledger, coordinator, key, data_dir() / "rl", emit=events.append)
+        threading.Thread(target=rl.loop, args=(stop,), name="rl-evaluator", daemon=True).start()
     run_daemon(ledger, loop, stop, poll=poll, emit=events.append, on_tick=prewarm)
     events.append("verifier.stopped")

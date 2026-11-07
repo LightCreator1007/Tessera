@@ -842,12 +842,12 @@ def test_one_funded_deployer_can_prepare_all_fresh_role_wallets(public):
     assert all(w3.eth.get_balance(v) == 25 * 10**16 for v in roles["verifiers"])
     record = json.loads((tmp / "out.toml.receipts.json").read_text())
     assert record["status"] == "complete" and len(record["funding"]) == 4
-    assert set(record["contracts"]) == {"ToDToken", "NodeRegistry", "JobMarket", "Competitions"}
+    assert set(record["contracts"]) == {"ToDToken", "NodeRegistry", "JobMarket", "Competitions", "RLCompetitions"}
     assert all(item["to"] != roles["deployer"] for item in record["funding"])
     for tx in [*record["funding"], *record["contracts"].values()]:
         assert w3.eth.get_transaction_receipt(tx["txHash"])["status"] == 1
     assert w3.eth.get_transaction_receipt(record["setMarketTxHash"])["status"] == 1
-    assert w3.eth.get_transaction_count(roles["deployer"]) == 9
+    assert w3.eth.get_transaction_count(roles["deployer"]) == 10
 
 
 def test_deployer_funding_cannot_spend_its_own_deployment_reserve(public):

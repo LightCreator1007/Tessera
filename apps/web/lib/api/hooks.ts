@@ -12,6 +12,8 @@ export const retry = (n: number, e: unknown) => n < 2 && e instanceof ApiError &
 export const useConfig = () => useQuery({ queryKey: ["config"], queryFn: api.config, staleTime: Infinity });
 export const useHealth = () => useQuery({ queryKey: ["health"], queryFn: api.health, refetchInterval: 15_000, retry: 0 });
 export const useLiveCompetitions = () => useQuery({ queryKey: ["competitions"], queryFn: api.competitions, refetchInterval: LIVE, retry });
+export const useRLCompetitions = () => useQuery({ queryKey: ["rl"], queryFn: api.rlCompetitions, refetchInterval: LIVE, retry });
+export const useRLCompetition = (id: string) => useQuery({ queryKey: ["rl", id], queryFn: () => api.rlCompetition(id), refetchInterval: LIVE, retry });
 export const useCompetitionEntry = (id: string, who: string, enabled: boolean) => useQuery({ queryKey: ["competitions", id, "entry", who.toLowerCase()], queryFn: () => api.competitionEntry(id, who), enabled, refetchInterval: LIVE, retry });
 export const useNotebooks = (id: string) => useQuery({ queryKey: ["competitions", id, "notebooks"], queryFn: () => api.notebooks(id), refetchInterval: SLOW, retry });
 // A 403 means sealed until the deadline and a 404 means none attached; both are answers, not failures to retry.

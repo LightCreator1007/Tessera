@@ -152,4 +152,4 @@ const DEMO_FAIL: Partial<Record<FailKind, string>> = {
 export type EntryPass = { wallet: string; nullifier: `0x${string}`; deadline: number; signature: `0x${string}`; credential: string };
 
 /** The admitter's signature that this wallet is one verified person, which Competitions.create and enter both check. */
-export const entryPass = (owner: string, proof?: unknown) => call<EntryPass>("/entry-pass", { owner, proof: proof ?? {} });
+export const entryPass = (owner: string, proof?: unknown, contract: "competitions" | "rl" = "competitions") => call<EntryPass>("/entry-pass", { owner, proof: proof ?? {}, contract });
