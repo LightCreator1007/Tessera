@@ -165,7 +165,7 @@ export function WorldSection() {
         <Card className="flex flex-col gap-3 p-4 md:p-5">
           <div className="flex items-center justify-between gap-2">
             <Eyebrow>Look up a person</Eyebrow>
-            {mode && <Pill tone={mode === "worldid" ? "ok" : mode === "demo" ? "neutral" : "warn"}>{mode === "worldid" ? `World ID ${cfg.data?.environment ?? ""}`.trim() : mode === "dev" ? "dev identities" : "demo"}</Pill>}
+            {mode && <Pill tone={mode === "worldid" ? "ok" : mode === "demo" ? "neutral" : "warn"}>{mode === "worldid" ? `World ID ${cfg.data?.environment ?? ""}`.trim() : mode === "dev" ? "dev identities" : mode === "wallet" ? "wallet only" : "demo"}</Pill>}
           </div>
           <Lookup />
         </Card>
