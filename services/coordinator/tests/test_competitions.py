@@ -1,6 +1,7 @@
 """Competition lifecycle, entrant standings, per-class breakdowns and the entry and owner read routes."""
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 
 import competitions as C
@@ -25,6 +26,40 @@ def test_event_logs_pages_the_whole_range_without_gaps_or_duplicates():
     assert calls == [(123 + i * 10000, min(10122 + i * 10000, 60123)) for i in range(7)]
     ledger.w3.eth.block_number = 122
     assert list(C.event_logs(ledger, con, "Created")) == []
+
+
+def test_event_logs_retries_a_rate_limited_page(monkeypatch):
+    sleeps, calls = [], []
+    monkeypatch.setattr(C.time, "sleep", sleeps.append)
+
+    def get_logs(**kwargs):
+        calls.append(kwargs)
+        if len(calls) < 3:
+            raise C.HTTPError(response=SimpleNamespace(status_code=429))
+        return ["log"]
+
+    ledger = SimpleNamespace(net=SimpleNamespace(deploy_block=1, log_span=10000),
+                             w3=SimpleNamespace(eth=SimpleNamespace(block_number=1)))
+    con = SimpleNamespace(events=SimpleNamespace(Created=lambda: SimpleNamespace(get_logs=get_logs)))
+    assert list(C.event_logs(ledger, con, "Created")) == ["log"]
+    assert calls == [{"from_block": 1, "to_block": 1}] * 3 and sleeps == [0.5, 1]
+
+
+@pytest.mark.parametrize("status,attempts", [(429, 5), (403, 1)])
+def test_event_logs_does_not_retry_forever_or_hide_other_errors(monkeypatch, status, attempts):
+    calls = []
+    monkeypatch.setattr(C.time, "sleep", lambda _: None)
+
+    def get_logs(**kwargs):
+        calls.append(kwargs)
+        raise C.HTTPError(response=SimpleNamespace(status_code=status))
+
+    ledger = SimpleNamespace(net=SimpleNamespace(deploy_block=1, log_span=10000),
+                             w3=SimpleNamespace(eth=SimpleNamespace(block_number=1)))
+    con = SimpleNamespace(events=SimpleNamespace(Created=lambda: SimpleNamespace(get_logs=get_logs)))
+    with pytest.raises(C.HTTPError):
+        list(C.event_logs(ledger, con, "Created"))
+    assert len(calls) == attempts
 
 
 def at(now, **over):
