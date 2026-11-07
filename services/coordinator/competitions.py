@@ -136,13 +136,20 @@ def _block_time(w3, block: int) -> int:
     return _block_times[block]
 
 
+def event_logs(ledger, con, event: str):
+    """Keep competition scans within the network RPC's block range limit."""
+    end = ledger.w3.eth.block_number
+    span = max(1, ledger.net.log_span)
+    for start in range(ledger.net.deploy_block, end + 1, span):
+        yield from getattr(con.events, event)().get_logs(from_block=start, to_block=min(start + span - 1, end))
+
+
 def build(ledger) -> list[dict]:
     con = _contract(ledger)
     w3 = ledger.w3
-    start = ledger.net.deploy_block
 
     def logs(ev, timed=False) -> list[Log]:
-        found = sorted(getattr(con.events, ev)().get_logs(from_block=start), key=lambda e: (e.blockNumber, e.logIndex))
+        found = sorted(event_logs(ledger, con, ev), key=lambda e: (e.blockNumber, e.logIndex))
         return [Log(dict(e.args), e.blockNumber, e.logIndex, "0x" + bytes(e.transactionHash).hex(),
                     _block_time(w3, e.blockNumber) if timed else None) for e in found]
 

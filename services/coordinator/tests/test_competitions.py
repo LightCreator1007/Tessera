@@ -1,4 +1,6 @@
 """Competition lifecycle, entrant standings, per-class breakdowns and the entry and owner read routes."""
+from types import SimpleNamespace
+
 from fastapi.testclient import TestClient
 
 import competitions as C
@@ -6,6 +8,23 @@ import competitions as C
 BASE = {"settled": False, "deadline": 100, "revealWindow": 50, "labelsRevealedAt": 0, "entries": 2}
 A, B, D = "0x" + "a" * 40, "0x" + "b" * 40, "0x" + "d" * 40
 HOST = "0x" + "1" * 40
+
+
+def test_event_logs_pages_the_whole_range_without_gaps_or_duplicates():
+    calls = []
+
+    def get_logs(*, from_block, to_block):
+        assert to_block - from_block < 10000
+        calls.append((from_block, to_block))
+        return [b for b in (123, 10122, 10123, 60123) if from_block <= b <= to_block]
+
+    ledger = SimpleNamespace(net=SimpleNamespace(deploy_block=123, log_span=10000),
+                             w3=SimpleNamespace(eth=SimpleNamespace(block_number=60123)))
+    con = SimpleNamespace(events=SimpleNamespace(Created=lambda: SimpleNamespace(get_logs=get_logs)))
+    assert list(C.event_logs(ledger, con, "Created")) == [123, 10122, 10123, 60123]
+    assert calls == [(123 + i * 10000, min(10122 + i * 10000, 60123)) for i in range(7)]
+    ledger.w3.eth.block_number = 122
+    assert list(C.event_logs(ledger, con, "Created")) == []
 
 
 def at(now, **over):

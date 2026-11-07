@@ -3,7 +3,7 @@ import threading
 import time
 
 from api import config
-from competitions import _block_time, _meta
+from competitions import _block_time, _meta, event_logs
 
 TTL = 5
 _lock = threading.Lock()
@@ -52,7 +52,7 @@ def build(ledger) -> list[dict]:
     con, w3 = _contract(ledger), ledger.w3
 
     def logs(ev):
-        found = getattr(con.events, ev)().get_logs(from_block=ledger.net.deploy_block)
+        found = event_logs(ledger, con, ev)
         return sorted(found, key=lambda e: (e.blockNumber, e.logIndex))
 
     created = {e.args["id"]: e for e in logs("Created")}
