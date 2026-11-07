@@ -91,13 +91,13 @@ def test_any_joined_owner_is_seated_except_an_excluded_one():
     assert OPS[0] not in match(s, excluded={OPS[0].lower()})[0]
 
 
-def test_one_seat_per_owner_so_open_round_cannot_revert():
+def test_one_owners_nodes_each_take_a_seat():
     s = state()
     s.nodes[OPS[1]]["owner"] = OPS[0]  # two operators, one owner
     three = {op: v for op, v in fleet().items() if op in OPS[:3]}
     roster, _ = match(s, three)
-    assert len(roster) == 2 and OPS[2] in roster and len({s.nodes[op]["owner"] for op in roster}) == 2
-    assert match(s, {op: v for op, v in three.items() if op in OPS[:2]}) is None  # one owner cannot meet quorum 2
+    assert roster == OPS[:3]  # both of one owner's nodes take a seat
+    assert match(s, {op: v for op, v in three.items() if op in OPS[:2]})[0] == OPS[:2]  # one owner meets quorum 2
 
 
 def test_roster_never_exceeds_the_shard_count():
@@ -118,12 +118,12 @@ def test_diagnose_counts_each_node_by_the_first_rule_it_fails():
                  "blocked": {"stake": 1, "busy": 2, "offline": 1, "selftest": 1, "notJoined": 1}}
 
 
-def test_diagnose_counts_one_seat_per_owner():
+def test_diagnose_counts_every_node_of_one_owner():
     s = state()
     for op in OPS[1:]:
         s.nodes[op]["owner"] = OPS[0]  # one person runs all six
     d = diagnose(s, rebuild(s), 1, fleet(), NOW, "w", NONE)
-    assert d == {"eligible": 1, "quorum": 2, "blocked": {"sameOwner": 5}}
+    assert d == {"eligible": 6, "quorum": 2, "blocked": {}}
 
 
 def test_queue_reports_the_jobs_it_could_not_seat():

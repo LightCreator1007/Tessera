@@ -40,7 +40,7 @@ export type Job = {
 };
 /** The coordinator's read on a stuck job: seats it can fill against seats it needs, what holds the other nodes back, and when anyone may abandon it. Times are unix seconds. */
 export type Waiting = { since: number; eligible: number; quorum: number; blocked: Partial<Record<BlockReason, number>>; abandonAfter: number };
-export type BlockReason = "notJoined" | "stake" | "offline" | "busy" | "selftest" | "benched" | "excluded" | "sameOwner";
+export type BlockReason = "notJoined" | "stake" | "offline" | "busy" | "selftest" | "benched" | "excluded";
 /** GET /v1/owners/{owner}/history: chain events that moved an owner's money or standing, newest first. Amounts in token units, times in unix seconds. */
 export type OwnerEvent = {
   kind: "joined" | "paid" | "claimed" | "leftover" | "forfeited" | "slashed" | "failure" | "noReveal" | "staked" | "unstaked" | "budget" | "refund";

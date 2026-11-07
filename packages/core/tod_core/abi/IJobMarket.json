@@ -60,7 +60,7 @@
 {"type":"error","name":"AlreadyReported","inputs":[]},
 {"type":"error","name":"BadInput","inputs":[]},
 {"type":"error","name":"BadSignature","inputs":[]},
-{"type":"error","name":"DuplicateOwner","inputs":[]},
+{"type":"error","name":"DuplicateNode","inputs":[]},
 {"type":"error","name":"DuplicateShard","inputs":[]},
 {"type":"error","name":"InsufficientBalance","inputs":[]},
 {"type":"error","name":"NodeNotEligible","inputs":[]},

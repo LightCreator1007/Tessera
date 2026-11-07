@@ -422,20 +422,17 @@ contract JobMarket is IJobMarket, EIP712, ReentrancyGuardTransient {
         address[] calldata nodes,
         uint8[] calldata shards
     ) private {
-        address[] memory owners = new address[](nodes.length);
         uint256 shardMask;
         for (uint256 i; i < nodes.length; i++) {
             INodeRegistry.Node memory n = INodeRegistry(registry).getNode(nodes[i]);
             if (!n.joined || n.busyJob != 0) revert NodeNotEligible();
             if (n.stake < p.stakePerNode) revert StakeTooLow();
-            for (uint256 j; j < i; j++) {
-                if (owners[j] == n.owner) revert DuplicateOwner();
-            }
-            owners[i] = n.owner;
             if (shards[i] >= p.shards) revert BadInput();
             if (shardMask & (1 << shards[i]) != 0) revert DuplicateShard();
             shardMask |= 1 << shards[i];
+            // Each node is its own seat, so one owner's several nodes can share a round; one node can't sit twice.
             NodeRound storage nr = _nr[jobId][roundId][nodes[i]];
+            if (nr.assigned) revert DuplicateNode();
             nr.slot = uint8(i);
             nr.shard = shards[i];
             nr.assigned = true;

@@ -186,7 +186,6 @@ const BLOCKED: Record<BlockReason, (n: number) => string> = {
   selftest: (n) => `${n} without a passing self-test`,
   benched: (n) => `${n} benched after missed rounds`,
   excluded: (n) => `${n} from owners excluded for cheating`,
-  sameOwner: (n) => `${n} sharing an owner with a counted node`,
 };
 
 function ago(sec: number): string {

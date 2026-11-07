@@ -45,7 +45,7 @@ contract PoolTest is MarketFixture {
         reg.join(op[0], n, uint64(block.timestamp + 60), uint64(block.timestamp + 60), invite, consent);
     }
 
-    function test_oneOwnerRunsTwoOperatorsButHoldsOneSeatPerRound() public {
+    function test_oneOwnerRunsTwoOperatorsAndBothTakeSeats() public {
         uint128 stake = market.minStake(BUDGET, ROUNDS, 3);
         for (uint256 i; i < 3; i++) {
             _joinAndStake(i, stake);
@@ -67,8 +67,8 @@ contract PoolTest is MarketFixture {
         (nodes[0], nodes[1], nodes[2]) = (op[0], op[3], op[1]);
         (shards[0], shards[1], shards[2]) = (0, 1, 2);
         vm.prank(coordinator);
-        vm.expectRevert(IJobMarket.DuplicateOwner.selector);
         market.openRound(jobId, nodes, shards);
+        assertTrue(market.getNodeRound(jobId, 1, op[0]).assigned && market.getNodeRound(jobId, 1, op[3]).assigned);
     }
 
     function test_withdrawWhileIdleUpToTheStake() public {

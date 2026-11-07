@@ -8,7 +8,7 @@ The same nullifier also gives us a lasting handle on a person, not a wallet. Whe
 
 ## Which credential, and why it's the minimum
 
-We accept Selfie Check and Proof of Human (Orb). World ID only gates joining the pool. The matcher (`services/coordinator/scheduler/__init__.py`) seats any joined node whatever its owner's credential, skipping only owners excluded for cheating, and the contract still allows one seat per owner in a round.
+We accept Selfie Check and Proof of Human (Orb). World ID only gates joining the pool. The matcher (`services/coordinator/scheduler/__init__.py`) seats any joined node whatever its owner's credential, skipping only owners excluded for cheating. Each node is its own seat, so one owner's several nodes can train in the same round.
 
 We don't ask for a passport, because nationality and age don't matter here, and asking for more than the job needs would only shrink the pool.
 
@@ -40,7 +40,7 @@ The client never decides anything. Its result only counts after the coordinator 
 
 The coordinator side is complete and tested (`services/coordinator/identity/test_worldid.py` and `services/coordinator/identity/test_identity.py`). On World ID staging it was verified live on 6 November with the simulator's Proof of Human: the coordinator verified the proof with World and signed an invite. The coordinator's `/v1/identity/test` page runs the whole join with IDKit, or gets a competition entry pass (see docs/competitions.md). On 7 November an entry pass from the simulator's Proof of Human entered competition 3 on the local chain: the contract bound that World ID nullifier to the entrant's wallet, and the same pass from another wallet reverted `BadPass`. IDKit in the main web app's join flow is in progress (#119). For a local demo, `docker/compose.worldid.yml` switches the dev stack from dev mode to World ID staging.
 
-The public coordinator (`docker/compose.prod.yml`) now runs with `IDENTITY_MODE=wallet`: any wallet joins the pool or enters a competition without World ID, and the coordinator derives a nullifier from the wallet address. That keeps one seat per wallet but not one per person. Set `IDENTITY_MODE=worldid` to turn World ID back on.
+The public coordinator (`docker/compose.prod.yml`) now runs with `IDENTITY_MODE=wallet`: any wallet joins the pool or enters a competition without World ID, and the coordinator derives a nullifier from the wallet address. That ties each wallet to one identity, not each person. Set `IDENTITY_MODE=worldid` to turn World ID back on.
 
 ## Integration debrief
 

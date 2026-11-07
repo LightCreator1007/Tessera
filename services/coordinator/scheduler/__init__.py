@@ -74,14 +74,8 @@ def pick(state: ChainState, sched: Sched, job_id: int, fleet: dict, now: int, wo
           if _blocker(n, fleet.get(op.lower()), p, sched, op, now, workload, excluded) is None]
     # Longest-idle first; the previous seed breaks ties so no operator is always first.
     ok.sort(key=lambda op: (sched.last_assigned.get(op, 0), Web3.keccak(prev + bytes.fromhex(op[2:]))))
-    # openRound reverts on two seats for one owner, and on more nodes than shards.
-    owners, seats = set(), []
-    for op in ok:
-        owner = state.nodes[op]["owner"].lower()
-        if owner not in owners:
-            owners.add(owner)
-            seats.append(op)
-    roster = sorted(seats[:min(p.maxPerRound, p.shards)], key=lambda op: bytes.fromhex(op[2:]))
+    # Every node is its own seat, whoever owns it; openRound reverts on more nodes than shards or maxPerRound.
+    roster = sorted(ok[:min(p.maxPerRound, p.shards)], key=lambda op: bytes.fromhex(op[2:]))
     if len(roster) < p.minQuorum:
         return None
     last = sched.shard_last.get(job_id, {})
@@ -91,22 +85,17 @@ def pick(state: ChainState, sched: Sched, job_id: int, fleet: dict, now: int, wo
 
 def diagnose(state: ChainState, sched: Sched, job_id: int, fleet: dict, now: int, workload: str,
              excluded: set[str]) -> dict:
-    """Why pick found no roster: how many nodes could take a seat against the quorum, and what held the rest back.
-
-    Seats count one per owner, the way openRound does, so a second node of the same owner shows as "sameOwner".
-    """
+    """Why pick found no roster: how many nodes could take a seat against the quorum, and what held the rest back."""
     p = state.jobs[job_id]["params"]
     blocked: dict[str, int] = {}
-    owners = set()
+    eligible = 0
     for op, n in state.nodes.items():
         why = _blocker(n, fleet.get(op.lower()), p, sched, op, now, workload, excluded)
-        if why is None and n["owner"].lower() in owners:
-            why = "sameOwner"
         if why is None:
-            owners.add(n["owner"].lower())
+            eligible += 1
         else:
             blocked[why] = blocked.get(why, 0) + 1
-    return {"eligible": len(owners), "quorum": p.minQuorum, "blocked": blocked}
+    return {"eligible": eligible, "quorum": p.minQuorum, "blocked": blocked}
 
 
 def queue(state: ChainState, sched: Sched, fleet: dict, now: int, workloads: dict[int, str], control: dict,
