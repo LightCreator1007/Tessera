@@ -122,7 +122,8 @@ export function JoinFlow() {
   const owner = w.address ?? "<your wallet>";
   const registry = cfg.data?.data.nodeRegistry ?? "<registry>";
 
-  const tryCode = (c: string) => {
+  const tryCode = (pasted: string) => {
+    const c = pasted.replace(/\s+/g, "");  // a code copied from a wrapped terminal line carries newlines or spaces
     setCode(c);
     const r = parsePairing(c, w.address);
     if (!r.ok) return setErr(r.error);
