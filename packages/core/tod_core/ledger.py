@@ -364,6 +364,10 @@ class ChainState:
                 self.jobs[a["jobId"]]["closedAt"] = ev.timestamp
                 self.jobs[a["jobId"]]["remaining"] += r["budget"]
             case "JobClosed":
-                self.jobs[a["jobId"]].update(status=JobStatus(a["status"]), remaining=0)
+                self.jobs[a["jobId"]].update(status=JobStatus(a["status"]), remaining=0, refundable=a["refundable"])
+            case "CancelRequested":
+                self.jobs[a["jobId"]]["stopping"] = True
+            case "RefundWithdrawn":
+                self.jobs[a["jobId"]]["refundable"] = 0
             case "WorkCredited":
                 self.work.setdefault(a["owner"], []).append(key)

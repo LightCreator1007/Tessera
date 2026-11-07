@@ -76,6 +76,15 @@ def test_queue_serves_the_best_price_first_and_a_node_works_one_job():
     assert not set(out[0][1]) & set(out[1][1])
 
 
+def test_a_cancelling_job_gets_no_new_round():
+    s = state()
+    s.jobs = {j: {"params": NS(**{**vars(P), "rounds": 4}), "status": JobStatus.ACTIVE, "remaining": 800,
+                  "roundsOpened": 1, "nextRound": 2} for j in (1, 2)}
+    s.jobs[2]["stopping"] = True  # openRound would revert with WrongState
+    out = queue(s, rebuild(s), fleet(), NOW, dict.fromkeys(s.jobs, "w"), {}, CREDS)
+    assert [j for j, *_ in out] == [1]
+
+
 def test_equal_price_goes_to_the_older_job():
     s = state()
     s.jobs = {j: {"params": NS(**{**vars(P), "rounds": 4}), "status": JobStatus.ACTIVE, "remaining": 800,

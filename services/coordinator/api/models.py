@@ -83,6 +83,8 @@ class Job(BaseModel):
     trust: Trust = "chain"
     published: "Published | None" = None  # null while Arkiv publishing is off or the job has no final model yet
     waiting: "Waiting | None" = None  # set while the job is ready for a round but too few nodes can take a seat
+    stopping: bool = False  # the requester cancelled during a round; the job ends when that round does
+    refundable: int = 0  # what withdrawRefund would pay the requester now
 
 
 class Waiting(BaseModel):

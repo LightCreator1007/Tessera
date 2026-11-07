@@ -123,7 +123,7 @@ def queue(state: ChainState, sched: Sched, fleet: dict, now: int, workloads: dic
     for job, j in state.jobs.items():
         p, c = j["params"], control.get(job, {"auto": True, "paused": False})
         last = state.rounds.get((job, j["nextRound"] - 1))
-        if (job not in workloads or j["status"] != JobStatus.ACTIVE or j["roundsOpened"] >= p.rounds
+        if (job not in workloads or j["status"] != JobStatus.ACTIVE or j.get("stopping") or j["roundsOpened"] >= p.rounds
                 or not c["auto"] or c["paused"]
                 or (last and last["status"] == RoundStatus.OPEN)):
             continue
