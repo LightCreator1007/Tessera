@@ -23,6 +23,7 @@ services:
       COMPETITIONS: "0xE12b72Be73a68811f118AB246044C773241EECBB"
       VERIFIERS: "0x2bf8af09b6c43D1b58A9c5f764DF402239b34E21,0x5500a0eb5C940d2227232f2B4Bcde7F4B4D3DD77"
       IDENTITY_MODE: worldid
+      WORLD_ID_ENV: staging  # the verify page's QR is a World ID staging request (simulator), never production
       WORLD_ID_ENV: production  # real World App proofs; the staging simulator gives every identity one nullifier
       PUBLIC_URL: "https://${SITE:?run docker/prod-up.sh, which sets this}"
       STORE_DIR: /data/store
