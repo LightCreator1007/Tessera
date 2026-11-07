@@ -82,12 +82,12 @@ export function HumanCheck({ onVerified, intro, split }: { onVerified?: (v: Veri
     app_id: (cfg.appId || "app_unset") as `app_${string}`,
     action: cfg.action,
     rp_context: rp ?? PLACEHOLDER_RP,
-    // Either credential counts: an Orb proof if the person has one, else a Selfie Check (no Orb needed), Sandbox included.
-    // Selfie Check is a World ID 4.0 credential, so legacy 3.0 proofs are off (World's docs require this for selfie).
+    // Either credential counts. Selfie Check is listed first so World App offers it by default (no Orb needed), with an
+    // Orb proof as the fallback. Selfie Check is a World ID 4.0 credential, so legacy 3.0 proofs are off (World's docs require this).
     allow_legacy_proofs: false,
     constraints: any(
-      humanProof,
       CredentialRequest("selfie", { signal: owner ? signalFor(owner) : "" }),
+      humanProof,
     ),
     environment: cfg.environment === "production" || cfg.environment === "sandbox" ? cfg.environment : "staging",
     polling: { interval: 1000, timeout: 300_000 },
@@ -184,7 +184,7 @@ export function HumanCheck({ onVerified, intro, split }: { onVerified?: (v: Veri
         body: <>This pool runs World ID staging, so World App on a phone can&apos;t answer it. Open the simulator, scan this code or paste the copied request, and approve Proof of Human. No Orb or selfie needed.</>,
       } : sandbox ? {
         title: "Scan with World ID Sandbox",
-        body: <>Open the Sandbox app on your phone, scan this code, and approve Proof of Human (Orb) or Selfie Check with your test credential.</>,
+        body: <>Open the Sandbox app on your phone, scan this code, and approve with Selfie Check (or Proof of Human if you have an Orb credential).</>,
       } : {
         title: "Scan with World App",
         body: <><span className="hidden md:inline">Open World App on your phone and scan this code. </span><span className="md:hidden">Open World App to continue. </span>It takes a quick selfie, or uses your Orb verification if you have one. Your face never leaves your phone.</>,
