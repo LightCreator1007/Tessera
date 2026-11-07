@@ -125,7 +125,7 @@ export function HumanCheck({ onVerified, intro, split }: { onVerified?: (v: Veri
     if (!owner) return;
     setFail(null);
     setStage("signing");
-    if (cfg.mode === "dev" || cfg.mode === "wallet") return void submit({});  // no World ID: the coordinator vouches for the wallet
+    if (cfg.mode === "dev") return void submit({});
     try {
       const ctx = await rpContext(cfg);
       setRp(ctx);
@@ -167,7 +167,7 @@ export function HumanCheck({ onVerified, intro, split }: { onVerified?: (v: Veri
     : shownStage === "submitting" ? ["CHECKING", "THE PROOF", short(owner)]
     : shownStage === "verified" ? ["VERIFIED", (credential ? CREDENTIAL_LABEL[credential] : "WORLD ID").toUpperCase(), short(owner)]
     : shownStage === "failed" && fail ? ["NOT VERIFIED", COPY[fail.kind].word, short(owner)]
-    : ["ONE PERSON", cfg.mode === "dev" ? "DEV IDENTITY" : cfg.mode === "wallet" ? "WALLET" : "WORLD ID", short(owner)];
+    : ["ONE PERSON", cfg.mode === "dev" ? "DEV IDENTITY" : "WORLD ID", short(owner)];
 
   const art = (
     <StageArt stage={shownStage} uri={uri} crack={shownStage === "failed" && !!fail && COPY[fail.kind].crack} meta={meta} />
@@ -201,7 +201,7 @@ export function HumanCheck({ onVerified, intro, split }: { onVerified?: (v: Veri
   const actions = (() => {
     if (!owner) return null;
     if (shownStage === "idle") return (
-      <Button variant="primary" icon={ScanFace} onClick={start}>{cfg.mode === "dev" ? "Verify with dev identity" : cfg.mode === "wallet" ? "Continue with this wallet" : "Verify with World ID"}</Button>
+      <Button variant="primary" icon={ScanFace} onClick={start}>{cfg.mode === "dev" ? "Verify with dev identity" : "Verify with World ID"}</Button>
     );
     if (shownStage === "scan" && uri && staging) return <SimulatorActions uri={uri} />;
     // On a phone the code is useless to the phone itself: the connector link opens World App directly and returns here.
@@ -251,7 +251,7 @@ export function HumanCheck({ onVerified, intro, split }: { onVerified?: (v: Veri
         </div>
       )}
       {actions && <div className="flex flex-wrap items-center gap-3">{actions}</div>}
-      {owner && cfg.mode !== "dev" && cfg.mode !== "wallet" && (shownStage === "idle" || shownStage === "scan" || (shownStage === "failed" && fail?.kind === "no_credential")) && !staging && <GetWorldApp />}
+      {owner && cfg.mode !== "dev" && (shownStage === "idle" || shownStage === "scan" || (shownStage === "failed" && fail?.kind === "no_credential")) && !staging && <GetWorldApp />}
       {shownStage !== "verified" && (
         <More label="What does World ID see?">
           <p>World learns that a verified person approved a request from Tessera. Tessera learns one number that is the same every time you prove yourself here, and different in every other app. No name, no face, no address.</p>

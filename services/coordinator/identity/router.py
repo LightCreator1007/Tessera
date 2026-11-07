@@ -30,7 +30,6 @@ INVITE_TTL = 30 * 60  # s; same lifetime as the operator's consent
 PASS_TTL = 24 * 3600  # s; an EntryPass is reused for every competition the wallet enters that day
 DEV_CHAIN = 31337
 
-# dev: local chain only. wallet: any wallet joins on its own, one seat per wallet, no proof of a person. worldid: World ID.
 MODE = os.environ.get("IDENTITY_MODE", "dev")
 # Same name as .env.example. On anvil the deploy script registers dev_key("admitter"), so that is the fallback;
 # anywhere else a missing key would sign Invites the registry rejects.
@@ -182,8 +181,6 @@ def verify_human(owner: str, proof: dict) -> tuple[str, str]:
         if config.CHAIN_ID != DEV_CHAIN:
             raise HTTPException(403, "IDENTITY_MODE=dev is refused off the local chain")
         return "0x" + k256(b"tod-dev" + bytes.fromhex(owner[2:])).hex(), "dev"
-    if MODE == "wallet":  # ponytail: one person can run many wallets; World ID mode is what stops that
-        return "0x" + k256(b"tod-wallet" + bytes.fromhex(owner[2:])).hex(), "wallet"
     try:
         return worldid.verify(proof, owner)
     except worldid.Rejected as e:
@@ -523,9 +520,7 @@ def owner_status(owner: str):
     owner = checked_owner(owner)
     row = db.execute("SELECT credential, joined, seen, sybil_score FROM humans WHERE owner = ?", (owner,)).fetchone()
     ex = exclusions.get(owner)
-    # In wallet mode every wallet counts as verified, so the web skips the World ID step.
-    wallet = MODE == "wallet" and not ex
-    return {"owner": owner, "verified": row is not None or wallet, "joined": bool(row and row[1]),
-            "credential": row[0] if row else ("wallet" if wallet else None), "verifiedAt": row[2] if row else None,
+    return {"owner": owner, "verified": row is not None, "joined": bool(row and row[1]),
+            "credential": row[0] if row else None, "verifiedAt": row[2] if row else None,
             "sybilScore": row[3] if row else None,
             "excluded": {k: ex[k] for k in ("reason", "evidence", "at")} if ex else None}
