@@ -39,7 +39,7 @@ export function Count({ children, className }: { children: ReactNode; className?
 }
 
 export const JOB_TONE: Record<JobStatus, Tone> = { open: "pending", running: "ok", completed: "neutral", abandoned: "warn", invalid: "danger" };
-export const JOB_LABEL: Record<JobStatus, string> = { open: "Waiting", running: "Training", completed: "Finished", abandoned: "Abandoned", invalid: "Invalid" };
+export const JOB_LABEL: Record<JobStatus, string> = { open: "Waiting", running: "Training", completed: "Finished", abandoned: "Cancelled", invalid: "Invalid" };
 export function JobStatusPill({ status }: { status: JobStatus }) {
   return <Pill tone={JOB_TONE[status]} live={status === "running"}>{JOB_LABEL[status]}</Pill>;
 }

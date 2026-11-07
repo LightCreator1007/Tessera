@@ -45,7 +45,7 @@ export default function Page() {
         <ButtonLink href="/docs/how-it-works">How a round is checked</ButtonLink>
       </div>
       <DocSection id="refunds" title="If a job stalls">
-        <p>A job that stalls past its window can be abandoned by anyone. Rounds that finalized stay paid; the budget for rounds that never opened goes back to you. Withdraw it from the job&apos;s page.</p>
+        <p>You can cancel your job from its page at any time. If no round is running, the budget for rounds that never opened comes straight back. If one is running, it finishes and pays its nodes first, then you withdraw the rest. A job that stalls past its window can also be abandoned by anyone. Rounds that finalized stay paid; the budget for rounds that never opened goes back to you. Withdraw it from the job&apos;s page.</p>
       </DocSection>
     </>
   );

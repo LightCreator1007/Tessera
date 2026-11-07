@@ -14,6 +14,7 @@ export const marketAbi = parseAbi([
   "function claimLeftover(uint256 jobId, address operator)",
   "function withdrawRefund(uint256 jobId)",
   "function abandonJob(uint256 jobId)",
+  "function cancelJob(uint256 jobId)",
   "error NotAuthorized()", "error WrongState()", "error TooEarly()", "error TooLate()", "error BadInput()", "error StakeTooLow()",
   "error InsufficientBalance()", "error NothingToClaim()",
 ]);
@@ -252,6 +253,7 @@ export const calls = {
   claim: async (): Promise<Call> => { const c = await getContracts(); return { to: c.market, abi: marketAbi, data: encodeFunctionData({ abi: marketAbi, functionName: "claim" }) }; },
   claimLeftover: async (job: number, op: string): Promise<Call> => { const c = await getContracts(); return { to: c.market, abi: marketAbi, data: encodeFunctionData({ abi: marketAbi, functionName: "claimLeftover", args: [BigInt(job), op as Address] }) }; },
   withdrawRefund: async (job: number): Promise<Call> => { const c = await getContracts(); return { to: c.market, abi: marketAbi, data: encodeFunctionData({ abi: marketAbi, functionName: "withdrawRefund", args: [BigInt(job)] }) }; },
+  cancelJob: async (job: number): Promise<Call> => { const c = await getContracts(); return { to: c.market, abi: marketAbi, data: encodeFunctionData({ abi: marketAbi, functionName: "cancelJob", args: [BigInt(job)] }) }; },
   abandonJob: async (job: number): Promise<Call> => { const c = await getContracts(); return { to: c.market, abi: marketAbi, data: encodeFunctionData({ abi: marketAbi, functionName: "abandonJob", args: [BigInt(job)] }) }; },
   approve: async (spender: "market" | "registry", amount: number): Promise<Call> => { const c = await getContracts(); return { to: c.token, abi: tokenAbi, data: encodeFunctionData({ abi: tokenAbi, functionName: "approve", args: [c[spender], BigInt(amount)] }) }; },
   join: async (i: { operator: string; nullifier: string; inviteDeadline: number; consentDeadline: number; inviteSig: string; consentSig: string }): Promise<Call> => {

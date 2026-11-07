@@ -104,13 +104,20 @@ export function JobPage({ id, tab: rawTab }: { id: number; tab?: string }) {
   );
 }
 
-/** What only the job's owner can do. There is no top-up in JobMarket, so more training is a follow-up job. */
+/** What only the job's owner can do: cancel while it runs, withdraw what never opened once it ends. There is no top-up in JobMarket, so more training is a follow-up job. */
 function OwnerActions({ job }: { job: Job }) {
   const refund = useTx({ revertAs: "WrongState" });
+  const cancel = useTx({ revertAs: "WrongState" });
   const [refunded, setRefunded] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const live = useRound(job.id, job.currentRound);
   const opened = job.currentRound ?? 0; // rails-allow: rounds opened, zero before the first
   const ended = job.status === "completed" || job.status === "abandoned";
-  const refundable = ended ? Math.min(job.remaining, ((job.rounds - opened) * job.budget) / job.rounds) : 0;
+  // What cancelJob or the contract's close would pay back: the budget of rounds that never opened, capped by what is left.
+  const unopened = Math.min(job.remaining, Math.floor(((job.rounds - opened) * job.budget) / job.rounds));
+  const refundable = ended ? (job.refundable ?? unopened) : 0;
+  const roundOpen = job.currentRound !== null && live.data !== undefined && STAGE_DONE[live.data.data.status] < 1;
+  const cancellable = !ended && !job.stopping && job.status !== "invalid" && opened < job.rounds;
   return (
     <div className="mt-4 flex flex-col gap-3 rounded-lg border border-brand-line bg-brand-soft p-3">
       <p className="text-xs font-medium text-ink">You posted this job</p>
@@ -121,8 +128,33 @@ function OwnerActions({ job }: { job: Job }) {
         </>
       )}
       {refunded && <p className="text-sm text-ok">Refund sent to your wallet.</p>}
-      {ended && refundable <= 0 && <p className="text-sm text-muted">Every round opened, so there is nothing to refund.</p>}
-      {!ended && <p className="text-sm text-muted">Rounds that never open come back to you once the job ends. You can't cancel a running job, but one stuck waiting for nodes can be abandoned once its wait runs out.</p>}
+      {ended && refundable <= 0 && !refunded && <p className="text-sm text-muted">{job.status === "completed" ? "Every round opened, so there is nothing to refund." : "Nothing left to refund."}</p>}
+      {job.stopping && !ended && (
+        <p className="text-sm text-muted">Cancelling. Round {job.currentRound} finishes and its nodes get paid, then no more rounds open. You can withdraw the unspent <Money units={unopened} /> here once it ends.</p>
+      )}
+      {cancellable && cancel.phase !== "confirmed" && !confirming && (
+        <>
+          <p className="text-sm text-muted">Rounds that never open come back to you once the job ends.</p>
+          <Button variant="secondary" className="self-start" onClick={() => setConfirming(true)}>Cancel job</Button>
+        </>
+      )}
+      {cancellable && (confirming || cancel.phase === "confirmed") && (
+        <div className="flex flex-col gap-3 border-t border-brand-line pt-3">
+          {cancel.phase !== "confirmed" && <p className="text-sm font-medium text-ink">Cancel this job?</p>}
+          {cancel.phase !== "confirmed" && <p className="text-sm text-muted">
+            {roundOpen
+              ? <>Round {job.currentRound} is running, so it finishes and its nodes get paid. No round opens after it, and the unspent <Money units={unopened} /> comes back for you to withdraw here.</>
+              : <>No round is running, so the unspent <Money units={unopened} /> comes straight back to your wallet in the same transaction.{opened > 0 && " Rounds that already finished stay paid."}</>}
+            {" "}This can&apos;t be undone.
+          </p>}
+          <div className="flex flex-wrap items-center gap-2">
+            <TxButton tx={cancel} variant="secondary" label="Cancel job" onRun={() => cancel.send(() => calls.cancelJob(job.id), () => { setConfirming(false); if (!roundOpen) setWallet((x) => ({ usdc: x.usdc + unopened })); })} />
+            {cancel.phase !== "confirmed" && <Button variant="ghost" disabled={cancel.busy} onClick={() => { setConfirming(false); cancel.reset(); }}>Keep the job</Button>}
+          </div>
+          <TxStatus tx={cancel} />
+          {cancel.phase === "confirmed" && <p className="text-sm text-ok">{roundOpen ? `Cancelling. Round ${job.currentRound} finishes first.` : "Cancelled. The refund is in your wallet."}</p>}
+        </div>
+      )}
       <Link href="/jobs/new" className="inline-flex min-h-6 items-center self-start text-sm text-muted underline decoration-rule-strong underline-offset-4 hover:text-ink hover:decoration-ink">Post a follow-up job</Link>
     </div>
   );
@@ -132,7 +164,7 @@ function summary(j: Job) {
   const base = `Trains ${j.workload} over ${j.rounds} rounds. Each round is replayed by two verifiers before it pays.`;
   if (j.status === "open") return `${base} Waiting for enough idle staked nodes to open round 1.`;
   if (j.status === "completed") return `${base} All ${j.rounds} rounds are done.`;
-  if (j.status === "abandoned") return `${base} The requester abandoned it after round ${j.currentRound}.`;
+  if (j.status === "abandoned") return `${base} It was cancelled after round ${j.currentRound}.`;
   return `${base} Round ${j.currentRound} is in progress.`;
 }
 
@@ -228,7 +260,7 @@ function Verdicts({ job }: { job: Job }) {
   const cur = job.currentRound;
   const v = useVerdicts(job.id, cur);
   const disagree = cur !== null && v.data && new Set(v.data.data.filter((x) => x.verdict === "pass" || x.verdict === "fail").map((x) => x.verdict)).size > 1;
-  if (job.status === "abandoned") return <Banner tone="warn" title={cur === null ? "Abandoned before round 1" : `Abandoned after round ${cur}`}>Finalized rounds stay paid. The unspent <Money units={job.remaining} /> is refundable to the requester.</Banner>;
+  if (job.status === "abandoned") return <Banner tone="warn" title={cur === null ? "Cancelled before round 1" : `Cancelled after round ${cur}`}>Finalized rounds stay paid.{(job.refundable ?? job.remaining) > 0 && <> The unspent <Money units={job.refundable ?? job.remaining} /> is refundable to the requester.</>}</Banner>;
   if (job.status === "open") return <Banner tone="pending" title="Waiting for nodes">Round 1 opens once enough staked nodes with this workload are idle. Nothing has been spent.</Banner>;
   if (disagree) {
     return (

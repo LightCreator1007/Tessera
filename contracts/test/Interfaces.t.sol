@@ -9,7 +9,7 @@ import {INodeRegistry} from "../src/INodeRegistry.sol";
 contract InterfacesTest is Test {
     function test_interfaceIdsAreStable() public pure {
         // Pin selectors so an accidental ABI change fails before consumers are built.
-        assertEq(type(IJobMarket).interfaceId, bytes4(0xe8c372ce), "IJobMarket");
+        assertEq(type(IJobMarket).interfaceId, bytes4(0xcbfe198b), "IJobMarket");
         assertEq(type(INodeRegistry).interfaceId, bytes4(0x7f590dff), "INodeRegistry");
     }
 

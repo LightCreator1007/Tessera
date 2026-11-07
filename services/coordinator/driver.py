@@ -98,7 +98,8 @@ class Driver:
                 id=job, status=JOB_STATUS[j["status"]], workload=spec["workload"]["id"] if spec else "unknown",
                 requester=j["requester"], budget=p.budget, remaining=j["remaining"], rounds=p.rounds,
                 currentRound=j["nextRound"] - 1 or None, stakePerNode=p.stakePerNode,
-                modelSpecHash=_hex(p.modelSpecHash),
+                modelSpecHash=_hex(p.modelSpecHash), stopping=j.get("stopping", False),
+                refundable=j.get("refundable", 0),
                 waiting=Waiting(**w, abandonAfter=j["closedAt"] + p.windows.stall)
                 if (w := tables.STALLED.get(job)) else None)
         for (job, rnd), r in self.state.rounds.items():

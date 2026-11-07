@@ -200,6 +200,7 @@ interface IJobMarket {
     event ForfeitedToPool(uint256 indexed jobId, uint256 indexed roundId, address indexed owner, uint256 amount);
     event PoolDripped(uint256 indexed jobId, uint256 indexed roundId, uint256 amount);
     event JobClosed(uint256 indexed jobId, JobStatus status, uint256 refundable, uint256 leftover);
+    event CancelRequested(uint256 indexed jobId);
     event RefundWithdrawn(uint256 indexed jobId, address indexed requester, uint256 amount);
     event LeftoverClaimed(uint256 indexed jobId, address indexed operator, address indexed owner, uint256 amount);
     event Claimed(address indexed owner, uint256 amount);
@@ -260,6 +261,12 @@ interface IJobMarket {
     function voidRound(uint256 jobId, uint256 roundId) external;
     /// @notice After the latest round closed and `stall` passed with no new round: cancel the job.
     function abandonJob(uint256 jobId) external;
+    /// @notice Requester only. With no round open the job closes as Cancelled and the rounds that never opened are
+    ///         paid back in the same call. With one open it opens no more, closes as Cancelled when that round does,
+    ///         and the refund is then pulled with withdrawRefund.
+    function cancelJob(uint256 jobId) external;
+    /// @notice True once cancelJob was called while a round was open, until that round closes the job.
+    function stopping(uint256 jobId) external view returns (bool);
     /// @notice A clean seat's share of a closed job's leftover (remaining - refundable), credited
     ///         to the owner's claimable balance.
     function claimLeftover(uint256 jobId, address operator) external;

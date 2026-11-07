@@ -57,6 +57,8 @@ contract JobMarket is IJobMarket, EIP712, ReentrancyGuardTransient {
     mapping(uint256 => uint256) private _cleanSeats;
     mapping(uint256 => uint256) private _leftoverShare;
     mapping(uint256 => uint256) private _refund;
+    /// @inheritdoc IJobMarket
+    mapping(uint256 => bool) public stopping;
 
     constructor(address token_, address registry_, address coordinator_, address[] memory verifiers_, uint8 threshold_)
         EIP712("ToD", "1")
@@ -119,7 +121,7 @@ contract JobMarket is IJobMarket, EIP712, ReentrancyGuardTransient {
         if (msg.sender != coordinator) revert NotAuthorized();
         JobParams storage p = _params[jobId];
         JobState storage js = _state[jobId];
-        if (js.status != JobStatus.Active || js.roundsOpened == p.rounds) revert WrongState();
+        if (js.status != JobStatus.Active || stopping[jobId] || js.roundsOpened == p.rounds) revert WrongState();
         uint256 roundId = js.nextRound;
         if (roundId > 1 && _rounds[jobId][roundId - 1].status == RoundStatus.Open) revert WrongState();
         if (nodes.length < p.minQuorum) revert QuorumNotMet();
@@ -298,6 +300,24 @@ contract JobMarket is IJobMarket, EIP712, ReentrancyGuardTransient {
         if (last > 0 && _rounds[jobId][last].status == RoundStatus.Open) revert WrongState();
         if (block.timestamp <= js.closedAt + _params[jobId].windows.stall) revert TooEarly();
         _closeJob(jobId, JobStatus.Cancelled);
+    }
+
+    function cancelJob(uint256 jobId) external nonReentrant {
+        JobState storage js = _state[jobId];
+        if (msg.sender != js.requester) revert NotAuthorized();
+        if (js.status != JobStatus.Active || stopping[jobId]) revert WrongState();
+        uint256 last = js.nextRound - 1;
+        if (last > 0 && _rounds[jobId][last].status == RoundStatus.Open) {
+            // The open round's nodes already staked and started, so it runs to the end and _close cancels after it.
+            stopping[jobId] = true;
+            emit CancelRequested(jobId);
+        } else {
+            _closeJob(jobId, JobStatus.Cancelled);
+            uint256 amount = _refund[jobId];
+            _refund[jobId] = 0;
+            if (amount > 0) IERC20(token).safeTransfer(msg.sender, amount);
+            emit RefundWithdrawn(jobId, msg.sender, amount);
+        }
     }
 
     function claimLeftover(uint256 jobId, address operator) external {
@@ -626,6 +646,7 @@ contract JobMarket is IJobMarket, EIP712, ReentrancyGuardTransient {
         js.closedAt = uint64(block.timestamp);
         INodeRegistry(registry).markFree(_roster[jobId][roundId], jobId, roundId);
         if (js.roundsOpened == _params[jobId].rounds) _closeJob(jobId, JobStatus.Completed);
+        else if (stopping[jobId]) _closeJob(jobId, JobStatus.Cancelled);
     }
 
     /// @dev Refund only rounds that never opened; the rest was promised to nodes, so it goes to clean seats,
