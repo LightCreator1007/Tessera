@@ -40,6 +40,8 @@ The client never decides anything. Its result only counts after the coordinator 
 
 The coordinator side is complete and tested (`services/coordinator/identity/test_worldid.py` and `services/coordinator/identity/test_identity.py`). On World ID staging it was verified live on 6 November with the simulator's Proof of Human: the coordinator verified the proof with World and signed an invite. The coordinator's `/v1/identity/test` page runs the whole join with IDKit, or gets a competition entry pass (see docs/competitions.md). On 7 November an entry pass from the simulator's Proof of Human entered competition 3 on the local chain: the contract bound that World ID nullifier to the entrant's wallet, and the same pass from another wallet reverted `BadPass`. IDKit in the main web app's join flow is in progress (#119). For a local demo, `docker/compose.worldid.yml` switches the dev stack from dev mode to World ID staging.
 
+The public coordinator (`docker/compose.prod.yml`) runs World ID production: people verify in World App on their phone, not in the simulator. The staging simulator gave every simulated identity the same nullifier, so only one wallet could ever join through it. Production needs the World ID app behind `WORLD_ID_APP_ID` and `WORLD_ID_RP_ID` enabled for production in the developer portal.
+
 ## Integration debrief
 
 - **Time to first success:** **Open:** fill in from the team's log.
