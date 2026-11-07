@@ -1,7 +1,7 @@
 "use client";
 // Competitions as the signed-in wallet sees them: the contract's, against a coordinator, or in demo mode the examples plus this wallet's; and who may enter what.
 import { useWallet, type DemoWallet, type HostedCompetition } from "@/lib/wallet";
-import { isDemo } from "@/lib/api/client";
+import { COORD_BASE, isDemo } from "@/lib/api/client";
 import { useLiveCompetitions } from "@/lib/api/hooks";
 import type { LiveCompetition } from "@/lib/api/types";
 import { COMPETITIONS, ITEMS, labelBytes, type Competition } from "@/lib/learn/competition";
@@ -32,40 +32,66 @@ const LIVE_STATUS: Record<LiveCompetition["status"], Competition["status"]> = {
   scoring: "finished", "ready-to-settle": "finished", settled: "finished",
 };
 
-export function fromLive(r: LiveCompetition): Competition {
-  const scores = new Map(r.leaderboard.map((e) => [e.entrant.toLowerCase(), e.score / r.items]));
+export function fromLive(r: LiveCompetition, readAt = Date.now()): Competition {
   const status = r.status === "settled" && r.scored === 0 ? "closed" : LIVE_STATUS[r.status];
+  // Older coordinators send only entrants and a leaderboard; newer ones send standings with ranks and commit counts.
+  const entries = r.standings
+    ? r.standings.map((s) => ({ op: s.entrant, seed: 0, skill: 0, scoreHash: "", score: s.score === null ? undefined : s.score / r.items, rank: s.rank, tied: s.tied, commits: s.commits, share: s.share }))
+    : r.entrants.map((op) => {
+      const i = r.leaderboard.findIndex((e) => e.entrant.toLowerCase() === op.toLowerCase());
+      return { op, seed: 0, skill: 0, scoreHash: "", score: i < 0 ? undefined : r.leaderboard[i].score / r.items, rank: i < 0 ? null : i + 1 };
+    });
   return {
-    id: String(r.id), title: r.title, task: r.task, host: r.host, status, prize: r.prize, budget: 0, fee: 0,
+    id: String(r.id), title: r.listing?.title || r.title, task: r.listing?.summary || r.task, host: r.host, status, prize: r.prize, budget: 0, fee: 0,
     deadline: new Date(r.deadline * 1000).toISOString(), labelsSeed: null, labelsHash: r.labelsHash, committedAt: r.createdBlock,
-    entries: r.entrants.map((op) => ({ op, seed: 0, skill: 0, scoreHash: "", score: scores.get(op.toLowerCase()) })),
-    live: true, items: r.items, revealWindow: r.revealWindow, arkiv: r.arkiv ?? null, stage: r.status, settled: r.settled,
+    entries, live: true, items: r.items, revealWindow: r.revealWindow, arkiv: r.arkiv ?? null, stage: r.status, settled: r.settled,
+    chainNow: r.now, readAt, settings: r.listing ?? null, resources: r.resources ?? [],
+    bannerUrl: r.banner && COORD_BASE ? `${COORD_BASE}/v1/competitions/${r.id}/banner?v=${r.banner.sha256.slice(0, 12)}` : null,
   };
 }
+
+export type ListState = "loading" | "error" | "ready";
 
 export function useCompetitions() {
   const w = useWallet();
   const live = useLiveCompetitions();
   // Against a coordinator, the contract is the source; the examples and this browser's demo hosting are demo mode only.
-  if (!isDemo) return { list: (live.data?.data ?? []).map(fromLive), w };
-  return { list: merge(w), w };
+  if (!isDemo) {
+    const state: ListState = live.data ? "ready" : live.isError ? "error" : "loading";
+    return {
+      list: (live.data?.data ?? []).map((r) => fromLive(r, live.dataUpdatedAt)), w, state,
+      // A failed refresh keeps the last good list on screen, marked stale.
+      stale: Boolean(live.data && live.isError), error: live.error, retry: () => void live.refetch(),
+    };
+  }
+  return { list: merge(w), w, state: "ready" as ListState, stale: false, error: null, retry: () => {} };
 }
 
 export function useCompetition(id: string) {
-  const { list, w } = useCompetitions();
-  return { c: list.find((c) => c.id === id) ?? null, w };
+  const all = useCompetitions();
+  return { ...all, c: all.list.find((c) => c.id === id) ?? null };
 }
+
+const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 export function relationOf(c: Competition, w: DemoWallet): Relation {
   if (w.hosted.some((h) => h.id === c.id)) return "host";
   if (!w.address) return null;
-  if (c.host.toLowerCase() === w.address.toLowerCase()) return "host";
+  if (same(c.host, w.address)) return "host";
+  // Live entries are onchain, so another browser or the CLI counts; demo entries live in this browser.
+  if (c.live) return c.entries.some((e) => same(e.op, w.address!)) ? "entered" : null;
   return w.entries.some((e) => e.competition === c.id) ? "entered" : null;
 }
 
-/** Whether this wallet may enter now. The deadline is checked against the clock, not just the stored status. */
+/** The chain's time now, from the last read plus the time since; the browser clock alone can be minutes off. */
+export function chainTime(c: Competition, now = Date.now()) {
+  if (c.chainNow === undefined || c.readAt === undefined) return now;
+  return c.chainNow * 1000 + (now - c.readAt);
+}
+
+/** Whether this wallet may enter now. The deadline is checked against the chain's clock, not just the stored status. */
 export function entryGate(c: Competition, w: DemoWallet, now = Date.now()): Gate {
-  if (c.status !== "open" || Date.parse(c.deadline) <= now) return { ok: false, why: "closed", text: "Entries are closed. The deadline has passed." };
+  if (c.status !== "open" || Date.parse(c.deadline) <= chainTime(c, now)) return { ok: false, why: "closed", text: "Entries are closed. The deadline has passed." };
   const rel = relationOf(c, w);
   if (rel === "host") return { ok: false, why: "host", text: "You host this competition, so you can't enter it." };
   if (rel === "entered") return { ok: false, why: "entered", text: "You've entered. One entry per person." };

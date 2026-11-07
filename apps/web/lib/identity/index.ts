@@ -148,3 +148,8 @@ const DEMO_FAIL: Partial<Record<FailKind, string>> = {
   linked_elsewhere: "this World ID is already linked to 0x1111...1111",
   rejected: "World ID verification failed: all_verifications_failed",
 };
+
+export type EntryPass = { wallet: string; nullifier: `0x${string}`; deadline: number; signature: `0x${string}`; credential: string };
+
+/** The admitter's signature that this wallet is one verified person, which Competitions.create and enter both check. */
+export const entryPass = (owner: string, proof?: unknown) => call<EntryPass>("/entry-pass", { owner, proof: proof ?? {} });

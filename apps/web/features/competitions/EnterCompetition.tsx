@@ -12,6 +12,7 @@ import { More, Sequence, StepPanel, TxButton, TxStatus } from "@/components/flow
 import { openConnect } from "@/components/connect";
 import { Banner, Button, EmptyState, Money, Skeleton, short } from "@/components/primitives";
 import { CommitFile } from "./CommitFile";
+import { LiveEnter } from "./LiveEnter";
 import { HumanGate } from "@/components/human/HumanGate";
 import { useHuman } from "@/lib/identity";
 import { PayLine } from "./HostCompetition";
@@ -21,7 +22,7 @@ const date = (iso: string) => new Intl.DateTimeFormat("en-GB", { day: "numeric",
 
 export function EnterCompetition({ id }: { id: string }) {
   const router = useRouter();
-  const { c, w } = useCompetition(id);
+  const { c, w, state } = useCompetition(id);
   const [mounted, setMounted] = useState(false);
   const [preds, setPreds] = useState<Committed | null>(null);
   const human = useHuman();
@@ -30,7 +31,7 @@ export function EnterCompetition({ id }: { id: string }) {
   const enter = useTx({ revertAs: "DeadlinePassed" });
   useEffect(() => setMounted(true), []);
 
-  if (!mounted) return <div className="mx-auto w-full max-w-2xl px-6 pt-16"><Skeleton className="h-8 w-72" /></div>;
+  if (!mounted || (!c && state === "loading")) return <div className="mx-auto w-full max-w-2xl px-6 pt-16"><Skeleton className="h-8 w-72" /></div>;
   if (!c) {
     return (
       <EmptyState icon={Trophy} title="No competition with that id" action={<Link href="/competitions" className="text-sm text-ink underline decoration-subtle underline-offset-4">All competitions</Link>}>
@@ -39,6 +40,11 @@ export function EnterCompetition({ id }: { id: string }) {
     );
   }
 
+  if (c.live) {
+    const g = entryGate(c, w);
+    if (g.ok) return <LiveEnter c={c} w={w} replacing={false} />;
+    if (g.why === "entered") return <LiveEnter c={c} w={w} replacing />;
+  }
   const entered = enter.phase === "confirmed";
   const gate = entryGate(c, w);
   const back = `/competitions/${c.id}`;

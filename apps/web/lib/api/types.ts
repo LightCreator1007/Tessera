@@ -19,6 +19,8 @@ export type Config = {
   threshold: number;
   token: string;
   verifiers: string[];
+  /** Absent or null where this network has no Competitions contract. */
+  competitions?: string | null;
 };
 export type Health = { block: number | null; chainId: number; ok: boolean; storeOk: boolean; version: string };
 export type Job = {
@@ -191,8 +193,58 @@ export type LiveCompetition = {
   id: number; host: string; title: string; task: string; dataset: string; prize: number; deadline: number; revealWindow: number; items: number;
   labelsHash: string; status: "open" | "awaiting-labels" | "labels-hidden" | "refundable" | "scoring" | "ready-to-settle" | "settled";
   entries: number; entrants: string[]; scored: number; labelsRevealedAt: number | null;
-  leaderboard: { entrant: string; score: number }[]; winner: string | null; bestScore: number | null;
+  leaderboard: { entrant: string; score: number; rank?: number; tied?: boolean }[]; winner: string | null; bestScore: number | null;
   settled: { to: string; amount: number; refunded: boolean } | null; sharesPaid: number; createdBlock: number;
+  /** Every entrant, scored ones first by rank. Older coordinators don't send it. */
+  standings?: Standing[];
+  /** The chain's time when this was read, which decides the status; the browser clock can be off. */
+  now?: number;
+  /** The host's signed listing edits, a banner and downloadable files; absent on older coordinators. */
+  listing?: ListingSettings | null;
+  banner?: { contentType: string; sha256: string; updatedAt: number } | null;
+  resources?: Resource[];
   /** Arkiv entity keys for this competition's listing and, once settled, its result; null when publishing is off. */
   arkiv?: { listing?: string; result?: string } | null;
 };
+
+/** One entrant of one competition. A null rank means not scored: not revealed yet, or never. */
+export type Standing = {
+  entrant: string; state: "committed" | "scored"; score: number | null; rank: number | null; tied: boolean; commits: number;
+  enteredAt: number | null; lastCommitAt: number | null; scoredAt: number | null; revealTx: string | null; share: number;
+};
+
+export type EntryBreakdown = {
+  correct: number; items: number; classes: number[];
+  perClass: { label: number; count: number; correct: number }[];
+  /** Absent past 20 classes, where a matrix is too big to read. */
+  confusion: { label: number; predicted: number; count: number }[] | null;
+};
+
+export type CompetitionEntry = Partial<Standing> & {
+  competition: number | string; entrant: string; status: LiveCompetition["status"]; items: number; entered: boolean;
+  of: number; scoredCount: number; predictions: string | null; breakdown: EntryBreakdown | null; unavailable: string | null;
+};
+
+export type NotebookMeta = {
+  entrant: string; title: string; name: string; kind: "ipynb" | "markdown" | "python"; size: number; sha256: string;
+  signature: string; signedAt: number; revisions: number; updatedAt: number;
+};
+export type NotebookIndex = { sealed: boolean; count: number; opensAt: number; notebooks: NotebookMeta[] };
+export type Notebook = NotebookMeta & { competition: number | string; content: string; message: string };
+export type NotebookIn = { entrant: string; name: string; title: string; content: string; signedAt: number; signature: string };
+
+export type OwnerCompetitions = {
+  owner: string; won: number; shares: number; wins: number; refunded: number;
+  hosted: { id: number | string; title: string; status: string; prize: number; deadline: number; entries: number; refunded: number }[];
+  entered: {
+    id: number | string; title: string; status: string; prize: number; deadline: number; entries: number; items: number;
+    state: Standing["state"]; score: number | null; rank: number | null; tied: boolean; won: number; share: number; commits: number;
+  }[];
+};
+
+export type ListingSettings = {
+  title: string; summary: string; rules: string; links: { label: string; url: string }[]; tags: string[]; classNames: string[];
+  notebookRules: "optional" | "required" | "off"; version?: number; sha256?: string; signature?: string; signedAt?: number; updatedAt?: number;
+};
+export type EnvSpec = { framework: "gymnasium"; entrypoint: string; seeds: number[]; episodes: number; maxSteps: number; metric: "mean-return" };
+export type Resource = { name: string; kind: "environment" | "starter" | "data"; description: string; env?: EnvSpec; sha256: string; size: number; updatedAt: number };

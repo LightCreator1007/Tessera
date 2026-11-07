@@ -13,6 +13,7 @@ import { formatToken, TOKEN_SYMBOL } from "@/lib/money";
 import { useWallet } from "@/lib/wallet";
 import { MIN_STAKE } from "@/features/node/JoinFlow";
 import { useAddressRecord, type AddressRecord } from "./record";
+import { OwnerCompetitions } from "@/features/competitions/OwnerCompetitions";
 import { Banner, Button, Card, Counter, EmptyState, Identicon, Money, Null, PageHeader, Pill, SectionTitle, Skeleton, cx, short, useCopy } from "@/components/primitives";
 
 const isAddress = (v: string) => /^0x[0-9a-fA-F]{40}$/.test(v);
@@ -136,6 +137,8 @@ function Record({ address }: { address: string }) {
             </Card>
           </section>
         )}
+
+        <OwnerCompetitions address={address} self={r.self} />
 
         <PosterShelf self={r.self} earned={r.paidRounds !== null && r.paidRounds > 0} spent={r.jobs.length > 0} recycled={r.recycled > 0} joined={r.operators.length > 0} human={Boolean(r.human)} graduated={r.graduated} />
       </div>

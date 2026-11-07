@@ -5,7 +5,13 @@ export const ITEMS = 2000;
 export const CLASSES = 10;
 
 /** score: the fraction of items right, as the Competitions contract counted it; only set on live competitions. */
-export type Entry = { op: string; seed: number; skill: number; scoreHash: string; score?: number };
+export type Entry = {
+  op: string; seed: number; skill: number; scoreHash: string; score?: number;
+  /** Live only: the contract's rank (null until scored), whether it ties, and how many times it was committed. */
+  rank?: number | null; tied?: boolean; commits?: number;
+  /** Live only: TOD this entrant claimed as an equal share when the labels stayed hidden. */
+  share?: number;
+};
 export type Competition = {
   id: string;
   title: string;
@@ -33,6 +39,13 @@ export type Competition = {
   settled?: { to: string; amount: number; refunded: boolean } | null;
   /** Where this competition is listed on Arkiv, and its result once settled. */
   arkiv?: { listing?: string; result?: string } | null;
+  /** Live only: the chain's time at the last read, and the browser's time when that read landed, to correct clock skew. */
+  chainNow?: number;
+  readAt?: number;
+  /** Live only: the host's listing. The banner is a URL with its hash, so a new upload busts the cache. */
+  settings?: import("@/lib/api/types").ListingSettings | null;
+  bannerUrl?: string | null;
+  resources?: import("@/lib/api/types").Resource[];
 };
 
 export function labelBytes(seed: number) {
@@ -60,7 +73,7 @@ export function scoreRecord(c: Pick<Competition, "id" | "labelsHash">, op: strin
 }
 
 /** Only example competitions can rebuild their labels in the browser; a hosted one waits for its reveal. */
-function seedOf(c: Competition) {
+export function seedOf(c: Competition) {
   if (c.labelsSeed === null) throw new Error(`${c.id} has no rebuildable labels until the host reveals them`);
   return c.labelsSeed;
 }

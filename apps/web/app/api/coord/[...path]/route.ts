@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 const COORDINATOR = process.env.NEXT_PUBLIC_COORDINATOR_URL?.replace(/\/$/, "");
 // Only the headers the coordinator reads or the browser needs; never forward cookies to it.
 const PASS_REQ = ["accept", "content-type"];
-const PASS_RES = ["content-type", "content-length", "x-keccak", "cache-control"];
+const PASS_RES = ["content-type", "content-length", "x-keccak", "cache-control", "content-disposition", "x-content-type-options"];
 
 async function forward(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
   if (!COORDINATOR) return Response.json({ code: "no_coordinator" }, { status: 404 });

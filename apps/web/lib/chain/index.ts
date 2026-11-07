@@ -33,7 +33,7 @@ export const tokenAbi = parseAbi([
 ]);
 export const faucetAbi = parseAbi(["function claim()", "error CooldownActive(uint256 nextClaim)", "error EmptyFaucet()"]);
 
-export type Contracts = { chainId: number; market: Address; registry: Address; token: Address; faucet: Address | null };
+export type Contracts = { chainId: number; market: Address; registry: Address; token: Address; faucet: Address | null; competitions: Address | null };
 export type ChainWallet = {
   address: Address | null;
   chainId: number | null;
@@ -83,7 +83,7 @@ const remember = (rdns: string | null) => {
 };
 
 export function getContracts(): Promise<Contracts> {
-  contracts ??= api.config().then(({ data: c }) => ({ chainId: c.chainId, market: c.jobMarket as Address, registry: c.nodeRegistry as Address, token: c.token as Address, faucet: FAUCET }))
+  contracts ??= api.config().then(({ data: c }) => ({ chainId: c.chainId, market: c.jobMarket as Address, registry: c.nodeRegistry as Address, token: c.token as Address, faucet: FAUCET, competitions: (c.competitions ?? null) as Address | null }))
     .catch((e) => { contracts = null; throw e; });
   return contracts;
 }
@@ -303,6 +303,19 @@ export async function send(make: () => Promise<Call>, onHash?: (hash: Hex) => vo
   const r = await pub.waitForTransactionReceipt({ hash });
   void refresh();
   return r.status === "success" ? { phase: "confirmed", hash, reason: null } : { phase: "reverted", hash, reason: "The transaction reverted on chain after it was sent." };
+}
+
+/** An EIP-191 signature over plain text from the connected wallet, for coordinator writes that a wallet must authorise. */
+export async function signText(message: string): Promise<{ address: Address; signature: Hex }> {
+  const p = provider();
+  if (!p || !state.address) throw new Error("Connect a wallet first.");
+  const wallet = createWalletClient({ account: state.address, transport: custom(p) });
+  try {
+    return { address: state.address, signature: await wallet.signMessage({ account: state.address, message }) };
+  } catch (e) {
+    if (e instanceof BaseError && e.walk((x) => x instanceof UserRejectedRequestError)) throw new Rejected("rejected");
+    throw e;
+  }
 }
 
 function refusal(e: unknown, abi: readonly unknown[]): Refused {
