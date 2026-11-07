@@ -149,7 +149,7 @@ contract TracerTest is MarketFixture {
         shards[2] = 2;
         nodes[2] = nodes[0];
         vm.prank(coordinator);
-        vm.expectRevert(IJobMarket.DuplicateOwner.selector);
+        vm.expectRevert(IJobMarket.DuplicateNode.selector);
         market.openRound(jobId, nodes, shards);
 
         nodes[2] = op[2];

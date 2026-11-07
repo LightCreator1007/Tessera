@@ -8,7 +8,7 @@ The same nullifier also gives us a lasting handle on a person, not a wallet. Whe
 
 ## Which credential, and why it's the minimum
 
-We accept Selfie Check and Proof of Human (Orb). World ID only gates joining the pool. The matcher (`services/coordinator/scheduler/__init__.py`) seats any joined node whatever its owner's credential, skipping only owners excluded for cheating, and the contract still allows one seat per owner in a round.
+We accept Selfie Check and Proof of Human (Orb). World ID only gates joining the pool. The matcher (`services/coordinator/scheduler/__init__.py`) seats any joined node whatever its owner's credential, skipping only owners excluded for cheating. Each node is its own seat, so one owner's several nodes can train in the same round.
 
 We don't ask for a passport, because nationality and age don't matter here, and asking for more than the job needs would only shrink the pool.
 

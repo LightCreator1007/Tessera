@@ -213,7 +213,7 @@ interface IJobMarket {
     error StakeTooLow(); // createJob: stakePerNode < minStake; openRound: node under-staked
     error QuorumNotMet(); // openRound: nodes.length < minQuorum
     error NodeNotEligible(); // openRound: busy, not joined or inactive for this job
-    error DuplicateOwner(); // openRound: two operators of one owner in one round
+    error DuplicateNode(); // openRound: one operator listed twice in a round
     error DuplicateShard();
     error AlreadyReported(); // a verifier attests a round twice, or lists a node twice
     error InsufficientBalance(); // createJob: fromBalance > claimable

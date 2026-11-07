@@ -87,7 +87,7 @@ class Job(BaseModel):
 
 class Waiting(BaseModel):
     """Why a running job isn't opening rounds. blocked counts nodes by the first rule they fail: notJoined, stake,
-    offline, busy, selftest, benched, excluded or sameOwner (a second node of an owner already counted)."""
+    offline, busy, selftest, benched or excluded."""
     since: int  # unix time the coordinator first saw the job stuck
     eligible: int  # owners with a node that could take a seat now
     quorum: int  # seats the job needs per round
