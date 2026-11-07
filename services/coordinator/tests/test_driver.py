@@ -71,7 +71,7 @@ def world(tmp_path, monkeypatch):
     market = Market({(1, 1): Phase.FINALIZE})
     registry = NS(graduatedAt=lambda owner: 1, PROBATION_SECONDS=lambda: 0)
     d = D.Driver(NS(market=market, registry=registry), store, {DATA: (X, Y)}.__getitem__,
-                 fleet=lambda: {}, credentials=lambda: {}, now=lambda: 1000)
+                 fleet=lambda: {}, excluded=set, now=lambda: 1000)
     d.state = s
     return NS(d=d, s=s, market=market, store=store, spec_hash=spec_hash, start=start, wl=wl)
 
@@ -163,7 +163,6 @@ def test_opens_the_next_round_on_idle_nodes(world):
     world.s.rounds[(1, 1)]["status"] = RoundStatus.SETTLED
     world.s.nodes = {op: {**n, "busyJob": 0} for op, n in world.s.nodes.items()}
     world.d.fleet = lambda: {op: {"seen": 1000, "busy": False, "selftest": {"mlp-exact/1": {"ok": True}}} for op in OPS}
-    world.d.credentials = lambda: dict.fromkeys(OPS, "orb")
     world.d.tick()
     (name, job, ops, shards), = world.market.calls
     assert (name, job, len(ops)) == ("openRound", 1, 3) and OPS[3] in ops  # the node that sat out goes first
@@ -179,7 +178,6 @@ def test_a_job_that_cannot_seat_a_quorum_says_why_and_since_when(world):
     world.s.jobs[1]["params"].windows = NS(stall=3600)
     online = {op: {"seen": 1000, "busy": False, "selftest": {"mlp-exact/1": {"ok": True}}} for op in OPS[:2]}
     world.d.fleet = lambda: online  # OPS[2] and OPS[3] are offline
-    world.d.credentials = lambda: dict.fromkeys(OPS, "orb")
     world.d.tick()
     world.d.now = lambda: 1030
     world.d.tick()  # publish runs before open_rounds, so the second tick shows the first tick's diagnosis

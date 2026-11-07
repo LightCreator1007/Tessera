@@ -8,14 +8,9 @@ The same nullifier also gives us a lasting handle on a person, not a wallet. Whe
 
 ## Which credential, and why it's the minimum
 
-We accept two credentials and pick the bar by how much a job is worth (`services/coordinator/scheduler/__init__.py`):
+We accept Selfie Check and Proof of Human (Orb). World ID only gates joining the pool. The matcher (`services/coordinator/scheduler/__init__.py`) seats any joined node whatever its owner's credential, skipping only owners excluded for cheating, and the contract still allows one seat per owner in a round.
 
-| Job budget | Credential required | Why |
-|---|---|---|
-| Under 500 TOD | **Selfie Check** or better | A small job's seats aren't worth farming identities for. Selfie Check stops casual Sybils (one person, many wallets), which is the realistic attack at this size, and it's the credential most laptop owners can get without visiting an Orb |
-| 500 TOD and up | **Proof of Human (Orb)** | Here a farm of fake identities could pay off. Only the Orb gives uniqueness strong enough that buying or faking selfies doesn't scale |
-
-A node verified with Selfie Check can still train small jobs. It just isn't seated in big ones. We don't ask for a passport, because nationality and age don't matter here, and asking for more than the job needs would only shrink the pool. Using more credentials than necessary earns nothing.
+We don't ask for a passport, because nationality and age don't matter here, and asking for more than the job needs would only shrink the pool.
 
 ## The flow
 
@@ -40,7 +35,6 @@ The client never decides anything. Its result only counts after the coordinator 
 | A proof made for another wallet | Refused: "World ID proof was made for a different wallet" |
 | Same human, second wallet | Onchain `NullifierUsed`; the web app explains "This World ID already runs a node. One person, one node." |
 | An owner excluded for cheating | Refused at join, by owner and by nullifier |
-| Selfie Check only, but a job of 500 TOD or more | The node joins, but the matcher won't seat it in that job (reason `credential`) |
 
 ## Where it runs today
 
