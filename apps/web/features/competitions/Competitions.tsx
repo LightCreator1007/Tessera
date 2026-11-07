@@ -17,6 +17,7 @@ import { formatToken } from "@/lib/money";
 import { ITEMS, labelBytes, rescore, scoreOf, type Competition } from "@/lib/learn/competition";
 import { chainTime, entryGate, relationOf, useCompetition, useCompetitions } from "./model";
 import { sha256 } from "@/lib/learn/replay";
+import { RLList } from "./rl/RLCompetition";
 
 type Status = Competition["status"];
 const LABEL: Record<Status, string> = { open: "Open", closed: "Closed", finished: "Finished", unrevealed: "Labels not revealed" };
@@ -115,6 +116,7 @@ export function CompetitionList() {
             Nothing matches this status.
           </EmptyState>
         ))}
+        <div className="px-4 pb-8 md:px-6"><RLList /></div>
       </div>
     </div>
   );

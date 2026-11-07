@@ -21,6 +21,7 @@ export type Config = {
   verifiers: string[];
   /** Absent or null where this network has no Competitions contract. */
   competitions?: string | null;
+  rlCompetitions?: string | null;
 };
 export type Health = { block: number | null; chainId: number; ok: boolean; storeOk: boolean; version: string };
 export type Job = {
@@ -248,3 +249,20 @@ export type ListingSettings = {
 };
 export type EnvSpec = { framework: "gymnasium"; entrypoint: string; seeds: number[]; episodes: number; maxSteps: number; metric: "mean-return" };
 export type Resource = { name: string; kind: "environment" | "starter" | "data"; description: string; env?: EnvSpec; sha256: string; size: number; updatedAt: number };
+
+/** An RL competition as GET /v1/rl/competitions returns it. Scores are mean return x 1000. */
+export type RLStanding = {
+  entrant: string; commits: number; enteredAt: number; lastCommitAt: number; seq: number; policy: string | null; policyUploaded: boolean;
+  score: number | null; rank: number | null; tied: boolean; share: number; results: RLResults;
+};
+export type RLResults = {
+  results: { verifier: string; policy: string; score: number; returns: number[][]; signature: string }[];
+  agreed: boolean; ready: { score: number; signatures: string[] } | null;
+};
+export type RLCompetition = {
+  id: number; host: string; title: string; task: string; prize: number; deadline: number; revealWindow: number; episodes: number; maxSteps: number;
+  env: string; envUploaded: boolean; seedsHash: string; seeds: number[] | null; seedsRevealedAt: number; entries: number; scored: number;
+  best: string | null; bestScore: number | null; settled: boolean; now: number; policyReveals: number;
+  status: "open" | "awaiting-seeds" | "seeds-hidden" | "refundable" | "revealing" | "scoring" | "ready-to-settle" | "settled";
+  standings: RLStanding[]; settledTo: { to: string; amount: number; refunded: boolean } | null;
+};

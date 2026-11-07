@@ -5,7 +5,7 @@ import * as fx from "@/mocks/fixtures";
 import * as demoNotebooks from "@/lib/learn/notebooks";
 import type {
   CompetitionEntry, Notebook, NotebookIn, NotebookIndex, OwnerCompetitions, Draft, DraftRequest, LiveCompetition, ModelRecord, NodeEvent, NodeHealth, NodeStatus, Spec, Workload,
-  Config, Evidence, Health, Job, JobState, Node, NodeChain, Pool, Round, RoundSummary, RoundVerdicts, Settlement, Sourced, OwnerHistory, OwnerIdentity, OwnerRecord } from "./types";
+  Config, Evidence, Health, Job, JobState, Node, NodeChain, Pool, Round, RoundSummary, RoundVerdicts, Settlement, Sourced, OwnerHistory, OwnerIdentity, OwnerRecord, RLCompetition } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_COORDINATOR_URL ? "/api/coord" : undefined;
 /** The same-origin proxy root, for modules with their own routes (lib/identity). */
@@ -83,6 +83,10 @@ export const api = {
   health: () => (BASE ? get<Health>("/v1/health") : demo(() => ({ ...fx.health, block: demoBlock() }), "health")),
   pool: () => (BASE ? get<Pool>("/v1/pool") : demo(() => fx.pool, "pool")),
   competitions: () => (BASE ? get<LiveCompetition[]>("/v1/competitions") : demo(() => [] as LiveCompetition[], "competitions")),
+  rlCompetitions: () => (isDemo ? demo<RLCompetition[]>(() => [], "RL competitions") : get<RLCompetition[]>("/v1/rl/competitions")),
+  rlCompetition: (id: string) => get<RLCompetition>(`/v1/rl/competitions/${encodeURIComponent(id)}`),
+  /** Posts an environment or a revealed policy; the coordinator takes only the file whose sha256 the contract holds. */
+  rlUpload: (id: string, what: "env" | `policies/${string}`, data: string) => post<{ sha256: string; size: number }>(`/v1/rl/competitions/${encodeURIComponent(id)}/${what}`, { data }),
   competitionEntry: (id: string, who: string) => get<CompetitionEntry>(`/v1/competitions/${encodeURIComponent(id)}/entries/${who}`),
   notebooks: (id: string) => (BASE ? get<NotebookIndex>(`/v1/competitions/${encodeURIComponent(id)}/notebooks`) : demo(() => demoNotebooks.index(id), "notebooks")),
   notebook: (id: string, who: string) => (BASE ? get<Notebook>(`/v1/competitions/${encodeURIComponent(id)}/notebooks/${who}`) : demo(() => demoNotebooks.one(id, who), "notebook")),
