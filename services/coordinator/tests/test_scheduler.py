@@ -81,7 +81,7 @@ def test_a_cancelling_job_gets_no_new_round():
     s.jobs = {j: {"params": NS(**{**vars(P), "rounds": 4}), "status": JobStatus.ACTIVE, "remaining": 800,
                   "roundsOpened": 1, "nextRound": 2} for j in (1, 2)}
     s.jobs[2]["stopping"] = True  # openRound would revert with WrongState
-    out = queue(s, rebuild(s), fleet(), NOW, dict.fromkeys(s.jobs, "w"), {}, CREDS)
+    out = queue(s, rebuild(s), fleet(), NOW, dict.fromkeys(s.jobs, "w"), {}, NONE)
     assert [j for j, *_ in out] == [1]
 
 
