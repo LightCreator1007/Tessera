@@ -26,7 +26,7 @@ const STATUS: { key: Seg; label: string }[] = [
   { key: "running", label: "Training" },
   { key: "open", label: "Waiting" },
   { key: "completed", label: "Finished" },
-  { key: "abandoned", label: "Abandoned" },
+  { key: "abandoned", label: "Cancelled" },
 ];
 export type Scope = "yours" | "all";
 
@@ -175,7 +175,7 @@ function RoundMosaic({ jobs, loading }: { jobs: Job[]; loading: boolean }) {
   );
 }
 
-const STATUS_WORD: Record<JobStatus, string> = { running: "training", open: "waiting", completed: "finished", abandoned: "abandoned", invalid: "invalid" };
+const STATUS_WORD: Record<JobStatus, string> = { running: "training", open: "waiting", completed: "finished", abandoned: "cancelled", invalid: "invalid" };
 
 /** A job as a poster card: its figure (stable per job), id, workload and one line of where it stands. */
 function JobCard({ job, mine }: { job: Job; mine: boolean }) {

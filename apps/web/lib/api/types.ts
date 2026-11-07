@@ -37,6 +37,10 @@ export type Job = {
   waiting?: Waiting | null;
   /** Where the final model is indexed on Arkiv. Absent on coordinators without Arkiv; null until the job completes. */
   published?: Published | null;
+  /** The requester cancelled while a round ran: no new rounds open and the job ends with that round. */
+  stopping?: boolean;
+  /** What withdrawRefund pays the requester now. Absent on coordinators that don't report it. */
+  refundable?: number;
 };
 /** The coordinator's read on a stuck job: seats it can fill against seats it needs, what holds the other nodes back, and when anyone may abandon it. Times are unix seconds. */
 export type Waiting = { since: number; eligible: number; quorum: number; blocked: Partial<Record<BlockReason, number>>; abandonAfter: number };

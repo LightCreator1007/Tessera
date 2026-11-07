@@ -186,7 +186,7 @@ export function PostJob() {
       )}
 
       {step === 3 && drafted && need !== null && shortBy !== null && (
-        <StepPanel key="review" title="Review and post" lede="Nothing locks until the last step. After that there is no cancel: if the job stalls, rounds that never opened come back to you." footer={<Button variant="ghost" onClick={() => go(2)} disabled={create.busy || posted}>Back</Button>}>
+        <StepPanel key="review" title="Review and post" lede="Nothing locks until the last step. After that you can cancel from the job's page, and rounds that never opened come back to you." footer={<Button variant="ghost" onClick={() => go(2)} disabled={create.busy || posted}>Back</Button>}>
           {!isDemo && <Banner tone="pending" title="Posting needs a wallet">Pricing the job is live. Locking the budget and posting is signed in your wallet, which this app doesn&apos;t send yet.</Banner>}
           <dl className="flex flex-col">
             <Recap label="Data" onEdit={() => go(0)}>{ds?.name}</Recap>
